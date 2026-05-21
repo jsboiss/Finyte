@@ -1,4 +1,4 @@
-# Seafin Foundation Plan
+# Finify Foundation Plan
 
 ## Product Goal
 
@@ -20,13 +20,13 @@ The Finance app provides the technical template:
 - Orval generated API client.
 - Banking ingestion, account, transaction, balance, metric, subscription, and budgeting concepts.
 
-Seafin should reuse the proven architectural shape, but it should not copy the old assumptions around personal use, external friend API access, or Redbark-specific banking flows.
+Finify should reuse the proven architectural shape, but it should not copy the old assumptions around personal use, external friend API access, or Redbark-specific banking flows.
 
 ## Important Product Shift
 
 Finance was built for trusted personal use and a narrow external API surface.
 
-Seafin needs to be built as a real service:
+Finify needs to be built as a real service:
 
 - Users create and manage their own accounts.
 - Users control their own bank connections and CDR consent.
@@ -76,7 +76,7 @@ Deliverables:
 
 Engineering outputs:
 
-- `PLAN_Seafin.md`.
+- `PLAN_Finify.md`.
 - Initial architecture decision records for Fiskil, auth, billing, and hosting assumptions.
 - Environment variable inventory for local, staging, and production.
 
@@ -90,12 +90,12 @@ Backend:
 
 - Create `.slnx` solution targeting .NET 10.
 - Projects:
-  - `src/Seafin.Api`
-  - `src/Seafin.Core`
-  - `src/Seafin.Data`
-  - `src/Seafin.Web`
-  - `tests/Seafin.Tests`
-  - `tests/Seafin.IntegrationTests`
+  - `src/Finify.Api`
+  - `src/Finify.Core`
+  - `src/Finify.Data`
+  - `src/Finify.Web`
+  - `tests/Finify.Tests`
+  - `tests/Finify.IntegrationTests`
 - Add ASP.NET Core API host.
 - Add Postgres and EF Core.
 - Add migrations.
@@ -253,7 +253,7 @@ Scope:
 Backend deliverables:
 
 - Typed Fiskil client.
-- Provider abstraction shaped around Seafin concepts, not Fiskil names.
+- Provider abstraction shaped around Finify concepts, not Fiskil names.
 - Secure storage for provider tokens or provider references, depending on Fiskil model.
 - Webhook endpoint with raw body verification if Fiskil signs payloads.
 - Durable provider event table.
@@ -272,7 +272,7 @@ Data model:
 Important design rule:
 
 - Keep Fiskil-specific DTOs at the infrastructure boundary.
-- Store normalized Seafin entities in the main banking tables.
+- Store normalized Finify entities in the main banking tables.
 - Keep selected raw provider JSON only where needed for audit/debugging and only if permitted.
 
 Acceptance:
@@ -444,7 +444,7 @@ Migration approach:
 - Move one domain feature at a time.
 - Keep each feature tenant-safe from the first commit.
 - Add integration tests around tenant isolation.
-- Avoid copying Redbark-specific assumptions into Seafin.
+- Avoid copying Redbark-specific assumptions into Finify.
 - Reuse UI patterns, not necessarily files, where Finance was personal-use oriented.
 
 ## Phase 10: External API Access
@@ -594,7 +594,7 @@ Everything after that is product depth.
 ## Near-Term Build Order
 
 1. Confirm Fiskil onboarding requirements and legal/compliance obligations.
-2. Create the Seafin solution and frontend shell.
+2. Create the Finify solution and frontend shell.
 3. Add identity and tenant model.
 4. Add Stripe billing foundation.
 5. Build Fiskil sandbox spike.
