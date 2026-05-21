@@ -1,0 +1,66 @@
+﻿# Get end user by id (/data-api/api-reference/v2-0-0/get-end-user-by-id)
+
+Finds an end user by end user id
+
+## GET /end-users/{id}
+
+**Get end user by id**
+
+Finds an end user by end user id
+
+**Tags:** end-users, public
+
+### Parameters
+
+| Name | In | Type | Required | Description |
+|------|----|------|----------|-------------|
+| `id` | path | string | Yes | ID of the end user to fetch. |
+
+### Responses
+
+**200:** OK response.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `email` | string | An End Users email address. This should be their primary email, as it is used for notifying the End User about their consents. |
+| `id` | string | A unique identifier for the End User object. |
+| `name` | string | An End Users name. |
+| `phone` | string | An End Users Phone. It is used for notifying the End User about their consents. |
+
+**Example:**
+```json
+{
+  "email": "john_starmer@gmail.com",
+  "id": "482c0e2b-5866-46b1-b795-220b7bba45b5",
+  "name": "John Starmer",
+  "phone": "+614123456789"
+}
+```
+
+**401:** unauthorized: Unauthorized response.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `fault` | boolean | Is the error a server-side fault? |
+| `id` | string | ID is a unique identifier for this particular occurrence of the problem. |
+| `message` | string | Message is a human-readable explanation specific to this occurrence of the problem. |
+| `name` | string | Name is the name of this class of errors. |
+| `temporary` | boolean | Is the error temporary? |
+| `timeout` | boolean | Is the error a timeout? |
+
+**404:** end_user_not_found: end user not found
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `fault` | boolean | Is the error a server-side fault? |
+| `id` | string | ID is a unique identifier for this particular occurrence of the problem. |
+| `message` | string | Message is a human-readable explanation specific to this occurrence of the problem. |
+| `name` | string | Name is the name of this class of errors. |
+| `temporary` | boolean | Is the error temporary? |
+| `timeout` | boolean | Is the error a timeout? |
+
+### Example Request
+```bash
+curl -X GET "https://api.fiskil.com/end-users/{id}" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```

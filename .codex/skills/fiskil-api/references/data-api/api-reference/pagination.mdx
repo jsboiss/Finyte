@@ -1,0 +1,71 @@
+﻿# Pagination (/data-api/api-reference/pagination)
+
+How to handle paginated responses from the Fiskil API.
+
+
+
+All top-level API endpoints that fetch resources in bulk (list APIs) support cursor-based pagination, such as list banking accounts, energy accounts list, list transactions, list all bills, and more.
+
+The API includes URL links to fetch previous and next sets of items, so for simple pagination needs, clients can simply use the links provided in the response.
+
+How It Works [#how-it-works]
+
+Cursor pagination, also known as keyset pagination, uses a specific pointer (the cursor) from the previous result set to fetch the next set of items. This method avoids the performance issues associated with skipping a large number of rows.
+
+Query Parameters [#query-parameters]
+
+| Parameter      | Type    | Required | Description                                                                                       |
+| -------------- | ------- | -------- | ------------------------------------------------------------------------------------------------- |
+| `page[before]` | string  | No       | A pointer to a specific item in the dataset. The API returns results before this item.            |
+| `page[after]`  | string  | No       | A pointer to a specific item in the dataset. The API returns results after this item.             |
+| `page[size]`   | integer | No       | The number of resources that will be included in the response's data field. It is capped at 1000. |
+
+Response Fields [#response-fields]
+
+The response will contain additional `links` fields:
+
+| Field  | Description                        |
+| ------ | ---------------------------------- |
+| `prev` | A URI to request the previous page |
+| `next` | A URI to request the next page     |
+
+Usage [#usage]
+
+The initial request does not require a cursor. The response will include links to fetch the previous or next set of items (if they exist).
+
+**Example:**
+
+1. Initial request: `GET /api/items`
+2. Following request: `GET /api/items?page[after]=abc123`
+
+Example Response [#example-response]
+
+```json
+{
+  "data": [
+    {
+      "id": "acc_123",
+      "name": "Main Account"
+    },
+    {
+      "id": "acc_456",
+      "name": "Savings Account"
+    }
+  ],
+  "links": {
+    "prev": "https://api.fiskil.com/v1/items?page[before]=abc123",
+    "next": "https://api.fiskil.com/v1/items?page[after]=xyz789"
+  }
+}
+```
+
+Best Practices [#best-practices]
+
+1. **Use links when available**: The response links (`prev`, `next`) are pre-computed and guaranteed to work correctly.
+
+2. **Handle empty pages**: When you receive an empty data array or no `next` link, you've reached the end of the results.
+
+3. **Respect rate limits**: Avoid making rapid sequential pagination requests. Add reasonable delays between requests.
+
+4. **Cache when appropriate**: If your data doesn't change frequently, consider caching paginated results to reduce API calls.
+

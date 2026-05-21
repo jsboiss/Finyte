@@ -1,0 +1,54 @@
+﻿# List invoices (/data-api/api-reference/v2-0-0/getEnergyInvoices)
+
+Returns the invoices for all accounts authorised by the end user
+
+## GET /v1/energy/invoice
+
+**List invoices**
+
+Returns the invoices for all accounts authorised by the end user
+
+**Tags:** Invoices, v1, v2, energy
+
+### Parameters
+
+| Name | In | Type | Required | Description |
+|------|----|------|----------|-------------|
+| `end_user_id` | query | string | Yes | A unique identifier for the End User object. |
+| `account_id` | query | string | No | (Optional) Account ID as returned by the Accounts API to fetch invoices for. If unset, invoices for all accounts will be returned |
+| `service_point_id` | query | string | No | (Optional) Service point ID as returned by the Service Points API to fetch invoices for. If unset, invoices for all service points will be returned. |
+| `invoice_number` | query | string | No | (Optional) Invoice Number for a specific invoice to fetch. |
+| `page[before]` | query | string | No | When the page[before] is specified, backwards pagination is achieved |
+| `page[after]` | query | string | No | When the page[after] is specified, forwards pagination is achieved |
+| `page[size]` | query | integer | No | When the page[size] is specified, no more than page[size] resources will be included in the response's data field. This parameter is set to a sensible default, which varies depending on the endpoint. It is capped at 1000. |
+
+### Responses
+
+**200:** OK
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `invoices` | fiskil_energy.Invoice[] |  |
+| `links` | httputil.Links |  |
+
+**400:** Bad Request
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string |  |
+| `message` | string |  |
+| `name` | string |  |
+
+**500:** Internal Server Error
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string |  |
+| `message` | string |  |
+| `name` | string |  |
+
+### Example Request
+```bash
+curl -X GET "https://api.fiskil.com/v1/energy/invoice" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```

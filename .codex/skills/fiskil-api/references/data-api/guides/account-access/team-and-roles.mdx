@@ -1,0 +1,49 @@
+﻿# Team & Roles (/data-api/guides/account-access/team-and-roles)
+
+Manage workspace access by inviting team members and assigning role-based permissions.
+
+
+
+Fiskil allows you to manage access to your workspace by inviting team members and assigning role-based permissions through the Console.
+
+This guide outlines the available roles and how to manage team members securely and effectively.
+
+Managing Team Members [#managing-team-members]
+
+You can view and manage your team from the **[Console > Settings > Members](https://console.fiskil.com)** page.
+
+From here, you can:
+
+* View the status of pending invitations
+* Remove users who no longer require access
+* Assign roles during or after invitation
+* Invite new users to your team by email
+
+Team changes take effect immediately. All team members must authenticate using MFA when accessing the Console.
+
+Supported Roles [#supported-roles]
+
+Fiskil currently supports three roles, each with different levels of access:
+
+| Role      | Permissions                                                              |
+| --------- | ------------------------------------------------------------------------ |
+| Owner     | Full access to all settings, API keys, team management, and billing      |
+| Developer | Can view and manage API keys, webhooks, and data - no team permissions   |
+| Analyst   | Read-only access to data and dashboards - cannot modify settings or keys |
+
+You can change a user's role at any time via the Members page.
+
+For security reasons, only Owners can invite new members or manage team roles.
+
+Best Practices [#best-practices]
+
+* Revoke access promptly when a team member no longer needs access
+* Regularly review your team to ensure access levels are up to date
+* Use the Analyst role for data consumers who don't need write access
+* Assign the Owner role only to trusted administrators
+
+Related Guides [#related-guides]
+
+* [SSO Login](/docs/data-api/guides/account-access/sso-login)
+* [Security](/docs/data-api/guides/account-access/security)
+

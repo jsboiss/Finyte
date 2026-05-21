@@ -1,0 +1,165 @@
+﻿# Service Points (/data-api/api-reference/service-points)
+
+Get service point (NMI) information from the Fiskil API.
+
+
+
+The Service Points endpoint provides information about National Metering Identifiers (NMIs) and meter details for energy accounts.
+
+Endpoints [#endpoints]
+
+| Method | Endpoint             | Description                        |
+| ------ | -------------------- | ---------------------------------- |
+| `GET`  | `/v1/service-points` | Get service points for an end user |
+
+The Service Point Model [#the-service-point-model]
+
+| Attribute        | Type   | Description                           |
+| ---------------- | ------ | ------------------------------------- |
+| `id`             | string | Service point identifier (NMI)        |
+| `account_id`     | string | Associated energy account ID          |
+| `address`        | object | Address details for the service point |
+| `classification` | string | Classification (SMALL, LARGE)         |
+| `status`         | string | Connection status (ACTIVE, INACTIVE)  |
+| `meter_type`     | string | Type of meter installed               |
+| `registers`      | array  | Meter register information            |
+
+Example Response [#example-response]
+
+```json
+{
+  "id": "NMI123456789",
+  "account_id": "energy_acc_123",
+  "address": {
+    "street": "123 Example Street",
+    "suburb": "Sydney",
+    "state": "NSW",
+    "postcode": "2000"
+  },
+  "classification": "SMALL",
+  "status": "ACTIVE",
+  "meter_type": "SMART",
+  "registers": [
+    {
+      "register_id": "E1",
+      "register_type": "CONSUMPTION",
+      "unit": "kWh"
+    }
+  ]
+}
+```
+
+Get Service Points [#get-service-points]
+
+Retrieve service point information for an end user's energy accounts.
+
+```
+GET https://api.fiskil.com/v1/service-points
+```
+
+Query Parameters [#query-parameters]
+
+| Parameter     | Type    | Required | Description                   |
+| ------------- | ------- | -------- | ----------------------------- |
+| `end_user_id` | string  | Yes      | The ID of the end user        |
+| `account_id`  | string  | No       | Filter by specific account ID |
+| `page[size]`  | integer | No       | Number of results (max 1000)  |
+| `page[after]` | string  | No       | Cursor for pagination         |
+
+Example Request [#example-request]
+
+<Tabs items={['cURL', 'Node.js', 'Python']}>
+  <Tab value="cURL">
+    ```bash
+    curl --request GET \
+      --url 'https://api.fiskil.com/v1/service-points?end_user_id=482c0e2b-5866-46b1-b795-220b7bba45b5' \
+      --header 'Authorization: Bearer {access_token}' \
+      --header 'accept: application/json; charset=UTF-8'
+    ```
+  </Tab>
+
+  <Tab value="Node.js">
+    ```javascript
+    const response = await fetch(
+      'https://api.fiskil.com/v1/service-points?end_user_id=482c0e2b-5866-46b1-b795-220b7bba45b5',
+      {
+        method: 'GET',
+        headers: {
+          'Authorization': 'Bearer {access_token}',
+          'accept': 'application/json; charset=UTF-8'
+        }
+      }
+    );
+
+    const servicePoints = await response.json();
+    ```
+  </Tab>
+
+  <Tab value="Python">
+    ```python
+    import requests
+
+    response = requests.get(
+        'https://api.fiskil.com/v1/service-points',
+        params={'end_user_id': '482c0e2b-5866-46b1-b795-220b7bba45b5'},
+        headers={
+            'Authorization': 'Bearer {access_token}',
+            'accept': 'application/json; charset=UTF-8'
+        }
+    )
+
+    service_points = response.json()
+    ```
+  </Tab>
+</Tabs>
+
+Example Response [#example-response-1]
+
+```json
+{
+  "data": [
+    {
+      "id": "NMI123456789",
+      "account_id": "energy_acc_123",
+      "address": {
+        "street": "123 Example Street",
+        "suburb": "Sydney",
+        "state": "NSW",
+        "postcode": "2000"
+      },
+      "classification": "SMALL",
+      "status": "ACTIVE",
+      "meter_type": "SMART",
+      "registers": [
+        {
+          "register_id": "E1",
+          "register_type": "CONSUMPTION",
+          "unit": "kWh"
+        }
+      ]
+    }
+  ]
+}
+```
+
+Meter Types [#meter-types]
+
+| Type       | Description                    |
+| ---------- | ------------------------------ |
+| `SMART`    | Smart meter with interval data |
+| `BASIC`    | Basic accumulation meter       |
+| `INTERVAL` | Interval meter (pre-smart)     |
+
+Register Types [#register-types]
+
+| Type          | Description                      |
+| ------------- | -------------------------------- |
+| `CONSUMPTION` | Energy consumption register      |
+| `GENERATION`  | Solar/generation export register |
+| `DEMAND`      | Demand measurement register      |
+
+Related Endpoints [#related-endpoints]
+
+* [Usage](/data-api/api-reference/usage) - Get usage data for service points
+* [DER](/data-api/api-reference/der) - Get DER (solar/battery) data
+

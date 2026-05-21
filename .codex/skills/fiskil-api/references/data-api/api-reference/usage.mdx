@@ -1,0 +1,167 @@
+﻿# Usage (/data-api/api-reference/usage)
+
+Get energy usage data from the Fiskil API.
+
+
+
+The Usage endpoint provides detailed energy consumption data, including interval data where available.
+
+Endpoints [#endpoints]
+
+| Method | Endpoint    | Description                    |
+| ------ | ----------- | ------------------------------ |
+| `GET`  | `/v1/usage` | Get usage data for an end user |
+
+The Usage Model [#the-usage-model]
+
+| Attribute          | Type   | Description                     |
+| ------------------ | ------ | ------------------------------- |
+| `service_point_id` | string | NMI or service point identifier |
+| `register_id`      | string | Meter register identifier       |
+| `interval_start`   | string | Start of the interval period    |
+| `interval_end`     | string | End of the interval period      |
+| `value`            | number | Usage value                     |
+| `unit`             | string | Unit of measurement (kWh)       |
+| `quality`          | string | Data quality indicator          |
+
+Example Response [#example-response]
+
+```json
+{
+  "service_point_id": "NMI123456789",
+  "register_id": "E1",
+  "interval_start": "2023-01-15T00:00:00+11:00",
+  "interval_end": "2023-01-15T00:30:00+11:00",
+  "value": 0.45,
+  "unit": "kWh",
+  "quality": "ACTUAL"
+}
+```
+
+Get Usage Data [#get-usage-data]
+
+Retrieve energy usage data for an end user.
+
+```
+GET https://api.fiskil.com/v1/usage
+```
+
+Query Parameters [#query-parameters]
+
+| Parameter          | Type    | Required | Description                            |
+| ------------------ | ------- | -------- | -------------------------------------- |
+| `end_user_id`      | string  | Yes      | The ID of the end user                 |
+| `service_point_id` | string  | No       | Filter by service point (NMI)          |
+| `from_date`        | string  | No       | Start date (YYYY-MM-DD)                |
+| `to_date`          | string  | No       | End date (YYYY-MM-DD)                  |
+| `interval_type`    | string  | No       | Interval granularity (INTERVAL, DAILY) |
+| `page[size]`       | integer | No       | Number of results (max 1000)           |
+| `page[after]`      | string  | No       | Cursor for pagination                  |
+
+Example Request [#example-request]
+
+<Tabs items={['cURL', 'Node.js', 'Python']}>
+  <Tab value="cURL">
+    ```bash
+    curl --request GET \
+      --url 'https://api.fiskil.com/v1/usage?end_user_id=482c0e2b-5866-46b1-b795-220b7bba45b5&from_date=2023-01-01&to_date=2023-01-31' \
+      --header 'Authorization: Bearer {access_token}' \
+      --header 'accept: application/json; charset=UTF-8'
+    ```
+  </Tab>
+
+  <Tab value="Node.js">
+    ```javascript
+    const response = await fetch(
+      'https://api.fiskil.com/v1/usage?end_user_id=482c0e2b-5866-46b1-b795-220b7bba45b5&from_date=2023-01-01&to_date=2023-01-31',
+      {
+        method: 'GET',
+        headers: {
+          'Authorization': 'Bearer {access_token}',
+          'accept': 'application/json; charset=UTF-8'
+        }
+      }
+    );
+
+    const usage = await response.json();
+    ```
+  </Tab>
+
+  <Tab value="Python">
+    ```python
+    import requests
+
+    response = requests.get(
+        'https://api.fiskil.com/v1/usage',
+        params={
+            'end_user_id': '482c0e2b-5866-46b1-b795-220b7bba45b5',
+            'from_date': '2023-01-01',
+            'to_date': '2023-01-31'
+        },
+        headers={
+            'Authorization': 'Bearer {access_token}',
+            'accept': 'application/json; charset=UTF-8'
+        }
+    )
+
+    usage = response.json()
+    ```
+  </Tab>
+</Tabs>
+
+Example Response [#example-response-1]
+
+```json
+{
+  "data": [
+    {
+      "service_point_id": "NMI123456789",
+      "register_id": "E1",
+      "interval_start": "2023-01-15T00:00:00+11:00",
+      "interval_end": "2023-01-15T00:30:00+11:00",
+      "value": 0.45,
+      "unit": "kWh",
+      "quality": "ACTUAL"
+    },
+    {
+      "service_point_id": "NMI123456789",
+      "register_id": "E1",
+      "interval_start": "2023-01-15T00:30:00+11:00",
+      "interval_end": "2023-01-15T01:00:00+11:00",
+      "value": 0.38,
+      "unit": "kWh",
+      "quality": "ACTUAL"
+    }
+  ],
+  "links": {
+    "next": "https://api.fiskil.com/v1/usage?end_user_id=482c0e2b-5866-46b1-b795-220b7bba45b5&page[after]=xyz789"
+  }
+}
+```
+
+Data Quality Indicators [#data-quality-indicators]
+
+| Quality       | Description                                |
+| ------------- | ------------------------------------------ |
+| `ACTUAL`      | Actual meter reading                       |
+| `ESTIMATED`   | Estimated reading (meter couldn't be read) |
+| `SUBSTITUTED` | Substituted value (data correction)        |
+
+Interval Types [#interval-types]
+
+* **INTERVAL**: 15 or 30-minute interval data (where smart meters are installed)
+* **DAILY**: Daily aggregated usage
+
+Use Cases [#use-cases]
+
+* **Energy Monitoring**: Track consumption patterns
+* **Bill Prediction**: Estimate future bills based on usage
+* **Solar Analysis**: Understand generation vs consumption
+* **Peak Usage Detection**: Identify high-usage periods
+
+Related Endpoints [#related-endpoints]
+
+* [Service Points](/data-api/api-reference/service-points) - Get NMI details
+* [Billing](/data-api/api-reference/billing) - Get billing information
+* [DER](/data-api/api-reference/der) - Get solar/battery data
+

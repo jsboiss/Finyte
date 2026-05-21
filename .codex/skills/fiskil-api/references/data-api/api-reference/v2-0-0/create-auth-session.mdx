@@ -1,0 +1,94 @@
+﻿# Create auth session (/data-api/api-reference/v2-0-0/create-auth-session)
+
+Create an auth session before auth process.
+
+## POST /auth/session
+
+**Create auth session**
+
+Create an auth session before auth process.
+
+**Tags:** auth, public
+
+### Request Body
+
+**Content-Type:** `application/json` (required)
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `cancel_uri` | string | Where the end user will be redirected on cancellation or failure. Required for redirect flows. |
+| `end_user_id` | string | The end_user that will be consenting with an external provider |
+| `institution_id` | string | The institution id selected for the auth session. The user will not be able to select another institution during the consent flow. |
+| `redirect_uri` | string | Where the end user will be redirected to on success. Required for redirect flow. |
+
+**Example:**
+```json
+{
+  "cancel_uri": "https://acme.com/cancel",
+  "end_user_id": "eu_2yRHN2ag2y4p8kCtm5DOeccZEXB",
+  "institution_id": "10",
+  "redirect_uri": "https://acme.com/success"
+}
+```
+
+### Responses
+
+**200:** OK response.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `auth_url` | string | The computed auth URL. |
+| `expires_at` | integer | The computed auth URL expires at. |
+| `id` | string | The client id. |
+| `session_id` | string | Session Id |
+
+**Example:**
+```json
+{
+  "auth_url": "auth-session.com/redirect-url",
+  "expires_at": 1213467,
+  "id": "5qcql2s0bn9qfh1m5qd1sl4gth",
+  "session_id": "ea564d-56012s4-6ds4564"
+}
+```
+
+**400:** invalid_institution_id: Bad Request response.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `fault` | boolean | Is the error a server-side fault? |
+| `id` | string | ID is a unique identifier for this particular occurrence of the problem. |
+| `message` | string | Message is a human-readable explanation specific to this occurrence of the problem. |
+| `name` | string | Name is the name of this class of errors. |
+| `temporary` | boolean | Is the error temporary? |
+| `timeout` | boolean | Is the error a timeout? |
+
+**401:** unauthorized: Unauthorized response.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `fault` | boolean | Is the error a server-side fault? |
+| `id` | string | ID is a unique identifier for this particular occurrence of the problem. |
+| `message` | string | Message is a human-readable explanation specific to this occurrence of the problem. |
+| `name` | string | Name is the name of this class of errors. |
+| `temporary` | boolean | Is the error temporary? |
+| `timeout` | boolean | Is the error a timeout? |
+
+**404:** end_user_not_found: Not Found response.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `fault` | boolean | Is the error a server-side fault? |
+| `id` | string | ID is a unique identifier for this particular occurrence of the problem. |
+| `message` | string | Message is a human-readable explanation specific to this occurrence of the problem. |
+| `name` | string | Name is the name of this class of errors. |
+| `temporary` | boolean | Is the error temporary? |
+| `timeout` | boolean | Is the error a timeout? |
+
+### Example Request
+```bash
+curl -X POST "https://api.fiskil.com/auth/session" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"cancel_uri":"https://acme.com/cancel","end_user_id":"eu_2yRHN2ag2y4p8kCtm5DOeccZEXB","institution_id":"10","redirect_uri":"https://acme.com/success"}'
+```

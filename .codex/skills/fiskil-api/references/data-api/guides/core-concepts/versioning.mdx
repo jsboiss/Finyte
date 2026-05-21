@@ -1,0 +1,110 @@
+﻿# API Versioning (/data-api/guides/core-concepts/versioning)
+
+How Fiskil Data API versions work, how to select one, and how upgrades happen
+
+
+
+Fiskil's Data API uses major-version numbering. Clients select a single major version — `v1` or `v2` — per request. Inside a major version, Fiskil ships non-breaking changes (new optional fields, new enum values, new endpoints, and bug fixes) automatically and without requiring any client update.
+
+Breaking changes are never shipped inside a major version. They only appear in a new major version that you opt into on your own schedule.
+
+<Callout type="info" title="Live major versions">
+  `v1` and `v2` are both live. `v2` is the current major version for new
+  accounts. `v1` is maintained for existing integrations — see [Support
+  timeline](#support-timeline) below.
+</Callout>
+
+Selecting a version [#selecting-a-version]
+
+There are two places a version gets chosen. The per-request header always wins.
+
+Per-request: X-Fiskil-Version header [#per-request-x-fiskil-version-header]
+
+Send the header on any request to override your team's Console default for that call:
+
+```bash
+curl https://api.fiskil.com/v1/banking/accounts \
+  -H 'X-Fiskil-Version: v2' \
+  -H 'Authorization: Bearer {token}'
+```
+
+Use `v1` or `v2` exactly — the literal major label. Do **not** send full semantic versions like `1.0.0` or `2.0.0`; those will not be accepted.
+
+Team default: Console pinned version [#team-default-console-pinned-version]
+
+Every team has a pinned version in Console. Requests without `X-Fiskil-Version` use this pin. New accounts are pinned to the latest live major version at sign-up.
+
+<Callout type="warning" title="Console upgrades are one-way">
+  Moving your Console pin from `v1` to `v2` cannot be reversed in settings.
+  Always validate `v2` in production with the `X-Fiskil-Version: v2` header
+  first, then flip the pin.
+</Callout>
+
+<Callout type="info" title="The /v1/ in the URL is not the API version">
+  Every request path starts with `/v1/` as a URL namespace. The API version is
+  selected by the `X-Fiskil-Version` header or your Console pin, never by the
+  URL segment.
+</Callout>
+
+What counts as a breaking change [#what-counts-as-a-breaking-change]
+
+A change is **breaking** (new major version only) if it could cause correctly written client code to fail. Anything else is **non-breaking** and ships inside the current major version.
+
+| Change                                                       | Classification |
+| ------------------------------------------------------------ | -------------- |
+| Removing a response field                                    | Breaking       |
+| Changing the type of a response field (e.g. number → string) | Breaking       |
+| Replacing a nested object with an array (or vice versa)      | Breaking       |
+| Adding a required request parameter                          | Breaking       |
+| Removing or renaming an endpoint                             | Breaking       |
+| Adding a new optional request parameter                      | Non-breaking   |
+| Adding a new response field                                  | Non-breaking   |
+| Adding a new value to a response enum                        | Non-breaking   |
+| Adding a new endpoint                                        | Non-breaking   |
+| Bug fixes that align behaviour with documented contract      | Non-breaking   |
+
+Parse responses defensively: treat unknown fields as safe to ignore and unknown enum values as valid. That lets non-breaking additions reach your integration without code changes.
+
+Version switcher in the docs [#version-switcher-in-the-docs]
+
+The version switcher in the top navigation changes which major version's API reference you see in these docs. It affects documentation only — it does not send anything to `api.fiskil.com` and does not change your team's runtime behaviour. Runtime behaviour is controlled by the `X-Fiskil-Version` header and your Console pin.
+
+Upgrading to a new major version [#upgrading-to-a-new-major-version]
+
+The same workflow applies to any future major version. It minimises blast radius by keeping production on the old version while you validate the new one.
+
+<Steps>
+  <Step title="Pin production to your current version">
+    Add `X-Fiskil-Version: v1` to every production request. This freezes your
+    current response shape so a later Console change can't surprise you.
+  </Step>
+
+  <Step title="Read the upgrade guide">
+    Each major release has a dedicated migration doc listing every breaking
+    change. For `v1` → `v2`, see the [Upgrade to v2](/data-api/changelog/upgrade-guide) guide.
+  </Step>
+
+  <Step title="Test the new version in production with the header">
+    Send `X-Fiskil-Version: v2` on a subset of real production traffic and verify
+    the affected endpoints and downstream parsers before committing.
+  </Step>
+
+  <Step title="Flip the Console pin">
+    Once you've validated `v2` end-to-end, update your team's pinned version in
+    Console. You can now drop the explicit header if you want — requests default
+    to the pin.
+  </Step>
+</Steps>
+
+Support timeline [#support-timeline]
+
+Each major version is supported for at least **12 months** from release. When a major version is scheduled for deprecation, the timeline is announced in the [Changelog](/data-api/changelog) with enough notice to upgrade.
+
+Non-breaking updates inside a live major version are announced in the changelog but require no action.
+
+Related [#related]
+
+* [Changelog](/data-api/changelog) — release notes for each major version.
+* [Upgrade to v2](/data-api/changelog/upgrade-guide) — concrete migration from `v1` to `v2`.
+* [API Reference](/data-api/api-reference) — per-endpoint shapes. Use the top-nav version switcher to compare `v1` and `v2`.
+

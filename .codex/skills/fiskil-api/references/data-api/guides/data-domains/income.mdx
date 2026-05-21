@@ -1,0 +1,54 @@
+﻿# Income (/data-api/guides/data-domains/income)
+
+Fiskil's Income API provides structured insights into consumer income using enriched transaction data.
+
+
+
+Fiskil's Income API provides structured insights into consumer income. Using enriched transaction data, it identifies salary deposits, recurring income streams, and patterns of inflows to help you power financial decisioning, credit assessments, and affordability checks.
+
+Once a customer has successfully linked their bank and Fiskil has processed their transactions, you can query the `/banking/income` endpoint to retrieve their income profile.
+
+What Data Can You Access? [#what-data-can-you-access]
+
+| Data Type          | Description                                                          |
+| ------------------ | -------------------------------------------------------------------- |
+| **Income Sources** | Identified salary or recurring credits into the user's bank accounts |
+| **Frequency**      | Detection of `WEEKLY`, `BIWEEKLY`, or `MONTHLY` income patterns      |
+| **Amounts**        | Gross income estimates calculated from transaction inflows           |
+| **Accounts**       | Accounts receiving identified income streams                         |
+
+Refer to the [Income API Reference](/docs/data-api/api-reference/income) for full endpoint documentation.
+
+Data Availability and Integration Flow [#data-availability-and-integration-flow]
+
+The `/banking/income` endpoint depends on transaction data being available. This means you should only query it after the initial transaction sync has completed.
+
+Integration flow:
+
+1. **Create an end-user and consent** → As shown in the [Quick Start Guide](/docs/data-api/guides/getting-started/quick-start).
+2. **Wait for webhook** → Listen for `banking.transactions.basic.sync.completed` (see [Webhooks Guide](/docs/data-api/guides/core-concepts/webhooks)).
+3. **Fetch income data** → Once the webhook fires, call `/banking/income?end_user_id={{end_user_id}}` to retrieve the user's income profile. Income detection defaults to up to 6 months worth of income data of category `INCOME_SALARY`, see the [Income API Reference](/docs/data-api/api-reference/income) for customisation options. For an up to date list of income related categories, see the [Fiskil Taxonomy](/downloads/categories-taxonomy.csv).
+
+We recommend using webhooks to trigger income data fetches instead of polling.
+
+Example Use Cases [#example-use-cases]
+
+Fiskil's Income API enables a range of financial product experiences:
+
+* **Credit decisioning** -- Assess income stability and regularity for loan approvals.
+* **Affordability checks** -- Verify customer income as part of responsible lending requirements.
+* **Financial wellness** -- Help users understand their income patterns and stability.
+* **Employment verification** -- Detect salary deposits for onboarding or compliance workflows.
+
+Best Practices [#best-practices]
+
+* Always provide `end_user_id` when querying `/banking/income`.
+* Do not call `/banking/income` until the `banking.transactions.basic.sync.completed` webhook has been received.
+* Ensure your webhook endpoints are HTTPS-secured and validated.
+
+Next Steps [#next-steps]
+
+* Review the [Quick Start Guide](/docs/data-api/guides/getting-started/quick-start) to learn how to create users and consents.
+* See the [Webhooks Guide](/docs/data-api/guides/core-concepts/webhooks) for listening to transaction sync events.
+* Explore the [Income API Reference](/docs/data-api/api-reference/income) for details on available fields and response schema.
+

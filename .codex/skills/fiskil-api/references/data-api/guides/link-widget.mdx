@@ -1,0 +1,42 @@
+﻿# Introduction (/data-api/guides/link-widget)
+
+Embed Fiskil's consent flow inside your application
+
+
+
+The Fiskil Link Widget provides a seamless way to integrate Fiskil's consent flow directly into your application. Instead of redirecting users to an external page, you can embed the entire account linking experience within your app's UI.
+
+Benefits [#benefits]
+
+* **Seamless User Experience**: Keep users within your app during the consent flow
+* **Easy Integration**: Single function call to launch the consent UI
+* **Customizable**: Matches your branding configured in the Fiskil Console
+* **Reliable**: Handles edge cases and errors automatically
+
+How It Works [#how-it-works]
+
+1. Create an [Auth Session](/data-api/guides/core-concepts/auth-sessions) on your server
+2. Pass the `auth_session_id` to the Link SDK on the client
+3. The SDK renders the consent flow in an overlay
+4. Once complete, you receive the `consent_id` in the callback
+
+Quick Example [#quick-example]
+
+```javascript
+import { link } from '@fiskil/link';
+
+const flow = link('auth_session_id');
+
+try {
+  const result = await flow;
+  console.log('Success! Consent ID:', result.consentID);
+} catch (err) {
+  console.error('Link error:', err);
+}
+```
+
+Next Steps [#next-steps]
+
+* [Integrating the Link SDK](/data-api/guides/link-widget/integrating-the-link-sdk) - Full integration guide
+* [Flow Overview](/data-api/guides/link-widget/flow-overview) - Understand the consent flow steps
+

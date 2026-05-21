@@ -1,0 +1,123 @@
+﻿# Energy Balances (/data-api/api-reference/energy-balances)
+
+Get energy account balances from the Fiskil API.
+
+
+
+The Energy Balances endpoint allows you to retrieve the current balance information for an end user's energy accounts.
+
+Endpoints [#endpoints]
+
+| Method | Endpoint              | Description                      |
+| ------ | --------------------- | -------------------------------- |
+| `GET`  | `/v1/energy-balances` | Get balances for energy accounts |
+
+The Energy Balance Model [#the-energy-balance-model]
+
+| Attribute    | Type   | Description                                           |
+| ------------ | ------ | ----------------------------------------------------- |
+| `account_id` | string | ID of the energy account                              |
+| `balance`    | number | Current balance (positive = credit, negative = owing) |
+| `currency`   | string | Currency code (AUD)                                   |
+| `as_of`      | string | Timestamp when balance was last updated               |
+
+Example Response [#example-response]
+
+```json
+{
+  "account_id": "energy_acc_123",
+  "balance": -245.50,
+  "currency": "AUD",
+  "as_of": "2023-01-15T10:30:00Z"
+}
+```
+
+Get Energy Balances [#get-energy-balances]
+
+Retrieve balance information for an end user's energy accounts.
+
+```
+GET https://api.fiskil.com/v1/energy-balances
+```
+
+Query Parameters [#query-parameters]
+
+| Parameter     | Type   | Required | Description                   |
+| ------------- | ------ | -------- | ----------------------------- |
+| `end_user_id` | string | Yes      | The ID of the end user        |
+| `account_id`  | string | No       | Filter by specific account ID |
+
+Example Request [#example-request]
+
+<Tabs items={['cURL', 'Node.js', 'Python']}>
+  <Tab value="cURL">
+    ```bash
+    curl --request GET \
+      --url 'https://api.fiskil.com/v1/energy-balances?end_user_id=482c0e2b-5866-46b1-b795-220b7bba45b5' \
+      --header 'Authorization: Bearer {access_token}' \
+      --header 'accept: application/json; charset=UTF-8'
+    ```
+  </Tab>
+
+  <Tab value="Node.js">
+    ```javascript
+    const response = await fetch(
+      'https://api.fiskil.com/v1/energy-balances?end_user_id=482c0e2b-5866-46b1-b795-220b7bba45b5',
+      {
+        method: 'GET',
+        headers: {
+          'Authorization': 'Bearer {access_token}',
+          'accept': 'application/json; charset=UTF-8'
+        }
+      }
+    );
+
+    const balances = await response.json();
+    ```
+  </Tab>
+
+  <Tab value="Python">
+    ```python
+    import requests
+
+    response = requests.get(
+        'https://api.fiskil.com/v1/energy-balances',
+        params={'end_user_id': '482c0e2b-5866-46b1-b795-220b7bba45b5'},
+        headers={
+            'Authorization': 'Bearer {access_token}',
+            'accept': 'application/json; charset=UTF-8'
+        }
+    )
+
+    balances = response.json()
+    ```
+  </Tab>
+</Tabs>
+
+Example Response [#example-response-1]
+
+```json
+{
+  "data": [
+    {
+      "account_id": "energy_acc_123",
+      "balance": -245.50,
+      "currency": "AUD",
+      "as_of": "2023-01-15T10:30:00Z"
+    }
+  ]
+}
+```
+
+Understanding Energy Balances [#understanding-energy-balances]
+
+* **Negative balance**: Amount owing to the energy retailer
+* **Positive balance**: Credit on the account
+* **Zero balance**: Account is paid in full
+
+Related Endpoints [#related-endpoints]
+
+* [Energy Accounts](/data-api/api-reference/energy-accounts) - Get account details
+* [Billing](/data-api/api-reference/billing) - Get billing information
+* [Invoices](/data-api/api-reference/invoices) - Get invoice data
+

@@ -1,0 +1,69 @@
+﻿# Testing (/data-api/guides/core-concepts/testing)
+
+Test your Fiskil integration with the Sandbox environment
+
+
+
+With the Fiskil Sandbox, you can develop and integration test your application in an environment that mirrors production. The sandbox supports unlimited End-Users and consents with realistic data across both Banking and Energy domains.
+
+In the steps below we'll create a new consent using Fiskil Console and then fetch sample data via the API.
+
+Prerequisites [#prerequisites]
+
+Ensure you have access to [Fiskil Console](https://console.fiskil.com). To set up the sandbox for your team or manage permissions, contact [customer support](https://fiskil.atlassian.net/servicedesk/customer/portal/6).
+
+Getting Started [#getting-started]
+
+Step 1: Generate API Key [#step-1-generate-api-key]
+
+If you haven't already, navigate to [API Keys](https://console.fiskil.com/settings/api-keys) in the console to create a key pair. Note your `client_id` and `client_secret` for authentication.
+
+Step 2: Get an access token [#step-2-get-an-access-token]
+
+Exchange your credentials for an `access token` using the `/v1/token` endpoint.
+
+```bash
+curl --location --request POST 'https://api.fiskil.com/v1/token' \
+--header 'Content-Type: application/json' \
+--header 'Accept: application/json' \
+--data-raw '{
+  "client_id": "${client_id}",
+  "client_secret": "${client_secret}"
+}'
+```
+
+Step 3: Create an End-User [#step-3-create-an-end-user]
+
+Create a new End-User to test the APIs. For simplicity, create a single consent per End-User. You'll need a `name`, `email` and `phone`. Use the `access token` from the previous step.
+
+```bash
+curl --location --request POST 'https://api.fiskil.com/v1/end-users' \
+--header 'Content-Type: application/json' \
+--header 'Authorization: Bearer ${access_token}' \
+--data-raw '{
+  "name": "Test User",
+  "email": "test@example.com",
+  "phone": "+1234567890"
+}'
+```
+
+Step 4: Create Auth Session [#step-4-create-auth-session]
+
+From [End-Users](https://console.fiskil.com/end-users) in the console, select your user and click **Create Auth Session**. Open the generated link in a new browser window.
+
+Grant access by selecting **Allow**. You'll then see the provider selection screen.
+
+Step 5: Choose the Sandbox Provider [#step-5-choose-the-sandbox-provider]
+
+Select the relevant sandbox provider (Bank or Energy Retailer).
+
+Step 6: Complete OTP Authentication [#step-6-complete-otp-authentication]
+
+Enter any email you can access and click **get code** to receive a one-time password.
+
+Step 7: Account Selection [#step-7-account-selection]
+
+Choose one of the available accounts for your consent. After selecting the account, confirm the consent by clicking **Confirm and share**. You have successfully created a consent in the sandbox environment.
+
+For example account details, see the sub‑pages below for Banking and Energy sample accounts.
+

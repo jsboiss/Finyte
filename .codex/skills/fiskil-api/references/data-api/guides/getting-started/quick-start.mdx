@@ -1,0 +1,219 @@
+﻿# Quick Start (/data-api/guides/getting-started/quick-start)
+
+Get up and running with Fiskil quickly
+
+
+
+Welcome to Fiskil! This guide will help you get up and running with your Fiskil integration in no time. Whether you're building a banking or energy application, follow these steps to connect your users' accounts and start pulling data.
+
+1. Create Your Fiskil Account [#1-create-your-fiskil-account]
+
+Start by creating an account through the [Fiskil Console](https://console.fiskil.com). Once registered, you can generate your API keys and access the tools needed to integrate Fiskil into your app or website.
+
+2. Authenticate with Fiskil [#2-authenticate-with-fiskil]
+
+Fiskil authenticates your API requests using API keys generated from the console. Here's how to exchange your API keys for an access token:
+
+Generate API Keys [#generate-api-keys]
+
+In the [Settings > API Keys](https://console.fiskil.com/data-api/settings/api-keys) menu, create an API key, selecting all scopes.
+
+<Callout type="warn">
+  Security Note: Save your client ID and client secret, you won't be able to see them again after this!
+</Callout>
+
+Request an Access Token [#request-an-access-token]
+
+Make a POST request to the `/v1/token` endpoint. Replace `your_client_id` and `your_client_secret` with the client ID and secret you saved in the previous step.
+
+```bash
+curl --location --request POST 'https://api.fiskil.com/v1/token' \
+--header 'Content-Type: application/json' \
+--header 'Accept: application/json' \
+--data-raw '{
+  "client_id": "your_client_id",
+  "client_secret": "your_client_secret"
+}'
+```
+
+<Callout type="info">
+  Tip: Check out the full API Reference for code snippets in various programming languages.
+</Callout>
+
+<Callout type="warn">
+  Security Note: Store the returned `token` securely. All integrations must be handled on the server-side to protect sensitive data.
+</Callout>
+
+3. Create an End User [#3-create-an-end-user]
+
+An End User represents a user of your app. You need to create this object to link accounts and manage consent.
+
+Create an End User [#create-an-end-user]
+
+Make a POST request to `/v1/end-users` with the user's details. Replace `your_token` with the token you got from the `/v1/token` endpoint.
+
+```bash
+curl --request POST \
+  --url https://api.fiskil.com/v1/end-users \
+  --header 'Authorization: Bearer your_token' \
+  --header 'Accept: application/json' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "email": "user@example.com",
+    "name": "User Name",
+    "phone": "+1234567890"
+  }'
+```
+
+Store the `end_user_id` returned in the response for future API calls.
+
+<Callout type="info">
+  Tip: Retrieve an existing `end_user_id` using the GET `/end-users` endpoint if needed.
+</Callout>
+
+4. Set Up Your Consent Flow [#4-set-up-your-consent-flow]
+
+Fiskil's APIs are use case agnostic, but it's crucial to ensure your users understand what data they're consenting to share.
+
+Customize Consent in the Console [#customize-consent-in-the-console]
+
+Navigate to the [Customize UI](https://console.fiskil.com/data-api/customize-ui) page in the Fiskil Console.
+
+Update:
+
+* **Consent Period**: Choose an appropriate duration
+* **Data History**: Limit history to what's necessary for faster sync
+* **Use Cases**: Clearly describe why you need access
+* **Branding**: Add your logo, company name, and adjust colors to match your brand
+
+Hit "Save" once you're happy with your consent UI.
+
+<Callout type="info">
+  Note: To gain production access, you must only collect data essential for your product or service.
+</Callout>
+
+5. Create an Auth Session [#5-create-an-auth-session]
+
+An Auth Session facilitates linking a user's account through the consent flow you designed. The Auth Session is used together with the Fiskil Link SDK to embed the account linking interface inside your application.
+
+Create an Auth Session [#create-an-auth-session]
+
+Make a POST request to `/v1/auth/session`:
+
+```bash
+curl --request POST \
+  --url https://api.fiskil.com/v1/auth/session \
+  --header 'Authorization: Bearer ${token}' \
+  --header 'Accept: application/json' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "cancel_uri": "https://yourapp.com/cancel",
+    "end_user_id": "${end_user_id}"
+  }'
+```
+
+Handle the Response [#handle-the-response]
+
+```json
+{
+  "auth_url": "https://auth.fiskil.com/?sess_id=your_session_id",
+  "expires_at": "2025-12-31T23:59:59Z",
+  "session_id": "your_session_id"
+}
+```
+
+Use the `auth_session_id` with the Fiskil Link SDK to launch the embedded account linking interface in your application.
+
+Using the Link SDK [#using-the-link-sdk]
+
+```bash
+npm install @fiskil/link
+# or
+yarn add @fiskil/link
+```
+
+```javascript
+import { link } from '@fiskil/link';
+
+const flow = link('auth_session_id');
+
+try {
+  const result = await flow;
+  console.log('Consent ID:', result.consentID);
+} catch (err) {
+  console.error('Link error:', err);
+}
+
+// Cancel programmatically if needed
+
+// flow.close();
+```
+
+For full details on configuration options and error handling, see [Integrating the Link SDK](/data-api/guides/link-widget/integrating-the-link-sdk).
+
+6. Listen for Webhook Events [#6-listen-for-webhook-events]
+
+Once a user completes the consent flow, Fiskil emits webhook events to notify you when data is ready. Listening for these is the recommended integration pattern.
+
+Key events to handle:
+
+* `consent.received` – triggered when the user completes the consent flow
+* `banking.transactions.sync.completed` – banking data is synced
+* `energy.usage.sync.completed` – energy data is synced
+
+You can register your webhook endpoint in the Fiskil Console under **[Settings > Teams > Webhooks](https://console.fiskil.com)**.
+
+Fiskil signs each payload with an HMAC-SHA256 signature in the `X-Fiskil-Signature` header. Make sure to verify this signature before processing.
+
+[Learn more in the Webhooks Guide](/data-api/guides/core-concepts/webhooks)
+
+7. Pull Data Using Fiskil APIs [#7-pull-data-using-fiskil-apis]
+
+Once the user has completed the consent flow, you can access their data using Fiskil's Banking or Energy APIs.
+
+Banking APIs [#banking-apis]
+
+| Endpoint                                                            | Description                                              |
+| ------------------------------------------------------------------- | -------------------------------------------------------- |
+| [Identity API](/data-api/api-reference/identity)                    | Retrieve identity information of connected bank accounts |
+| [Account API](/data-api/api-reference/accounts)                     | Get account details of connected bank accounts           |
+| [Balance API](/data-api/api-reference/balance)                      | Access balance data of connected bank accounts           |
+| [Transaction API](/data-api/api-reference/getBankingTransactions)   | Fetch transaction history of connected bank accounts     |
+| [Payee API](/data-api/api-reference/payee)                          | Get payee details linked to connected bank accounts      |
+| [Direct Debit API](/data-api/api-reference/direct-debits)           | View direct debits from connected bank accounts          |
+| [Scheduled Payment API](/data-api/api-reference/scheduled-payments) | List scheduled payments from connected bank accounts     |
+
+Energy APIs [#energy-apis]
+
+| Endpoint                                                          | Description                                                  |
+| ----------------------------------------------------------------- | ------------------------------------------------------------ |
+| [Identity API](/data-api/api-reference/identity)                  | Retrieve identity information of connected energy accounts   |
+| [Account API](/data-api/api-reference/energy-accounts)            | Get account details of connected energy accounts             |
+| [Balance API](/data-api/api-reference/energy-balances)            | Access balance data of connected energy accounts             |
+| [Concession API](/data-api/api-reference/concessions)             | View concessions applied to connected energy accounts        |
+| [Billing API](/data-api/api-reference/billing)                    | Retrieve billing information from connected energy accounts  |
+| [Invoice API](/data-api/api-reference/invoices)                   | Get invoice data for connected energy accounts               |
+| [Usage API](/data-api/api-reference/usage)                        | Access usage and interval data for connected energy accounts |
+| [Servicepoint API](/data-api/api-reference/service-points)        | Retrieve site information for connected energy accounts      |
+| [DER API](/data-api/api-reference/der)                            | Obtain Distributed Energy Resources (DER) data               |
+| [Scheduled Payment API](/data-api/api-reference/payment-schedule) | List scheduled payments from connected energy accounts       |
+
+Note: Most endpoints support retries and idempotency. We recommend listening to webhook events before attempting to fetch data to ensure it's available.
+
+8. Test Your Integration [#8-test-your-integration]
+
+Before moving to production, validate your integration end-to-end:
+
+* Create a test end user
+* Run through the consent flow
+* Confirm webhook delivery
+* Fetch data using the relevant API
+
+Once you're confident in your flow, review our [Launch Checklist](/data-api/guides/resources/go-live-checklist) to prepare for production.
+
+Need Help? [#need-help]
+
+Not a developer? No worries! Reach out to [Fiskil's certified experts](https://www.fiskil.com/contact) or explore our [Open Source examples](https://github.com/fiskil).
+
+🎉 That's it! You're now set up with Fiskil. Let us know what you're building—we'd love to help you out or even feature your product on our blog.
+

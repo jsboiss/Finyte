@@ -1,0 +1,158 @@
+﻿# Invoices (/data-api/api-reference/invoices)
+
+Get energy invoice data from the Fiskil API.
+
+
+
+The Invoices endpoint provides access to energy bill/invoice data.
+
+Endpoints [#endpoints]
+
+| Method | Endpoint       | Description                  |
+| ------ | -------------- | ---------------------------- |
+| `GET`  | `/v1/invoices` | Get invoices for an end user |
+
+The Invoice Model [#the-invoice-model]
+
+| Attribute        | Type   | Description                            |
+| ---------------- | ------ | -------------------------------------- |
+| `id`             | string | Unique invoice identifier              |
+| `account_id`     | string | ID of the energy account               |
+| `invoice_number` | string | Invoice reference number               |
+| `issue_date`     | string | Date the invoice was issued            |
+| `due_date`       | string | Payment due date                       |
+| `period_start`   | string | Billing period start date              |
+| `period_end`     | string | Billing period end date                |
+| `total_amount`   | number | Total invoice amount                   |
+| `currency`       | string | Currency code                          |
+| `status`         | string | Invoice status (PAID, UNPAID, OVERDUE) |
+
+Example Response [#example-response]
+
+```json
+{
+  "id": "inv_123",
+  "account_id": "energy_acc_123",
+  "invoice_number": "INV-2023-001234",
+  "issue_date": "2023-01-01",
+  "due_date": "2023-01-15",
+  "period_start": "2022-12-01",
+  "period_end": "2022-12-31",
+  "total_amount": 185.50,
+  "currency": "AUD",
+  "status": "PAID"
+}
+```
+
+Get Invoices [#get-invoices]
+
+Retrieve invoice data for an end user's energy accounts.
+
+```
+GET https://api.fiskil.com/v1/invoices
+```
+
+Query Parameters [#query-parameters]
+
+| Parameter     | Type    | Required | Description                              |
+| ------------- | ------- | -------- | ---------------------------------------- |
+| `end_user_id` | string  | Yes      | The ID of the end user                   |
+| `account_id`  | string  | No       | Filter by specific account ID            |
+| `status`      | string  | No       | Filter by status (PAID, UNPAID, OVERDUE) |
+| `page[size]`  | integer | No       | Number of results (max 1000)             |
+| `page[after]` | string  | No       | Cursor for pagination                    |
+
+Example Request [#example-request]
+
+<Tabs items={['cURL', 'Node.js', 'Python']}>
+  <Tab value="cURL">
+    ```bash
+    curl --request GET \
+      --url 'https://api.fiskil.com/v1/invoices?end_user_id=482c0e2b-5866-46b1-b795-220b7bba45b5' \
+      --header 'Authorization: Bearer {access_token}' \
+      --header 'accept: application/json; charset=UTF-8'
+    ```
+  </Tab>
+
+  <Tab value="Node.js">
+    ```javascript
+    const response = await fetch(
+      'https://api.fiskil.com/v1/invoices?end_user_id=482c0e2b-5866-46b1-b795-220b7bba45b5',
+      {
+        method: 'GET',
+        headers: {
+          'Authorization': 'Bearer {access_token}',
+          'accept': 'application/json; charset=UTF-8'
+        }
+      }
+    );
+
+    const invoices = await response.json();
+    ```
+  </Tab>
+
+  <Tab value="Python">
+    ```python
+    import requests
+
+    response = requests.get(
+        'https://api.fiskil.com/v1/invoices',
+        params={'end_user_id': '482c0e2b-5866-46b1-b795-220b7bba45b5'},
+        headers={
+            'Authorization': 'Bearer {access_token}',
+            'accept': 'application/json; charset=UTF-8'
+        }
+    )
+
+    invoices = response.json()
+    ```
+  </Tab>
+</Tabs>
+
+Example Response [#example-response-1]
+
+```json
+{
+  "data": [
+    {
+      "id": "inv_123",
+      "account_id": "energy_acc_123",
+      "invoice_number": "INV-2023-001234",
+      "issue_date": "2023-01-01",
+      "due_date": "2023-01-15",
+      "period_start": "2022-12-01",
+      "period_end": "2022-12-31",
+      "total_amount": 185.50,
+      "currency": "AUD",
+      "status": "PAID"
+    },
+    {
+      "id": "inv_124",
+      "account_id": "energy_acc_123",
+      "invoice_number": "INV-2023-001235",
+      "issue_date": "2023-02-01",
+      "due_date": "2023-02-15",
+      "period_start": "2023-01-01",
+      "period_end": "2023-01-31",
+      "total_amount": 198.75,
+      "currency": "AUD",
+      "status": "UNPAID"
+    }
+  ]
+}
+```
+
+Invoice Statuses [#invoice-statuses]
+
+| Status    | Description                 |
+| --------- | --------------------------- |
+| `PAID`    | Invoice has been fully paid |
+| `UNPAID`  | Invoice is pending payment  |
+| `OVERDUE` | Invoice is past due date    |
+| `PARTIAL` | Invoice is partially paid   |
+
+Related Endpoints [#related-endpoints]
+
+* [Billing](/data-api/api-reference/billing) - Get billing transactions
+* [Energy Balances](/data-api/api-reference/energy-balances) - Get current balance
+

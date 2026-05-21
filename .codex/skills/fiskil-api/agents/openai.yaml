@@ -1,0 +1,4 @@
+interface:
+  display_name: "Fiskil API"
+  short_description: "Use local Fiskil Data API docs"
+  default_prompt: "Use $fiskil-api to build or review this Fiskil Data API integration against the local docs."

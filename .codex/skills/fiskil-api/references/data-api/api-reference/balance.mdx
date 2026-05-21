@@ -1,0 +1,154 @@
+﻿# Balance (/data-api/api-reference/balance)
+
+Get bank account balances from the Fiskil API.
+
+
+
+The Balance endpoint allows you to retrieve the current balance information for an end user's bank accounts.
+
+Endpoints [#endpoints]
+
+| Method | Endpoint       | Description                             |
+| ------ | -------------- | --------------------------------------- |
+| `GET`  | `/v1/balances` | Get balances for an end user's accounts |
+
+The Balance Model [#the-balance-model]
+
+| Attribute           | Type   | Description                                 |
+| ------------------- | ------ | ------------------------------------------- |
+| `account_id`        | string | ID of the account                           |
+| `current_balance`   | number | Current balance of the account              |
+| `available_balance` | number | Available balance (may differ from current) |
+| `credit_limit`      | number | Credit limit (for credit accounts)          |
+| `currency`          | string | Currency code (e.g., AUD)                   |
+| `as_of`             | string | Timestamp when the balance was last updated |
+
+Example Response [#example-response]
+
+```json
+{
+  "account_id": "acc_123456789",
+  "current_balance": 5432.10,
+  "available_balance": 5432.10,
+  "credit_limit": null,
+  "currency": "AUD",
+  "as_of": "2023-01-15T10:30:00Z"
+}
+```
+
+Get Balances [#get-balances]
+
+Retrieve balance information for an end user's accounts.
+
+```
+GET https://api.fiskil.com/v1/balances
+```
+
+Query Parameters [#query-parameters]
+
+| Parameter        | Type   | Required | Description                   |
+| ---------------- | ------ | -------- | ----------------------------- |
+| `end_user_id`    | string | Yes      | The ID of the end user        |
+| `account_id`     | string | No       | Filter by specific account ID |
+| `institution_id` | string | No       | Filter by institution ID      |
+
+Example Request [#example-request]
+
+<Tabs items={['cURL', 'Node.js', 'Python']}>
+  <Tab value="cURL">
+    ```bash
+    curl --request GET \
+      --url 'https://api.fiskil.com/v1/balances?end_user_id=482c0e2b-5866-46b1-b795-220b7bba45b5' \
+      --header 'Authorization: Bearer {access_token}' \
+      --header 'accept: application/json; charset=UTF-8'
+    ```
+  </Tab>
+
+  <Tab value="Node.js">
+    ```javascript
+    const response = await fetch(
+      'https://api.fiskil.com/v1/balances?end_user_id=482c0e2b-5866-46b1-b795-220b7bba45b5',
+      {
+        method: 'GET',
+        headers: {
+          'Authorization': 'Bearer {access_token}',
+          'accept': 'application/json; charset=UTF-8'
+        }
+      }
+    );
+
+    const balances = await response.json();
+    ```
+  </Tab>
+
+  <Tab value="Python">
+    ```python
+    import requests
+
+    response = requests.get(
+        'https://api.fiskil.com/v1/balances',
+        params={'end_user_id': '482c0e2b-5866-46b1-b795-220b7bba45b5'},
+        headers={
+            'Authorization': 'Bearer {access_token}',
+            'accept': 'application/json; charset=UTF-8'
+        }
+    )
+
+    balances = response.json()
+    ```
+  </Tab>
+</Tabs>
+
+Example Response [#example-response-1]
+
+```json
+{
+  "data": [
+    {
+      "account_id": "acc_123456789",
+      "current_balance": 5432.10,
+      "available_balance": 5432.10,
+      "credit_limit": null,
+      "currency": "AUD",
+      "as_of": "2023-01-15T10:30:00Z"
+    },
+    {
+      "account_id": "acc_987654321",
+      "current_balance": 12500.00,
+      "available_balance": 12500.00,
+      "credit_limit": null,
+      "currency": "AUD",
+      "as_of": "2023-01-15T10:30:00Z"
+    },
+    {
+      "account_id": "acc_credit_001",
+      "current_balance": -1250.50,
+      "available_balance": 3749.50,
+      "credit_limit": 5000.00,
+      "currency": "AUD",
+      "as_of": "2023-01-15T10:30:00Z"
+    }
+  ]
+}
+```
+
+Understanding Balances [#understanding-balances]
+
+Current vs Available Balance [#current-vs-available-balance]
+
+* **Current Balance**: The actual balance on the account, including pending transactions
+* **Available Balance**: The amount actually available to spend, which may be less than the current balance due to holds or pending transactions
+
+Credit Accounts [#credit-accounts]
+
+For credit cards and other credit accounts:
+
+* **Current Balance**: Amount owed (typically shown as negative)
+* **Available Balance**: Remaining credit available
+* **Credit Limit**: Maximum credit extended on the account
+
+Related Endpoints [#related-endpoints]
+
+* [Accounts](/data-api/api-reference/accounts) - Get account details
+* [Transactions](/data-api/api-reference/getBankingTransactions) - Get transaction history
+

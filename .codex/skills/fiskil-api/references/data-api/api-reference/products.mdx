@@ -1,0 +1,124 @@
+﻿# Products (/data-api/api-reference/products)
+
+Get bank product information from the Fiskil API.
+
+
+
+The Products endpoint provides detailed information about banking products associated with an end user's accounts.
+
+Endpoints [#endpoints]
+
+| Method | Endpoint       | Description                                    |
+| ------ | -------------- | ---------------------------------------------- |
+| `GET`  | `/v1/products` | Get product details for an end user's accounts |
+
+The Product Model [#the-product-model]
+
+| Attribute        | Type   | Description                       |
+| ---------------- | ------ | --------------------------------- |
+| `id`             | string | Unique identifier for the product |
+| `account_id`     | string | ID of the associated account      |
+| `name`           | string | Product name                      |
+| `description`    | string | Product description               |
+| `category`       | string | Product category                  |
+| `features`       | array  | List of product features          |
+| `fees`           | array  | Associated fees                   |
+| `interest_rates` | array  | Interest rate information         |
+
+Example Response [#example-response]
+
+```json
+{
+  "id": "prod_123",
+  "account_id": "acc_123456789",
+  "name": "Complete Freedom Account",
+  "description": "Everyday transaction account with no monthly fees",
+  "category": "TRANS_AND_SAVINGS_ACCOUNTS",
+  "features": [
+    "No monthly account keeping fees",
+    "Unlimited transactions",
+    "Free ATM withdrawals"
+  ],
+  "fees": [
+    {
+      "name": "International transaction fee",
+      "amount": 3.00,
+      "currency": "AUD"
+    }
+  ],
+  "interest_rates": [
+    {
+      "rate": 0.01,
+      "type": "VARIABLE",
+      "description": "Base interest rate"
+    }
+  ]
+}
+```
+
+Get Products [#get-products]
+
+Retrieve product information for an end user's accounts.
+
+```
+GET https://api.fiskil.com/v1/products
+```
+
+Query Parameters [#query-parameters]
+
+| Parameter     | Type   | Required | Description                   |
+| ------------- | ------ | -------- | ----------------------------- |
+| `end_user_id` | string | Yes      | The ID of the end user        |
+| `account_id`  | string | No       | Filter by specific account ID |
+
+Example Request [#example-request]
+
+<Tabs items={['cURL', 'Node.js', 'Python']}>
+  <Tab value="cURL">
+    ```bash
+    curl --request GET \
+      --url 'https://api.fiskil.com/v1/products?end_user_id=482c0e2b-5866-46b1-b795-220b7bba45b5' \
+      --header 'Authorization: Bearer {access_token}' \
+      --header 'accept: application/json; charset=UTF-8'
+    ```
+  </Tab>
+
+  <Tab value="Node.js">
+    ```javascript
+    const response = await fetch(
+      'https://api.fiskil.com/v1/products?end_user_id=482c0e2b-5866-46b1-b795-220b7bba45b5',
+      {
+        method: 'GET',
+        headers: {
+          'Authorization': 'Bearer {access_token}',
+          'accept': 'application/json; charset=UTF-8'
+        }
+      }
+    );
+
+    const products = await response.json();
+    ```
+  </Tab>
+
+  <Tab value="Python">
+    ```python
+    import requests
+
+    response = requests.get(
+        'https://api.fiskil.com/v1/products',
+        params={'end_user_id': '482c0e2b-5866-46b1-b795-220b7bba45b5'},
+        headers={
+            'Authorization': 'Bearer {access_token}',
+            'accept': 'application/json; charset=UTF-8'
+        }
+    )
+
+    products = response.json()
+    ```
+  </Tab>
+</Tabs>
+
+Related Endpoints [#related-endpoints]
+
+* [Accounts](/data-api/api-reference/accounts) - Get account details
+

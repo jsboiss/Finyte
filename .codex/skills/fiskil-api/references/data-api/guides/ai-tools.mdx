@@ -1,0 +1,403 @@
+﻿# Overview (/data-api/guides/ai-tools)
+
+Use AI assistants to build Fiskil integrations faster
+
+
+
+Fiskil provides optimized resources for AI-assisted development. Copy the
+prompt below into your AI assistant to get a complete integration built in
+minutes.
+
+Two ways to get started [#two-ways-to-get-started]
+
+Pick the option that fits your workflow:
+
+1. **Copy the integration prompt** (recommended) — paste it into Cursor,
+   Claude Code, ChatGPT, or any AI coding assistant
+2. **Connect the MCP server** — gives your AI tool live access to Fiskil
+   documentation. See [MCP server setup](/data-api/guides/ai-tools/mcp)
+
+Fiskil integration prompt [#fiskil-integration-prompt]
+
+Copy everything inside the code fence and paste it as context for your AI
+assistant.
+
+```markdown
+# Fiskil Data API — Complete Integration Guide
+
+Fiskil is a CDR (Consumer Data Right) platform for accessing consumer
+banking and energy data with consent. You integrate once and get access to
+banking transactions, account details, and energy usage data.
+
+## API Basics
+
+- Base URL: https://api.fiskil.com/v1
+- Auth: Bearer token from POST /v1/token
+- All API calls must be server-side — never expose credentials in frontend
+
+## Authentication
+
+POST /v1/token
+Content-Type: application/json
+
+{ "client_id": "...", "client_secret": "..." }
+
+Response: { "token": "...", "token_type": "Bearer", "expires_in": 900 }
+
+Store credentials in environment variables. Cache tokens until near expiry.
+
+## Core Flow
+
+1. Create End User → POST /v1/end-users { email, name, phone? }
+2. Create Auth Session → POST /v1/auth/session { end_user_id, cancel_uri }
+3. Frontend: Open Link SDK with session_id
+4. User completes consent flow
+5. Backend: Receive webhook events
+6. Backend: Fetch data using consent_id
+
+## Create End User
+
+POST /v1/end-users
+Authorization: Bearer {token}
+Content-Type: application/json
+
+{ "email": "user@example.com", "name": "User Name", "phone": "+1234567890" }
+
+Response: { "id": "end_user_abc123", "email": "...", "name": "..." }
+
+Store the id — needed for auth sessions.
+
+## Create Auth Session
+
+POST /v1/auth/session
+Authorization: Bearer {token}
+Content-Type: application/json
+
+{ "end_user_id": "end_user_abc123", "cancel_uri": "https://yourapp.com/cancel" }
+
+Response: { "session_id": "sess_xyz789", "auth_url": "...", "expires_at": "..." }
+
+Pass session_id to the Link SDK in your frontend.
+
+## Frontend: Link SDK (@fiskil/link)
+
+The Link SDK embeds a consent UI for users to connect their bank or energy
+accounts.
+
+### Installation
+
+npm install @fiskil/link
+
+### API
+
+link(sessionId, options?) returns a LinkFlow which is:
+
+- A Promise resolving to { consentID?: string, redirectURL?: string }
+- A controller with .close() to cancel programmatically
+
+Options:
+
+- allowedOrigin: string — restrict postMessage origin (recommended for production)
+- timeoutMs: number — timeout in ms (default: 600000 / 10 min)
+
+### Basic usage
+
+import { link, LinkError } from '@fiskil/link';
+
+async function startLink(authSessionId: string) {
+const flow = link(authSessionId);
+
+try {
+const result = await flow;
+console.log('Consent ID:', result.consentID);
+return result.consentID;
+} catch (err) {
+const error = err as LinkError;
+handleLinkError(error);
+throw error;
+}
+}
+
+// Cancel programmatically if needed
+// flow.close();
+
+## Handle Link Errors
+
+The SDK rejects with LinkError containing a code property:
+
+interface LinkError extends Error {
+name: 'LinkError';
+code: LinkErrorCode;
+details?: unknown;
+}
+
+Error codes and how to handle them:
+
+| Code                              | Description                             | User Message                                                 |
+| --------------------------------- | --------------------------------------- | ------------------------------------------------------------ |
+| LINK_USER_CANCELLED               | User closed the flow or .close() called | "You cancelled the linking process."                         |
+| LINK_TIMEOUT                      | Flow exceeded timeoutMs                 | "The session timed out. Please try again."                   |
+| LINK_INVALID_SESSION              | Invalid auth_session_id                 | "Invalid session. Please restart the process."               |
+| LINK_ORIGIN_MISMATCH              | Message from unexpected origin          | "Security error. Please try again."                          |
+| LINK_NOT_FOUND                    | Container element not in DOM            | "Display error. Please refresh and try again."               |
+| LINK_INTERNAL_ERROR               | Unrecognized SDK error                  | "An error occurred. Please try again."                       |
+| CONSENT_ENDUSER_DENIED            | User denied consent                     | "You declined to share your data."                           |
+| CONSENT_OTP_FAILURE               | OTP verification failed                 | "Verification failed. Please try again."                     |
+| CONSENT_ENDUSER_INELIGIBLE        | User ineligible for sharing             | "Your account is not eligible for data sharing."             |
+| CONSENT_TIMEOUT                   | Consent process timed out               | "The consent process timed out. Please try again."           |
+| CONSENT_UPSTREAM_PROCESSING_ERROR | Bank/provider error                     | "There was an issue with your bank. Please try again later." |
+
+function handleLinkError(error: LinkError): string {
+switch (error.code) {
+case 'LINK_USER_CANCELLED':
+return 'You cancelled the linking process.';
+case 'LINK_TIMEOUT':
+case 'CONSENT_TIMEOUT':
+return 'The session timed out. Please try again.';
+case 'LINK_INVALID_SESSION':
+return 'Invalid session. Please restart the process.';
+case 'CONSENT_ENDUSER_DENIED':
+return 'You declined to share your data.';
+case 'CONSENT_OTP_FAILURE':
+return 'Verification failed. Please try again.';
+case 'CONSENT_ENDUSER_INELIGIBLE':
+return 'Your account is not eligible for data sharing.';
+case 'CONSENT_UPSTREAM_PROCESSING_ERROR':
+return 'There was an issue with your bank. Please try again later.';
+default:
+return 'An error occurred. Please try again.';
+}
+}
+
+## Webhooks
+
+Register endpoints in Fiskil Console. Key events:
+
+| Event                               | When to fetch data     |
+| ----------------------------------- | ---------------------- |
+| consent.received                    | User completed consent |
+| banking.transactions.sync.completed | Banking data ready     |
+| energy.usage.sync.completed         | Energy data ready      |
+
+Webhook payload structure:
+{
+"event": "banking.transactions.sync.completed",
+"data": { "consent_id": "..." },
+"message_id": "unique-id-for-idempotency"
+}
+
+Verify signature with X-Fiskil-Signature header (HMAC-SHA256).
+
+## Fetch Data
+
+After receiving sync webhooks:
+
+GET /v1/accounts?consent_id={consent_id}
+GET /v1/transactions?consent_id={consent_id}
+GET /v1/energy/usage?consent_id={consent_id}
+
+## Full TypeScript Example
+
+class FiskilClient {
+private baseUrl = 'https://api.fiskil.com/v1';
+private token: string | null = null;
+private tokenExpiry = 0;
+
+private async getToken(): Promise<string> {
+if (this.token && Date.now() < this.tokenExpiry - 60000) {
+return this.token;
+}
+const res = await fetch(`${this.baseUrl}/token`, {
+method: 'POST',
+headers: { 'Content-Type': 'application/json' },
+body: JSON.stringify({
+client_id: process.env.FISKIL_CLIENT_ID,
+client_secret: process.env.FISKIL_CLIENT_SECRET,
+}),
+});
+const data = await res.json();
+this.token = data.token;
+this.tokenExpiry = Date.now() + data.expires_in \* 1000;
+return this.token;
+}
+
+private async request<T>(endpoint: string, options?: RequestInit): Promise<T> {
+const token = await this.getToken();
+const res = await fetch(`${this.baseUrl}${endpoint}`, {
+...options,
+headers: {
+Authorization: `Bearer ${token}`,
+'Content-Type': 'application/json',
+...options?.headers,
+},
+});
+if (!res.ok) throw new Error(`Fiskil API error: ${res.status}`);
+return res.json();
+}
+
+createEndUser(data: { email: string; name: string; phone?: string }) {
+return this.request<{ id: string }>('/end-users', {
+method: 'POST',
+body: JSON.stringify(data),
+});
+}
+
+createAuthSession(endUserId: string, cancelUri: string) {
+return this.request<{ session_id: string }>('/auth/session', {
+method: 'POST',
+body: JSON.stringify({ end_user_id: endUserId, cancel_uri: cancelUri }),
+});
+}
+
+getAccounts(consentId: string) {
+return this.request<{ accounts: any[] }>(`/accounts?consent_id=${consentId}`);
+}
+
+getTransactions(consentId: string) {
+return this.request<{ transactions: any[] }>(`/transactions?consent_id=${consentId}`);
+}
+}
+
+## React Component Pattern
+
+'use client';
+
+import { useState, useCallback, useRef } from 'react';
+import { link, LinkError, LinkErrorCode } from '@fiskil/link';
+
+type LinkStatus = 'idle' | 'linking' | 'success' | 'error';
+
+interface UseLinkAccountResult {
+startLink: (sessionId: string) => Promise<string | null>;
+cancel: () => void;
+status: LinkStatus;
+error: { code: LinkErrorCode; message: string } | null;
+}
+
+export function useLinkAccount(): UseLinkAccountResult {
+const [status, setStatus] = useState<LinkStatus>('idle');
+const [error, setError] = useState<{ code: LinkErrorCode; message: string } | null>(null);
+const flowRef = useRef<ReturnType<typeof link> | null>(null);
+
+const startLink = useCallback(async (sessionId: string): Promise<string | null> => {
+setStatus('linking');
+setError(null);
+
+    try {
+      const flow = link(sessionId);
+      flowRef.current = flow;
+      const result = await flow;
+      setStatus('success');
+      return result.consentID ?? null;
+    } catch (err) {
+      const linkError = err as LinkError;
+      if (linkError.code === 'LINK_USER_CANCELLED') {
+        setStatus('idle');
+        return null;
+      }
+      setStatus('error');
+      setError({ code: linkError.code, message: handleLinkError(linkError) });
+      return null;
+    } finally {
+      flowRef.current = null;
+    }
+
+}, []);
+
+const cancel = useCallback(() => {
+flowRef.current?.close();
+}, []);
+
+return { startLink, cancel, status, error };
+}
+
+// Example component
+function LinkAccountButton({
+sessionId,
+onSuccess
+}: {
+sessionId: string;
+onSuccess: (consentId: string) => void;
+}) {
+const { startLink, status, error } = useLinkAccount();
+
+const handleClick = async () => {
+const consentId = await startLink(sessionId);
+if (consentId) onSuccess(consentId);
+};
+
+return (
+<div>
+{error && <p className="text-red-600">{error.message}</p>}
+<button onClick={handleClick} disabled={status === 'linking'}>
+{status === 'linking' ? 'Connecting...' : 'Link Account'}
+</button>
+</div>
+);
+}
+
+## Webhook Handler Example (Next.js)
+
+import crypto from 'crypto';
+import { NextRequest, NextResponse } from 'next/server';
+
+const WEBHOOK_SECRET = process.env.FISKIL_WEBHOOK_SECRET!;
+
+function verifySignature(payload: string, signature: string): boolean {
+const expected = crypto.createHmac('sha256', WEBHOOK_SECRET).update(payload).digest('hex');
+return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+}
+
+export async function POST(req: NextRequest) {
+const signature = req.headers.get('x-fiskil-signature');
+const payload = await req.text();
+
+if (!signature || !verifySignature(payload, signature)) {
+return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
+}
+
+const { event, data, message_id } = JSON.parse(payload);
+
+// Idempotency check
+if (await isProcessed(message_id)) {
+return NextResponse.json({ status: 'already processed' });
+}
+
+switch (event) {
+case 'consent.received':
+await handleConsentReceived(data);
+break;
+case 'banking.transactions.sync.completed':
+await fetchAndStoreBankingData(data.consent_id);
+break;
+case 'energy.usage.sync.completed':
+await fetchAndStoreEnergyData(data.consent_id);
+break;
+}
+
+await markProcessed(message_id);
+return NextResponse.json({ status: 'ok' });
+}
+
+## Security Checklist
+
+- [ ] Credentials in environment variables only
+- [ ] All API calls server-side
+- [ ] Tokens never logged or exposed
+- [ ] Webhook signatures verified
+- [ ] Idempotency on webhook handlers (use message_id)
+- [ ] HTTPS for all endpoints
+```
+
+Other resources [#other-resources]
+
+| Resource                         | Description                             |
+| -------------------------------- | --------------------------------------- |
+| [/llms.txt](/llms.txt)           | Directory of all documentation pages    |
+| [/llms-full.txt](/llms-full.txt) | Complete documentation as a single file |
+| [/skill.md](/skill.md)           | Fiskil capabilities summary             |
+
+Every documentation page is also available as raw markdown by appending
+`.mdx` to the URL. For example:
+`/data-api/guides/getting-started/quick-start.mdx`
+

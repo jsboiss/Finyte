@@ -1,0 +1,67 @@
+﻿# Get institution by id (/data-api/api-reference/v1-0-0/get-institution-by-id)
+
+Get institution by id
+
+## GET /institutions/{id}
+
+**Get institution by id**
+
+Get institution by id
+
+**Tags:** institutions, public
+
+### Parameters
+
+| Name | In | Type | Required | Description |
+|------|----|------|----------|-------------|
+| `id` | path | string | Yes | The ID of the institution to fetch details of |
+
+### Responses
+
+**200:** OK response.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `icon` | string | A URL to an icon for the institution |
+| `id` | string | The id of the institution |
+| `industry` | string | The industry of the institution e.g. “banking” or “energy” |
+| `is_accessible` | boolean | Whether this institution is accessible by the teamID. Determines if institution can be used |
+| `logo` | string | A URL to the logo of the institution |
+| `name` | string | The name of the institution |
+| `priority` | integer | The order that this institution will appear in during an auth session |
+| `status` | InstitutionStatus |  |
+
+**Example:**
+```json
+{
+  "icon": "https://eastpaclogo.com.au/eastpac-icon.svg",
+  "id": "22",
+  "industry": "banking",
+  "is_accessible": true,
+  "logo": "https://eastpaclogo.com.au/eastpac.svg",
+  "name": "Eastpac",
+  "priority": 1,
+  "status": {
+    "connections": {
+      "status": "OUTAGE"
+    }
+  }
+}
+```
+
+**404:** institution_not_found: Not Found response.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `fault` | boolean | Is the error a server-side fault? |
+| `id` | string | ID is a unique identifier for this particular occurrence of the problem. |
+| `message` | string | Message is a human-readable explanation specific to this occurrence of the problem. |
+| `name` | string | Name is the name of this class of errors. |
+| `temporary` | boolean | Is the error temporary? |
+| `timeout` | boolean | Is the error a timeout? |
+
+### Example Request
+```bash
+curl -X GET "https://api.fiskil.com/institutions/{id}" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```

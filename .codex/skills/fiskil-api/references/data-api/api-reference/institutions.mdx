@@ -1,0 +1,238 @@
+﻿# Institutions (/data-api/api-reference/institutions)
+
+List and retrieve institution (data holder) information from the Fiskil API.
+
+
+
+Institutions are commonly known as Data Holders within the Consumer Data Right. They are typically banks, credit unions, or energy providers who return information about end users. Their response contains media, names, and identifiers which can be used for displaying specific information to your end users.
+
+The Fiskil API supports many different institutions and continues to grow and work with more.
+
+Endpoints [#endpoints]
+
+| Method | Endpoint                | Description                     |
+| ------ | ----------------------- | ------------------------------- |
+| `GET`  | `/v1/institutions`      | List all institutions           |
+| `GET`  | `/v1/institutions/{id}` | Retrieve a specific institution |
+
+The Institution Model [#the-institution-model]
+
+| Attribute       | Type    | Required | Description                                                                                    |
+| --------------- | ------- | -------- | ---------------------------------------------------------------------------------------------- |
+| `id`            | string  | Yes      | The ID of the institution                                                                      |
+| `name`          | string  | Yes      | The name of the institution                                                                    |
+| `icon`          | string  | Yes      | A URL to an icon for the institution                                                           |
+| `logo`          | string  | Yes      | A URL to the logo of the institution                                                           |
+| `industry`      | string  | Yes      | The industry of the institution. Values: `banking`, `energy`                                   |
+| `is_accessible` | boolean | No       | Whether this institution is accessible by your team. Determines if the institution can be used |
+| `priority`      | integer | Yes      | The order that this institution will appear in during an auth session                          |
+| `status`        | object  | Yes      | Status information including connection status                                                 |
+
+Example Response [#example-response]
+
+```json
+{
+  "icon": "https://eastpaclogo.com.au/eastpac-icon.svg",
+  "id": "22",
+  "industry": "banking",
+  "is_accessible": true,
+  "logo": "https://eastpaclogo.com.au/eastpac.svg",
+  "name": "Eastpac",
+  "priority": 1,
+  "status": {
+    "connections": {
+      "status": "DEGRADED"
+    }
+  }
+}
+```
+
+List All Institutions [#list-all-institutions]
+
+Returns a list of all institutions that are currently supported by Fiskil.
+
+```
+GET https://api.fiskil.com/v1/institutions
+```
+
+Query Parameters [#query-parameters]
+
+| Parameter          | Type   | Required | Description                                                                 |
+| ------------------ | ------ | -------- | --------------------------------------------------------------------------- |
+| `industry`         | string | No       | The type of the institution. Values: `banking`, `energy`                    |
+| `client_id`        | string | Yes      | Your team ID. You can get this from the settings menu of the Fiskil Console |
+| `institution_mode` | string | No       | If set to `recommended`, will load recommended institution data only        |
+
+Example Request [#example-request]
+
+<Tabs items={['cURL', 'Node.js', 'Python']}>
+  <Tab value="cURL">
+    ```bash
+    curl --request GET \
+      --url 'https://api.fiskil.com/v1/institutions?industry=banking&client_id={client_id}' \
+      --header 'accept: application/json; charset=UTF-8' \
+      --header 'content-type: application/json; charset=UTF-8'
+    ```
+  </Tab>
+
+  <Tab value="Node.js">
+    ```javascript
+    const response = await fetch(
+      'https://api.fiskil.com/v1/institutions?industry=banking&client_id={client_id}',
+      {
+        method: 'GET',
+        headers: {
+          'accept': 'application/json; charset=UTF-8',
+          'content-type': 'application/json; charset=UTF-8'
+        }
+      }
+    );
+
+    const institutions = await response.json();
+    ```
+  </Tab>
+
+  <Tab value="Python">
+    ```python
+    import requests
+
+    response = requests.get(
+        'https://api.fiskil.com/v1/institutions',
+        params={
+            'industry': 'banking',
+            'client_id': '{client_id}'
+        },
+        headers={
+            'accept': 'application/json; charset=UTF-8',
+            'content-type': 'application/json; charset=UTF-8'
+        }
+    )
+
+    institutions = response.json()
+    ```
+  </Tab>
+</Tabs>
+
+Example Response [#example-response-1]
+
+```json
+[
+  {
+    "icon": "https://eastpaclogo.com.au/eastpac-icon.svg",
+    "id": "22",
+    "industry": "banking",
+    "is_accessible": true,
+    "logo": "https://eastpaclogo.com.au/eastpac.svg",
+    "name": "Eastpac",
+    "priority": 1,
+    "status": {
+      "connections": {
+        "status": "HEALTHY"
+      }
+    }
+  },
+  {
+    "icon": "https://westbank.com.au/icon.svg",
+    "id": "23",
+    "industry": "banking",
+    "is_accessible": true,
+    "logo": "https://westbank.com.au/logo.svg",
+    "name": "Westbank",
+    "priority": 2,
+    "status": {
+      "connections": {
+        "status": "HEALTHY
+    }
+  }
+]
+```
+
+Retrieve an Institution [#retrieve-an-institution]
+
+Retrieve a specific institution based on its ID.
+
+```
+GET https://api.fiskil.com/v1/institutions/{id}
+```
+
+Path Parameters [#path-parameters]
+
+| Parameter | Type   | Required | Description                        |
+| --------- | ------ | -------- | ---------------------------------- |
+| `id`      | string | Yes      | The ID of the institution to fetch |
+
+Example Request [#example-request-1]
+
+<Tabs items={['cURL', 'Node.js', 'Python']}>
+  <Tab value="cURL">
+    ```bash
+    curl --request GET \
+      --url https://api.fiskil.com/v1/institutions/22 \
+      --header 'accept: application/json; charset=UTF-8' \
+      --header 'content-type: application/json; charset=UTF-8'
+    ```
+  </Tab>
+
+  <Tab value="Node.js">
+    ```javascript
+    const response = await fetch(
+      'https://api.fiskil.com/v1/institutions/22',
+      {
+        method: 'GET',
+        headers: {
+          'accept': 'application/json; charset=UTF-8',
+          'content-type': 'application/json; charset=UTF-8'
+        }
+      }
+    );
+
+    const institution = await response.json();
+    ```
+  </Tab>
+
+  <Tab value="Python">
+    ```python
+    import requests
+
+    response = requests.get(
+        'https://api.fiskil.com/v1/institutions/22',
+        headers={
+            'accept': 'application/json; charset=UTF-8',
+            'content-type': 'application/json; charset=UTF-8'
+        }
+    )
+
+    institution = response.json()
+    ```
+  </Tab>
+</Tabs>
+
+Example Response [#example-response-2]
+
+```json
+{
+  "icon": "https://eastpaclogo.com.au/eastpac-icon.svg",
+  "id": "22",
+  "industry": "banking",
+  "is_accessible": true,
+  "logo": "https://eastpaclogo.com.au/eastpac.svg",
+  "name": "Eastpac",
+  "priority": 1,
+  "status": {
+    "connections": {
+      "status": "HEALTHY"
+    }
+  }
+}
+```
+
+Status Values [#status-values]
+
+The `status.connections.status` field can have the following values:
+
+| Status     | Description                                          |
+| ---------- | ---------------------------------------------------- |
+| `HEALTHY`  | The institution is fully operational                 |
+| `DEGRADED` | The institution is experiencing degraded performance |
+| `OUTAGE`   | The institution is currently unavailable             |
+

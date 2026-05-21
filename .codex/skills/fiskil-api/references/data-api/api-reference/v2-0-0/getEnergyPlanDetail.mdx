@@ -1,0 +1,47 @@
+﻿# Get energy plan details (/data-api/api-reference/v2-0-0/getEnergyPlanDetail)
+
+Get details of an energy plan using the plan's ID
+
+## GET /v1/energy/plans/{plan_id}
+
+**Get energy plan details**
+
+Get details of an energy plan using the plan's ID
+
+**Tags:** Plans, v1, v2, energy
+
+### Parameters
+
+| Name | In | Type | Required | Description |
+|------|----|------|----------|-------------|
+| `plan_id` | path | string | Yes | A unique identifier for the plan object as returned by the List Plans API. |
+
+### Responses
+
+**200:** OK
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `data` | fiskil_energy.PlanDetail |  |
+
+**400:** Bad Request
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string |  |
+| `message` | string |  |
+| `name` | string |  |
+
+**500:** Internal Server Error
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string |  |
+| `message` | string |  |
+| `name` | string |  |
+
+### Example Request
+```bash
+curl -X GET "https://api.fiskil.com/v1/energy/plans/{plan_id}" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```

@@ -1,0 +1,52 @@
+﻿# Handle Income (/data-api/api-reference/v2-0-0/getBankingIncome)
+
+returns an income summary for the end-user. This is calculated over all consents associated with the end-user in real-time, and includes data from all connected bank accounts
+
+## GET /v1/banking/income
+
+**Handle Income**
+
+returns an income summary for the end-user. This is calculated over all consents associated with the end-user in real-time, and includes data from all connected bank accounts
+
+**Tags:** Income, v1, v2, banking
+
+### Parameters
+
+| Name | In | Type | Required | Description |
+|------|----|------|----------|-------------|
+| `end_user_id` | query | string | Yes | A unique identifier for the End User object. |
+| `from` | query | string | No | Start date (inclusive) in ISO-8601 date format (YYYY-MM-DD). Defaults to 6 months before today if omitted. |
+| `to` | query | string | No | End date (inclusive) in ISO-8601 date format (YYYY-MM-DD). Defaults to today if omitted. |
+| `categories` | query | string[] | No | One or many income categories to include |
+| `account_id` | query | string[] | No | List of account IDs to include. Pass multiple instances of account_id to include multiple accounts. Defaults to all available accounts if omitted |
+
+### Responses
+
+**200:** OK
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `income_sources` | fiskil_banking.IncomeSource[] | A list of income sources |
+| `income_summary` | object | The income summary |
+
+**400:** Bad Request
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string |  |
+| `message` | string |  |
+| `name` | string |  |
+
+**500:** Internal Server Error
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string |  |
+| `message` | string |  |
+| `name` | string |  |
+
+### Example Request
+```bash
+curl -X GET "https://api.fiskil.com/v1/banking/income" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```

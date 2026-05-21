@@ -1,0 +1,149 @@
+﻿# Concessions (/data-api/api-reference/concessions)
+
+Get concession information from the Fiskil API.
+
+
+
+The Concessions endpoint provides information about concessions and discounts applied to energy accounts.
+
+Endpoints [#endpoints]
+
+| Method | Endpoint          | Description                     |
+| ------ | ----------------- | ------------------------------- |
+| `GET`  | `/v1/concessions` | Get concessions for an end user |
+
+The Concession Model [#the-concession-model]
+
+| Attribute      | Type   | Description                              |
+| -------------- | ------ | ---------------------------------------- |
+| `id`           | string | Unique concession identifier             |
+| `account_id`   | string | Associated energy account ID             |
+| `type`         | string | Type of concession                       |
+| `display_name` | string | Display name of the concession           |
+| `start_date`   | string | When the concession started              |
+| `end_date`     | string | When the concession ends (if applicable) |
+| `percentage`   | number | Percentage discount (if applicable)      |
+| `fixed_amount` | number | Fixed amount discount (if applicable)    |
+
+Example Response [#example-response]
+
+```json
+{
+  "id": "conc_123",
+  "account_id": "energy_acc_123",
+  "type": "GOVERNMENT",
+  "display_name": "Low Income Household Rebate",
+  "start_date": "2023-01-01",
+  "end_date": null,
+  "percentage": null,
+  "fixed_amount": 285.00
+}
+```
+
+Get Concessions [#get-concessions]
+
+Retrieve concession information for an end user's energy accounts.
+
+```
+GET https://api.fiskil.com/v1/concessions
+```
+
+Query Parameters [#query-parameters]
+
+| Parameter     | Type    | Required | Description                   |
+| ------------- | ------- | -------- | ----------------------------- |
+| `end_user_id` | string  | Yes      | The ID of the end user        |
+| `account_id`  | string  | No       | Filter by specific account ID |
+| `page[size]`  | integer | No       | Number of results (max 1000)  |
+| `page[after]` | string  | No       | Cursor for pagination         |
+
+Example Request [#example-request]
+
+<Tabs items={['cURL', 'Node.js', 'Python']}>
+  <Tab value="cURL">
+    ```bash
+    curl --request GET \
+      --url 'https://api.fiskil.com/v1/concessions?end_user_id=482c0e2b-5866-46b1-b795-220b7bba45b5' \
+      --header 'Authorization: Bearer {access_token}' \
+      --header 'accept: application/json; charset=UTF-8'
+    ```
+  </Tab>
+
+  <Tab value="Node.js">
+    ```javascript
+    const response = await fetch(
+      'https://api.fiskil.com/v1/concessions?end_user_id=482c0e2b-5866-46b1-b795-220b7bba45b5',
+      {
+        method: 'GET',
+        headers: {
+          'Authorization': 'Bearer {access_token}',
+          'accept': 'application/json; charset=UTF-8'
+        }
+      }
+    );
+
+    const concessions = await response.json();
+    ```
+  </Tab>
+
+  <Tab value="Python">
+    ```python
+    import requests
+
+    response = requests.get(
+        'https://api.fiskil.com/v1/concessions',
+        params={'end_user_id': '482c0e2b-5866-46b1-b795-220b7bba45b5'},
+        headers={
+            'Authorization': 'Bearer {access_token}',
+            'accept': 'application/json; charset=UTF-8'
+        }
+    )
+
+    concessions = response.json()
+    ```
+  </Tab>
+</Tabs>
+
+Example Response [#example-response-1]
+
+```json
+{
+  "data": [
+    {
+      "id": "conc_123",
+      "account_id": "energy_acc_123",
+      "type": "GOVERNMENT",
+      "display_name": "Low Income Household Rebate",
+      "start_date": "2023-01-01",
+      "end_date": null,
+      "percentage": null,
+      "fixed_amount": 285.00
+    },
+    {
+      "id": "conc_456",
+      "account_id": "energy_acc_123",
+      "type": "RETAILER",
+      "display_name": "Pay On Time Discount",
+      "start_date": "2023-01-01",
+      "end_date": "2024-01-01",
+      "percentage": 10,
+      "fixed_amount": null
+    }
+  ]
+}
+```
+
+Concession Types [#concession-types]
+
+| Type         | Description                                           |
+| ------------ | ----------------------------------------------------- |
+| `GOVERNMENT` | Government-issued concession (e.g., pensioner rebate) |
+| `RETAILER`   | Retailer-offered discount                             |
+| `HARDSHIP`   | Hardship program discount                             |
+| `LOYALTY`    | Customer loyalty discount                             |
+
+Related Endpoints [#related-endpoints]
+
+* [Energy Accounts](/data-api/api-reference/energy-accounts) - Get account details
+* [Billing](/data-api/api-reference/billing) - See concessions applied to bills
+

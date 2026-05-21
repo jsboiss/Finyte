@@ -1,0 +1,60 @@
+﻿# Identity Data (/data-api/guides/data-domains/identity)
+
+Fiskil provides access to verified identity information associated with a user's connected accounts.
+
+
+
+Fiskil provides access to verified identity information associated with a user's connected accounts. This data can be retrieved from either banking or energy institutions, depending on the domains your application supports.
+
+The Identity API is useful for onboarding, account verification, compliance, and personalisation workflows.
+
+What Is Available [#what-is-available]
+
+Identity data is retrieved from the user's linked institution after a successful connection and sync.
+
+The fields available may vary slightly between providers, but generally include:
+
+| Field                    | Description                                     |
+| ------------------------ | ----------------------------------------------- |
+| **Full Name**            | Verified legal name as registered with provider |
+| **Phone Number**         | Mobile or contact number                        |
+| **Email Address**        | Contact email address                           |
+| **Residential Address**  | Postal or supply address                        |
+| **Institution Metadata** | Source of identity data (e.g. bank or retailer) |
+
+You can retrieve identity data for all connected institutions or filter by `end_user_id`.
+
+Refer to the [Identity API Reference](/docs/data-api/api-reference/identity) for full details.
+
+When Identity Data Becomes Available [#when-identity-data-becomes-available]
+
+Identity information is accessible only after:
+
+1. The user has linked an institution (see [End Users](/docs/data-api/guides/core-concepts/end-users))
+2. Fiskil has completed the identity sync
+3. Your system receives the `common.identity.sync.completed` webhook
+
+Always wait for the relevant webhook before attempting to retrieve identity data.
+
+For more on handling events, see the [Webhooks Guide](/docs/data-api/guides/core-concepts/webhooks).
+
+Example Use Cases [#example-use-cases]
+
+* **Onboarding verification** -- Confirm user-provided details during sign-up
+* **Account ownership checks** -- Match account data with verified identity information
+* **Personalisation** -- Pre-fill forms or tailor user experiences
+* **Compliance workflows** -- Support identity confirmation for regulated use cases
+
+Best Practices [#best-practices]
+
+* Always use `end_user_id` to retrieve identity data
+* Rely on webhooks to determine when identity data is available — avoid polling
+* Identity field coverage may vary by institution
+* Avoid storing sensitive identity data unless necessary for your application and compliant with regulation
+
+Related Guides [#related-guides]
+
+* [End Users](/docs/data-api/guides/core-concepts/end-users)
+* [Consents](/docs/data-api/guides/core-concepts/consents)
+* [Identity API Reference](/docs/data-api/api-reference/identity)
+

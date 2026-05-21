@@ -1,0 +1,153 @@
+﻿# Plans (/data-api/api-reference/plans)
+
+Get energy plan information from the Fiskil API.
+
+
+
+The Plans endpoint provides information about energy plans and tariffs associated with an end user's accounts.
+
+Endpoints [#endpoints]
+
+| Method | Endpoint    | Description                      |
+| ------ | ----------- | -------------------------------- |
+| `GET`  | `/v1/plans` | Get plan details for an end user |
+
+The Plan Model [#the-plan-model]
+
+| Attribute        | Type   | Description                              |
+| ---------------- | ------ | ---------------------------------------- |
+| `id`             | string | Unique plan identifier                   |
+| `account_id`     | string | Associated energy account ID             |
+| `name`           | string | Plan name                                |
+| `description`    | string | Plan description                         |
+| `fuel_type`      | string | Fuel type (ELECTRICITY, GAS, DUAL\_FUEL) |
+| `tariff_type`    | string | Tariff structure type                    |
+| `effective_from` | string | When the plan became effective           |
+| `effective_to`   | string | When the plan ends (if applicable)       |
+| `rates`          | array  | Rate/tariff information                  |
+
+Example Response [#example-response]
+
+```json
+{
+  "id": "plan_123",
+  "account_id": "energy_acc_123",
+  "name": "Residential Saver",
+  "description": "Competitive rates for residential customers",
+  "fuel_type": "ELECTRICITY",
+  "tariff_type": "TIME_OF_USE",
+  "effective_from": "2023-01-01",
+  "effective_to": null,
+  "rates": [
+    {
+      "rate_type": "PEAK",
+      "unit_price": 0.35,
+      "unit": "kWh",
+      "time_of_use": {
+        "start": "14:00",
+        "end": "20:00",
+        "days": ["WEEKDAY"]
+      }
+    },
+    {
+      "rate_type": "OFF_PEAK",
+      "unit_price": 0.18,
+      "unit": "kWh",
+      "time_of_use": {
+        "start": "20:00",
+        "end": "14:00",
+        "days": ["WEEKDAY", "WEEKEND"]
+      }
+    }
+  ]
+}
+```
+
+Get Plans [#get-plans]
+
+Retrieve plan information for an end user's energy accounts.
+
+```
+GET https://api.fiskil.com/v1/plans
+```
+
+Query Parameters [#query-parameters]
+
+| Parameter     | Type    | Required | Description                   |
+| ------------- | ------- | -------- | ----------------------------- |
+| `end_user_id` | string  | Yes      | The ID of the end user        |
+| `account_id`  | string  | No       | Filter by specific account ID |
+| `page[size]`  | integer | No       | Number of results (max 1000)  |
+| `page[after]` | string  | No       | Cursor for pagination         |
+
+Example Request [#example-request]
+
+<Tabs items={['cURL', 'Node.js', 'Python']}>
+  <Tab value="cURL">
+    ```bash
+    curl --request GET \
+      --url 'https://api.fiskil.com/v1/plans?end_user_id=482c0e2b-5866-46b1-b795-220b7bba45b5' \
+      --header 'Authorization: Bearer {access_token}' \
+      --header 'accept: application/json; charset=UTF-8'
+    ```
+  </Tab>
+
+  <Tab value="Node.js">
+    ```javascript
+    const response = await fetch(
+      'https://api.fiskil.com/v1/plans?end_user_id=482c0e2b-5866-46b1-b795-220b7bba45b5',
+      {
+        method: 'GET',
+        headers: {
+          'Authorization': 'Bearer {access_token}',
+          'accept': 'application/json; charset=UTF-8'
+        }
+      }
+    );
+
+    const plans = await response.json();
+    ```
+  </Tab>
+
+  <Tab value="Python">
+    ```python
+    import requests
+
+    response = requests.get(
+        'https://api.fiskil.com/v1/plans',
+        params={'end_user_id': '482c0e2b-5866-46b1-b795-220b7bba45b5'},
+        headers={
+            'Authorization': 'Bearer {access_token}',
+            'accept': 'application/json; charset=UTF-8'
+        }
+    )
+
+    plans = response.json()
+    ```
+  </Tab>
+</Tabs>
+
+Tariff Types [#tariff-types]
+
+| Type          | Description                          |
+| ------------- | ------------------------------------ |
+| `FLAT`        | Single rate for all usage            |
+| `TIME_OF_USE` | Different rates based on time of day |
+| `TIERED`      | Rates change based on usage tiers    |
+| `DEMAND`      | Includes demand charges              |
+
+Rate Types [#rate-types]
+
+| Type              | Description                       |
+| ----------------- | --------------------------------- |
+| `PEAK`            | Peak period rate                  |
+| `OFF_PEAK`        | Off-peak period rate              |
+| `SHOULDER`        | Shoulder period rate              |
+| `CONTROLLED_LOAD` | Controlled load (hot water, etc.) |
+| `FEED_IN`         | Solar feed-in tariff              |
+
+Related Endpoints [#related-endpoints]
+
+* [Energy Accounts](/data-api/api-reference/energy-accounts) - Get account details
+* [Usage](/data-api/api-reference/usage) - Get usage to calculate costs
+

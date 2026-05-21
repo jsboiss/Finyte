@@ -1,0 +1,251 @@
+﻿# Consents (/data-api/api-reference/consents)
+
+View and manage data sharing consents in the Fiskil API.
+
+
+
+A Consent represents the access period and scope of data an End User allows your application to access. Fiskil handles a lot of the compliance requirements around consents, but you should also alert your customers about their consents. These APIs will help you embed an end user's personalized consents into your application.
+
+Endpoints [#endpoints]
+
+| Method   | Endpoint                       | Description                       |
+| -------- | ------------------------------ | --------------------------------- |
+| `GET`    | `/v1/consent`                  | List all consents for an end user |
+| `DELETE` | `/v1/consent/{arrangement_id}` | Revoke a consent                  |
+
+The Consent Model [#the-consent-model]
+
+| Attribute            | Type    | Required | Description                                                 |
+| -------------------- | ------- | -------- | ----------------------------------------------------------- |
+| `arrangement_id`     | string  | Yes      | CDR arrangement ID provided by the data holder              |
+| `active`             | boolean | Yes      | Indicates whether consent is active                         |
+| `app_name`           | string  | Yes      | Your application name                                       |
+| `app_logo`           | string  | Yes      | URL to your application logo                                |
+| `created_at`         | string  | Yes      | When the consent was created (ISO 8601)                     |
+| `duration`           | integer | Yes      | The time period access was granted, in seconds              |
+| `end_user_id`        | string  | Yes      | ID of the end user that authorized the consent              |
+| `end_user_email`     | string  | Yes      | End user's email                                            |
+| `expires_at`         | string  | Yes      | When the consent expires (ISO 8601)                         |
+| `institution_id`     | string  | Yes      | The identifier for the institution the consent is held with |
+| `institution_name`   | string  | Yes      | Institution name                                            |
+| `institution_logo`   | string  | Yes      | Institution logo URL                                        |
+| `institution_type`   | string  | Yes      | Institution type (e.g., "banking", "energy")                |
+| `last_accessed`      | string  | Yes      | The last time the consent was used to access data           |
+| `last_consent`       | string  | Yes      | The last time the consent was acknowledged by the end user  |
+| `permissions`        | array   | Yes      | A list of the data permissions granted                      |
+| `termination_reason` | string  | Yes      | Reason for consent termination (if applicable)              |
+
+Example Response [#example-response]
+
+```json
+{
+  "active": true,
+  "app_logo": "https://acme.com/app-logo.png",
+  "app_name": "MyCoolApp",
+  "arrangement_id": "94549a73-a554-4b76-b824-d96898829751",
+  "created_at": "2021-03-18T02:46:42Z",
+  "duration": 7776000,
+  "end_user_email": "tony.stark@example.com",
+  "end_user_id": "482c0e2b-5866-46b1-b795-220b7bba45b5",
+  "expires_at": "2023-01-01T10:42:40Z",
+  "institution_id": "11",
+  "institution_logo": "https://example.com/images/gringotts-logo.png",
+  "institution_name": "Gringotts",
+  "institution_type": "banking",
+  "last_accessed": "2023-01-02T10:42:42Z",
+  "last_consent": "2023-01-01T10:42:40Z",
+  "permissions": [
+    "accounts",
+    "balances",
+    "transactions"
+  ],
+  "termination_reason": "Expired or Revoked"
+}
+```
+
+List Consents [#list-consents]
+
+Retrieve all consents for a specific end user.
+
+```
+GET https://api.fiskil.com/v1/consent
+```
+
+Query Parameters [#query-parameters]
+
+| Parameter     | Type    | Required | Description                                                          |
+| ------------- | ------- | -------- | -------------------------------------------------------------------- |
+| `end_user_id` | string  | No       | The ID of the end user to list consents for                          |
+| `active`      | boolean | No       | Filter to include only active or inactive (revoked/expired) consents |
+
+Example Request [#example-request]
+
+<Tabs items={['cURL', 'Node.js', 'Python']}>
+  <Tab value="cURL">
+    ```bash
+    curl --request GET \
+      --url 'https://api.fiskil.com/v1/consent?end_user_id=482c0e2b-5866-46b1-b795-220b7bba45b5&active=true' \
+      --header 'Authorization: Bearer {access_token}' \
+      --header 'accept: application/json; charset=UTF-8'
+    ```
+  </Tab>
+
+  <Tab value="Node.js">
+    ```javascript
+    const response = await fetch(
+      'https://api.fiskil.com/v1/consent?end_user_id=482c0e2b-5866-46b1-b795-220b7bba45b5&active=true',
+      {
+        method: 'GET',
+        headers: {
+          'Authorization': 'Bearer {access_token}',
+          'accept': 'application/json; charset=UTF-8'
+        }
+      }
+    );
+
+    const consents = await response.json();
+    ```
+  </Tab>
+
+  <Tab value="Python">
+    ```python
+    import requests
+
+    response = requests.get(
+        'https://api.fiskil.com/v1/consent',
+        params={
+            'end_user_id': '482c0e2b-5866-46b1-b795-220b7bba45b5',
+            'active': 'true'
+        },
+        headers={
+            'Authorization': 'Bearer {access_token}',
+            'accept': 'application/json; charset=UTF-8'
+        }
+    )
+
+    consents = response.json()
+    ```
+  </Tab>
+</Tabs>
+
+Example Response [#example-response-1]
+
+```json
+[
+  {
+    "active": true,
+    "app_logo": "https://acme.com/app-logo.png",
+    "app_name": "MyCoolApp",
+    "arrangement_id": "94549a73-a554-4b76-b824-d96898829751",
+    "created_at": "2021-03-18T02:46:42Z",
+    "duration": 7776000,
+    "end_user_email": "tony.stark@example.com",
+    "end_user_id": "482c0e2b-5866-46b1-b795-220b7bba45b5",
+    "expires_at": "2023-01-01T10:42:40Z",
+    "institution_id": "11",
+    "institution_logo": "https://example.com/images/gringotts-logo.png",
+    "institution_name": "Gringotts",
+    "institution_type": "banking",
+    "last_accessed": "2023-01-02T10:42:42Z",
+    "last_consent": "2023-01-01T10:42:40Z",
+    "permissions": [
+      "accounts",
+      "balances",
+      "transactions"
+    ],
+    "termination_reason": null
+  }
+]
+```
+
+Revoke Consent [#revoke-consent]
+
+Revoke an active consent. This immediately terminates the end user's data sharing agreement.
+
+```
+DELETE https://api.fiskil.com/v1/consent/{arrangement_id}
+```
+
+Path Parameters [#path-parameters]
+
+| Parameter        | Type   | Required | Description                                             |
+| ---------------- | ------ | -------- | ------------------------------------------------------- |
+| `arrangement_id` | string | Yes      | CDR arrangement ID as returned by the list consents API |
+
+Example Request [#example-request-1]
+
+<Tabs items={['cURL', 'Node.js', 'Python']}>
+  <Tab value="cURL">
+    ```bash
+    curl --request DELETE \
+      --url https://api.fiskil.com/v1/consent/94549a73-a554-4b76-b824-d96898829751 \
+      --header 'Authorization: Bearer {access_token}' \
+      --header 'accept: application/json; charset=UTF-8'
+    ```
+  </Tab>
+
+  <Tab value="Node.js">
+    ```javascript
+    const response = await fetch(
+      'https://api.fiskil.com/v1/consent/94549a73-a554-4b76-b824-d96898829751',
+      {
+        method: 'DELETE',
+        headers: {
+          'Authorization': 'Bearer {access_token}',
+          'accept': 'application/json; charset=UTF-8'
+        }
+      }
+    );
+    ```
+  </Tab>
+
+  <Tab value="Python">
+    ```python
+    import requests
+
+    response = requests.delete(
+        'https://api.fiskil.com/v1/consent/94549a73-a554-4b76-b824-d96898829751',
+        headers={
+            'Authorization': 'Bearer {access_token}',
+            'accept': 'application/json; charset=UTF-8'
+        }
+    )
+    ```
+  </Tab>
+</Tabs>
+
+<Callout type="warning">
+  Revoking a consent is permanent. Once revoked, you will no longer be able to access the end user's data from that institution until they create a new consent.
+</Callout>
+
+Consent Lifecycle [#consent-lifecycle]
+
+Consents follow a specific lifecycle:
+
+1. **Created**: Consent is established when end user completes the authorization flow
+2. **Active**: Consent is active and data can be accessed
+3. **Expired**: Consent has passed its expiration date
+4. **Revoked**: Consent has been manually revoked by you or the end user
+
+Consent Duration [#consent-duration]
+
+The `duration` field indicates how long the consent was granted for, in seconds. Common durations:
+
+| Duration (seconds) | Human readable |
+| ------------------ | -------------- |
+| 86400              | 1 day          |
+| 604800             | 1 week         |
+| 2592000            | 30 days        |
+| 7776000            | 90 days        |
+| 31536000           | 1 year         |
+
+Best Practices [#best-practices]
+
+1. **Display Consents to Users**: Build a consent management UI that allows users to view and revoke their consents.
+
+2. **Monitor Expiration**: Set up reminders or workflows to prompt users to re-consent before their consents expire.
+
+3. **Handle Revocation Gracefully**: When a consent is revoked, update your application state accordingly and inform the user.
+
+4. **Use Webhooks**: Subscribe to consent-related [webhooks](/data-api/guides/core-concepts/webhooks) to get real-time updates about consent status changes.
+

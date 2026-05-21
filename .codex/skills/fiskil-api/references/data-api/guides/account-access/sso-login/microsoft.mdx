@@ -1,0 +1,37 @@
+﻿# Configure Microsoft (Entra ID) as a SSO Provider (/data-api/guides/account-access/sso-login/microsoft)
+
+Configure Single Sign-On authentication for your team to access the Fiskil Console using your existing Microsoft identity provider.
+
+
+
+Microsoft (Entra ID) is a cloud-based identity and access management service that allows you to manage user identities and access to your applications and resources.
+
+Prerequisites [#prerequisites]
+
+<Check>
+  You must have access to Microsoft Entra ID to configure Single Sign-On authentication with Microsoft.
+</Check>
+
+Configure Single Sign-On authentication [#configure-single-sign-on-authentication]
+
+<Steps>
+  <Step title="Create a new app registration">
+    Create a new [**Microsoft Identity Platform app registration**](https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app) in Microsoft Entra ID
+  </Step>
+
+  <Step title="Configure the application" bulletList={true}>
+    [**Add a redirect URI**](https://learn.microsoft.com/en-us/entra/identity-platform/how-to-add-redirect-uri):
+
+    * platform type: **Web**
+    * redirect URI: `https://enablement-prod.firebaseapp.com/__/auth/handler`
+  </Step>
+
+  <Step title="Configure credentials">
+    [**Create a client secret**](https://learn.microsoft.com/en-us/entra/identity-platform/how-to-add-credentials?tabs=client-secret) in the new application. Please take note of the client secret value (not the ID) when it is first created as it will not be retrievable at a later date
+  </Step>
+
+  <Step title="Configure Fisil Login">
+    Use the Fiskil Console to [**Enable SSO**](/docs/security/sso#how-to-enable-sso) by providing Client ID, Client Secret, and Directory (tenant) ID
+  </Step>
+</Steps>
+

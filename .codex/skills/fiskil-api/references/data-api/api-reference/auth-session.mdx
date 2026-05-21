@@ -1,0 +1,245 @@
+﻿# Auth Session (/data-api/api-reference/auth-session)
+
+Create authorization sessions for end users to grant data access.
+
+
+
+An Auth Session is a single-use session for an end user to authorize data sharing from an institution. It generates a unique URL where users can complete the consent flow.
+
+Endpoints [#endpoints]
+
+| Method | Endpoint           | Description               |
+| ------ | ------------------ | ------------------------- |
+| `POST` | `/v1/auth/session` | Create a new auth session |
+
+The Auth Session Model [#the-auth-session-model]
+
+| Attribute    | Type    | Required | Description                                                           |
+| ------------ | ------- | -------- | --------------------------------------------------------------------- |
+| `id`         | string  | Yes      | The client ID                                                         |
+| `session_id` | string  | Yes      | The unique session identifier                                         |
+| `auth_url`   | string  | Yes      | The URL where the user should be redirected to complete authorization |
+| `expires_at` | integer | Yes      | Unix timestamp when the auth session expires                          |
+
+Example Response [#example-response]
+
+```json
+{
+  "id": "5qcql2s0bn9qfh1m5qd1sl4gth",
+  "session_id": "ea564d-56012s4-6ds4564",
+  "auth_url": "https://auth.fiskil.com/redirect-url",
+  "expires_at": 1621083785
+}
+```
+
+Create Auth Session [#create-auth-session]
+
+Create a new session for the authentication flow.
+
+```
+POST https://api.fiskil.com/v1/auth/session
+```
+
+Request Body [#request-body]
+
+| Parameter        | Type   | Required | Description                                       |
+| ---------------- | ------ | -------- | ------------------------------------------------- |
+| `end_user_id`    | string | Yes      | The ID of the end user to create the session for  |
+| `redirect_uri`   | string | No       | URL to redirect to after successful authorization |
+| `cancel_uri`     | string | No       | URL to redirect to if the user cancels            |
+| `institution_id` | string | No       | Pre-select a specific institution                 |
+| `permissions`    | array  | No       | Specific permissions to request                   |
+
+Example Request [#example-request]
+
+<Tabs items={['cURL', 'Node.js', 'Python']}>
+  <Tab value="cURL">
+    ```bash
+    curl --request POST \
+      --url https://api.fiskil.com/v1/auth/session \
+      --header 'Authorization: Bearer {access_token}' \
+      --header 'accept: application/json; charset=UTF-8' \
+      --header 'content-type: application/json; charset=UTF-8' \
+      --data '{
+        "end_user_id": "482c0e2b-5866-46b1-b795-220b7bba45b5",
+        "redirect_uri": "https://yourapp.com/callback",
+        "cancel_uri": "https://yourapp.com/cancel"
+      }'
+    ```
+  </Tab>
+
+  <Tab value="Node.js">
+    ```javascript
+    const response = await fetch('https://api.fiskil.com/v1/auth/session', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer {access_token}',
+        'accept': 'application/json; charset=UTF-8',
+        'content-type': 'application/json; charset=UTF-8'
+      },
+      body: JSON.stringify({
+        end_user_id: '482c0e2b-5866-46b1-b795-220b7bba45b5',
+        redirect_uri: 'https://yourapp.com/callback',
+        cancel_uri: 'https://yourapp.com/cancel'
+      })
+    });
+
+    const session = await response.json();
+    console.log(session.auth_url);
+    ```
+  </Tab>
+
+  <Tab value="Python">
+    ```python
+    import requests
+
+    response = requests.post(
+        'https://api.fiskil.com/v1/auth/session',
+        headers={
+            'Authorization': 'Bearer {access_token}',
+            'accept': 'application/json; charset=UTF-8',
+            'content-type': 'application/json; charset=UTF-8'
+        },
+        json={
+            'end_user_id': '482c0e2b-5866-46b1-b795-220b7bba45b5',
+            'redirect_uri': 'https://yourapp.com/callback',
+            'cancel_uri': 'https://yourapp.com/cancel'
+        }
+    )
+
+    session = response.json()
+    print(session['auth_url'])
+    ```
+  </Tab>
+</Tabs>
+
+Example Response [#example-response-1]
+
+```json
+{
+  "id": "5qcql2s0bn9qfh1m5qd1sl4gth",
+  "session_id": "ea564d-56012s4-6ds4564",
+  "auth_url": "https://auth.fiskil.com/consent?session=ea564d-56012s4-6ds4564",
+  "expires_at": 1621083785
+}
+```
+
+Using the Auth Session [#using-the-auth-session]
+
+After creating an auth session, redirect the user to the `auth_url`:
+
+```javascript
+// Redirect to Fiskil's authorization page
+window.location.href = session.auth_url;
+```
+
+The user will then:
+
+1. Select their institution (bank or energy provider)
+2. Log in to their institution
+3. Select which accounts to share
+4. Confirm the consent
+
+Handling Callbacks [#handling-callbacks]
+
+**Success Callback**
+
+When the user successfully completes authorization, they are redirected to your `redirect_uri` with the session information:
+
+```
+https://yourapp.com/callback?session_id=ea564d-56012s4-6ds4564
+```
+
+**Cancel/Error Callback**
+
+If the user cancels or an error occurs, they are redirected to your `cancel_uri` with error details:
+
+```
+https://yourapp.com/cancel?error=access_denied&error_type=CONSENT_ENDUSER_DENIED&error_description=User+cancelled+the+flow
+```
+
+See [Errors](/data-api/api-reference/errors) for a complete list of error types.
+
+Session Expiration [#session-expiration]
+
+Auth sessions expire after a short period (typically 10-15 minutes). If a session expires before the user completes authorization, you'll need to create a new session.
+
+<Callout type="info">
+  Auth sessions are single-use. Once used (whether successfully or not), a new session must be created for subsequent authorization attempts.
+</Callout>
+
+Integration Patterns [#integration-patterns]
+
+Redirect Flow [#redirect-flow]
+
+The standard flow where users are redirected to the Fiskil-hosted consent UI:
+
+```javascript
+// Create session
+const session = await createAuthSession(endUserId);
+
+// Store session_id for callback verification
+sessionStorage.setItem('fiskil_session', session.session_id);
+
+// Redirect user
+window.location.href = session.auth_url;
+```
+
+Popup Flow [#popup-flow]
+
+Open the consent flow in a popup window:
+
+```javascript
+const session = await createAuthSession(endUserId);
+
+const popup = window.open(
+  session.auth_url,
+  'FiskilConsent',
+  'width=500,height=700,menubar=no,toolbar=no'
+);
+
+// Monitor for popup close or completion
+const checkPopup = setInterval(() => {
+  if (popup.closed) {
+    clearInterval(checkPopup);
+    // Handle completion or cancellation
+  }
+}, 500);
+```
+
+Embedded Flow (iframe) [#embedded-flow-iframe]
+
+Embed the consent flow within your application:
+
+```html
+<iframe
+  id="fiskil-consent"
+  src="{auth_url}"
+  width="100%"
+  height="600"
+  allow="payment"
+></iframe>
+
+<script>
+window.addEventListener('message', (event) => {
+  if (event.origin !== 'https://auth.fiskil.com') return;
+  
+  if (event.data.type === 'consent_complete') {
+    // Handle successful consent
+  } else if (event.data.type === 'consent_error') {
+    // Handle error
+  }
+});
+</script>
+```
+
+Best Practices [#best-practices]
+
+1. **Store Session ID**: Always store the `session_id` so you can verify the callback is legitimate.
+
+2. **Handle Expiration**: Create a new session if the user returns after the session has expired.
+
+3. **Pre-select Institution**: If you know which institution the user wants to connect, pass the `institution_id` to skip the selection step.
+
+4. **Configure Redirect URIs**: Ensure your redirect and cancel URIs are configured in the Fiskil Console.
+

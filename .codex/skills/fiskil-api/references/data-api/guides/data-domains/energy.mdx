@@ -1,0 +1,63 @@
+﻿# Energy Data (/data-api/guides/data-domains/energy)
+
+Fiskil's Energy APIs allow your application to securely access utility account data authorised by the customer through a linked energy provider.
+
+
+
+Fiskil's Energy APIs allow your application to securely access utility account data authorised by the customer through a linked energy provider. This includes usage, billing history, concessions, and service point information.
+
+After a customer has connected their energy institution and consented to data sharing, Fiskil syncs available data and notifies your system via webhook events when it is ready to be accessed.
+
+What Data Can You Access? [#what-data-can-you-access]
+
+| Data Type              | Description                                                          |
+| ---------------------- | -------------------------------------------------------------------- |
+| **Identity**           | Name, contact details, and verified customer identifiers             |
+| **Accounts**           | Account numbers, plan information, status, and institution metadata  |
+| **Usage**              | Interval energy usage (e.g. smart meter reads), including timestamps |
+| **Billing**            | Billing summaries and historical charges                             |
+| **Invoices**           | Structured invoice-level data, including totals and due dates        |
+| **Concessions**        | Government rebates or support linked to the account                  |
+| **Service Points**     | Physical site data including supply address and NMI                  |
+| **DER**                | Distributed Energy Resource data (e.g. rooftop solar, batteries)     |
+| **Scheduled Payments** | Upcoming payments scheduled via the institution                      |
+
+Refer to the [Energy API Reference](/docs/data-api/api-reference/energy-overview) for full endpoint specifications.
+
+Data Availability and Integration Flow [#data-availability-and-integration-flow]
+
+After a successful connection, Fiskil initiates data syncs and emits webhook events as data becomes available.
+
+Typical event types include:
+
+* `energy.accounts.sync.completed`
+* `energy.usage.sync.completed`
+* `energy.billing.sync.completed`
+
+You should listen for these events and only fetch data once syncs are complete. This reduces latency and ensures data accuracy.
+
+See the [Webhooks Guide](/docs/data-api/guides/core-concepts/webhooks) for details on payload structure, security, and retry handling.
+
+Example Use Cases [#example-use-cases]
+
+Fiskil's Energy APIs can support a range of use cases for energy retailers, aggregators, and climate-focused applications. For example:
+
+* **Energy usage visualisation** -- Display interval consumption data in user dashboards
+* **Automated billing summaries** -- Show recent bills, overdue amounts, and payment schedules
+* **DER insights** -- Track solar export or battery performance for connected homes
+* **Concession eligibility checks** -- Validate if government rebates are correctly applied
+* **Service point lookups** -- Support supply-side diagnostics or location mapping
+
+Best Practices [#best-practices]
+
+* Use `end_user_id` to query for energy data — you do not need to store account or consent identifiers
+* Expect variability in usage data granularity depending on the institution (e.g. daily vs. 30-minute intervals)
+* Reconnect the user if consent expires or access is revoked (see [Consents](/docs/data-api/guides/core-concepts/consents))
+* Use webhooks as your trigger for backend sync and processing — avoid polling
+
+Next Steps [#next-steps]
+
+* Review the [Consents](/docs/data-api/guides/core-concepts/consents) and [End Users](/docs/data-api/guides/core-concepts/end-users) guides to understand how energy accounts are linked
+* Explore webhook events in more depth in the [Webhooks Guide](/docs/data-api/guides/core-concepts/webhooks)
+* See the [Energy API Reference](/docs/data-api/api-reference/energy-overview) for endpoint details
+

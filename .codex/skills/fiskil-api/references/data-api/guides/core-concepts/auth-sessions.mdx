@@ -1,0 +1,64 @@
+﻿# Auth Sessions (/data-api/guides/core-concepts/auth-sessions)
+
+Temporary sessions used to initiate Fiskil's consent flow
+
+
+
+An Auth Session is a temporary session used to initiate Fiskil's consent flow. It enables your users to securely authenticate with their financial or energy institution and approve access to their data.
+
+Once you create an Auth Session, you'll receive an `auth_url` that launches Fiskil's hosted consent UI. The recommended way to present this is using the Fiskil Link SDK, which embeds the consent flow inside your app with a single function call.
+
+<Callout type="info">
+  Note: An Auth Session will expire after 5 days and the user must complete the consent flow within this time frame.
+</Callout>
+
+Integration Flows [#integration-flows]
+
+1. Link SDK (Recommended) [#1-link-sdk-recommended]
+
+The [Link SDK](https://github.com/Fiskil/link/) is the easiest way to keep users inside your app while completing the consent experience. Instead of manually embedding iframes and listening for postMessage events, install `@fiskil/link` and pass in the auth\_session\_id returned by the API. The SDK renders the consent flow and resolves with the result.
+
+```javascript
+import { link } from '@fiskil/link';
+
+const flow = link('auth_session_id');
+
+try {
+  const result = await flow;
+  console.log(result.consentID);
+} catch (err) {
+  console.error('Link error:', err);
+}
+```
+
+See [Integrating the Link SDK](/data-api/guides/link-widget/integrating-the-link-sdk) for full details.
+
+2. Redirect Flow [#2-redirect-flow]
+
+The default approach is to *redirect your user to the `auth_url`* in the current browser tab or window.
+
+* The user completes the consent journey hosted on Fiskil's domain.
+* On success, they are redirected to your configured `redirect_uri`.
+* On failure or cancellation, they are redirected to your configured `cancel_uri`. In this case, *error details will be included in the query parameters*, following Fiskil's [error type format](/data-api/api-reference/errors).
+* Use this flow for quick integrations where maintaining in-app context isn't required.
+
+3. Embedded Flow (Deprecated) [#3-embedded-flow-deprecated]
+
+The previous method of loading the auth\_url inside an iframe and handling postMessage events manually is no longer recommended. If you are currently using this approach, migrate to the [Link SDK](https://github.com/Fiskil/link) for a simpler and more reliable integration.
+
+For reference, the legacy embedded flow documentation remains available [here](/data-api/guides/core-concepts/auth-sessions/embedded).
+
+Restricting to a Specific Institution [#restricting-to-a-specific-institution]
+
+You can skip the institution selection step by providing an institution\_id when creating the Auth Session:
+
+```json
+{
+  "institution_id": "88888",
+  "redirect_uri": "https://yourapp.com/redirect",
+  "cancel_uri": "https://yourapp.com/cancel"
+}
+```
+
+When set, users will be sent directly to the specified institution's login screen.
+

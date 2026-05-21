@@ -1,0 +1,174 @@
+﻿# DER (/data-api/api-reference/der)
+
+Get Distributed Energy Resources (DER) data from the Fiskil API.
+
+
+
+The DER (Distributed Energy Resources) endpoint provides information about solar panels, batteries, and other distributed energy resources at a service point.
+
+Endpoints [#endpoints]
+
+| Method | Endpoint  | Description                  |
+| ------ | --------- | ---------------------------- |
+| `GET`  | `/v1/der` | Get DER data for an end user |
+
+The DER Model [#the-der-model]
+
+| Attribute           | Type    | Description                         |
+| ------------------- | ------- | ----------------------------------- |
+| `service_point_id`  | string  | NMI/service point identifier        |
+| `account_id`        | string  | Associated energy account ID        |
+| `devices`           | array   | List of DER devices                 |
+| `approved_capacity` | number  | Total approved export capacity (kW) |
+| `available_phases`  | integer | Number of available phases          |
+
+Device Object [#device-object]
+
+| Attribute      | Type   | Description                                  |
+| -------------- | ------ | -------------------------------------------- |
+| `device_type`  | string | Type of device (SOLAR, BATTERY, EV\_CHARGER) |
+| `manufacturer` | string | Device manufacturer                          |
+| `model`        | string | Device model                                 |
+| `capacity`     | number | Device capacity (kW)                         |
+| `install_date` | string | Installation date                            |
+| `status`       | string | Device status                                |
+
+Example Response [#example-response]
+
+```json
+{
+  "service_point_id": "NMI123456789",
+  "account_id": "energy_acc_123",
+  "approved_capacity": 5.0,
+  "available_phases": 1,
+  "devices": [
+    {
+      "device_type": "SOLAR",
+      "manufacturer": "SunPower",
+      "model": "X22-360",
+      "capacity": 6.6,
+      "install_date": "2022-03-15",
+      "status": "ACTIVE"
+    }
+  ]
+}
+```
+
+Get DER Data [#get-der-data]
+
+Retrieve DER information for an end user's service points.
+
+```
+GET https://api.fiskil.com/v1/der
+```
+
+Query Parameters [#query-parameters]
+
+| Parameter          | Type    | Required | Description                      |
+| ------------------ | ------- | -------- | -------------------------------- |
+| `end_user_id`      | string  | Yes      | The ID of the end user           |
+| `service_point_id` | string  | No       | Filter by specific service point |
+| `page[size]`       | integer | No       | Number of results (max 1000)     |
+| `page[after]`      | string  | No       | Cursor for pagination            |
+
+Example Request [#example-request]
+
+<Tabs items={['cURL', 'Node.js', 'Python']}>
+  <Tab value="cURL">
+    ```bash
+    curl --request GET \
+      --url 'https://api.fiskil.com/v1/der?end_user_id=482c0e2b-5866-46b1-b795-220b7bba45b5' \
+      --header 'Authorization: Bearer {access_token}' \
+      --header 'accept: application/json; charset=UTF-8'
+    ```
+  </Tab>
+
+  <Tab value="Node.js">
+    ```javascript
+    const response = await fetch(
+      'https://api.fiskil.com/v1/der?end_user_id=482c0e2b-5866-46b1-b795-220b7bba45b5',
+      {
+        method: 'GET',
+        headers: {
+          'Authorization': 'Bearer {access_token}',
+          'accept': 'application/json; charset=UTF-8'
+        }
+      }
+    );
+
+    const der = await response.json();
+    ```
+  </Tab>
+
+  <Tab value="Python">
+    ```python
+    import requests
+
+    response = requests.get(
+        'https://api.fiskil.com/v1/der',
+        params={'end_user_id': '482c0e2b-5866-46b1-b795-220b7bba45b5'},
+        headers={
+            'Authorization': 'Bearer {access_token}',
+            'accept': 'application/json; charset=UTF-8'
+        }
+    )
+
+    der = response.json()
+    ```
+  </Tab>
+</Tabs>
+
+Example Response [#example-response-1]
+
+```json
+{
+  "data": [
+    {
+      "service_point_id": "NMI123456789",
+      "account_id": "energy_acc_123",
+      "approved_capacity": 5.0,
+      "available_phases": 1,
+      "devices": [
+        {
+          "device_type": "SOLAR",
+          "manufacturer": "SunPower",
+          "model": "X22-360",
+          "capacity": 6.6,
+          "install_date": "2022-03-15",
+          "status": "ACTIVE"
+        },
+        {
+          "device_type": "BATTERY",
+          "manufacturer": "Tesla",
+          "model": "Powerwall 2",
+          "capacity": 13.5,
+          "install_date": "2022-03-15",
+          "status": "ACTIVE"
+        }
+      ]
+    }
+  ]
+}
+```
+
+Device Types [#device-types]
+
+| Type         | Description              |
+| ------------ | ------------------------ |
+| `SOLAR`      | Solar PV system          |
+| `BATTERY`    | Battery storage system   |
+| `EV_CHARGER` | Electric vehicle charger |
+| `WIND`       | Wind turbine             |
+
+Use Cases [#use-cases]
+
+* **Solar Monitoring**: Track solar installations
+* **Battery Analysis**: Understand battery capacity and usage
+* **EV Integration**: Identify EV charging infrastructure
+* **Energy Trading**: Identify customers for VPP programs
+
+Related Endpoints [#related-endpoints]
+
+* [Service Points](/data-api/api-reference/service-points) - Get NMI details
+* [Usage](/data-api/api-reference/usage) - Get energy usage including generation
+

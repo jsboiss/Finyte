@@ -1,0 +1,132 @@
+﻿# Fiskil Data API Documentation Manifest
+
+Generated from https://docs.fiskil.com/llms.txt on 2026-05-21 21:05:17 +10:00.
+
+Downloaded pages: 126
+
+- [Accounts](data-api/api-reference/accounts.mdx) - `/data-api/api-reference/accounts`
+- [Authentication](data-api/api-reference/authentication.mdx) - `/data-api/api-reference/authentication`
+- [Auth Session](data-api/api-reference/auth-session.mdx) - `/data-api/api-reference/auth-session`
+- [Balance](data-api/api-reference/balance.mdx) - `/data-api/api-reference/balance`
+- [Billing](data-api/api-reference/billing.mdx) - `/data-api/api-reference/billing`
+- [Concessions](data-api/api-reference/concessions.mdx) - `/data-api/api-reference/concessions`
+- [Consents](data-api/api-reference/consents.mdx) - `/data-api/api-reference/consents`
+- [DER](data-api/api-reference/der.mdx) - `/data-api/api-reference/der`
+- [Direct Debits](data-api/api-reference/direct-debits.mdx) - `/data-api/api-reference/direct-debits`
+- [End User](data-api/api-reference/end-user.mdx) - `/data-api/api-reference/end-user`
+- [Energy Accounts](data-api/api-reference/energy-accounts.mdx) - `/data-api/api-reference/energy-accounts`
+- [Energy Balances](data-api/api-reference/energy-balances.mdx) - `/data-api/api-reference/energy-balances`
+- [Errors](data-api/api-reference/errors.mdx) - `/data-api/api-reference/errors`
+- [Identity](data-api/api-reference/identity.mdx) - `/data-api/api-reference/identity`
+- [Income](data-api/api-reference/income.mdx) - `/data-api/api-reference/income`
+- [Institutions](data-api/api-reference/institutions.mdx) - `/data-api/api-reference/institutions`
+- [Invoices](data-api/api-reference/invoices.mdx) - `/data-api/api-reference/invoices`
+- [Linking Accounts](data-api/api-reference/linking-accounts.mdx) - `/data-api/api-reference/linking-accounts`
+- [Pagination](data-api/api-reference/pagination.mdx) - `/data-api/api-reference/pagination`
+- [Payee](data-api/api-reference/payee.mdx) - `/data-api/api-reference/payee`
+- [Payment Schedule](data-api/api-reference/payment-schedule.mdx) - `/data-api/api-reference/payment-schedule`
+- [Permissions](data-api/api-reference/permissions.mdx) - `/data-api/api-reference/permissions`
+- [Plans](data-api/api-reference/plans.mdx) - `/data-api/api-reference/plans`
+- [Products](data-api/api-reference/products.mdx) - `/data-api/api-reference/products`
+- [Scheduled Payments](data-api/api-reference/scheduled-payments.mdx) - `/data-api/api-reference/scheduled-payments`
+- [Service Points](data-api/api-reference/service-points.mdx) - `/data-api/api-reference/service-points`
+- [Usage](data-api/api-reference/usage.mdx) - `/data-api/api-reference/usage`
+- [Create auth session](data-api/api-reference/v1-0-0/create-auth-session.mdx) - `/data-api/api-reference/v1-0-0/create-auth-session`
+- [Create end user](data-api/api-reference/v1-0-0/create-end-user.mdx) - `/data-api/api-reference/v1-0-0/create-end-user`
+- [Delete end user](data-api/api-reference/v1-0-0/delete-end-user.mdx) - `/data-api/api-reference/v1-0-0/delete-end-user`
+- [Handle Accounts](data-api/api-reference/v1-0-0/getBankingAccountsV1.mdx) - `/data-api/api-reference/v1-0-0/getBankingAccountsV1`
+- [Get Balances](data-api/api-reference/v1-0-0/getBankingBalances.mdx) - `/data-api/api-reference/v1-0-0/getBankingBalances`
+- [Handle Income](data-api/api-reference/v1-0-0/getBankingIncome.mdx) - `/data-api/api-reference/v1-0-0/getBankingIncome`
+- [Get Payees](data-api/api-reference/v1-0-0/getBankingPayees.mdx) - `/data-api/api-reference/v1-0-0/getBankingPayees`
+- [Get product details](data-api/api-reference/v1-0-0/getBankingProductDetailV1.mdx) - `/data-api/api-reference/v1-0-0/getBankingProductDetailV1`
+- [Get Transactions](data-api/api-reference/v1-0-0/getBankingTransactionsV1.mdx) - `/data-api/api-reference/v1-0-0/getBankingTransactionsV1`
+- [Get customer details](data-api/api-reference/v1-0-0/getCustomerIdentity.mdx) - `/data-api/api-reference/v1-0-0/getCustomerIdentity`
+- [Get direct debits](data-api/api-reference/v1-0-0/getDirectDebits.mdx) - `/data-api/api-reference/v1-0-0/getDirectDebits`
+- [Get end user by id](data-api/api-reference/v1-0-0/get-end-user-by-id.mdx) - `/data-api/api-reference/v1-0-0/get-end-user-by-id`
+- [List energy accounts](data-api/api-reference/v1-0-0/getEnergyAccounts.mdx) - `/data-api/api-reference/v1-0-0/getEnergyAccounts`
+- [List energy account balances](data-api/api-reference/v1-0-0/getEnergyBalances.mdx) - `/data-api/api-reference/v1-0-0/getEnergyBalances`
+- [Get billing transactions](data-api/api-reference/v1-0-0/getEnergyBilling.mdx) - `/data-api/api-reference/v1-0-0/getEnergyBilling`
+- [List concessions](data-api/api-reference/v1-0-0/getEnergyConcessions.mdx) - `/data-api/api-reference/v1-0-0/getEnergyConcessions`
+- [List DER (Distributed Energy Resources)](data-api/api-reference/v1-0-0/getEnergyDer.mdx) - `/data-api/api-reference/v1-0-0/getEnergyDer`
+- [List invoices](data-api/api-reference/v1-0-0/getEnergyInvoices.mdx) - `/data-api/api-reference/v1-0-0/getEnergyInvoices`
+- [List payment schedules](data-api/api-reference/v1-0-0/getEnergyPaymentSchedules.mdx) - `/data-api/api-reference/v1-0-0/getEnergyPaymentSchedules`
+- [Get energy plan details](data-api/api-reference/v1-0-0/getEnergyPlanDetail.mdx) - `/data-api/api-reference/v1-0-0/getEnergyPlanDetail`
+- [List Plans](data-api/api-reference/v1-0-0/getEnergyPlans.mdx) - `/data-api/api-reference/v1-0-0/getEnergyPlans`
+- [Get service points](data-api/api-reference/v1-0-0/getEnergyServicePoints.mdx) - `/data-api/api-reference/v1-0-0/getEnergyServicePoints`
+- [Get usage](data-api/api-reference/v1-0-0/getEnergyUsage.mdx) - `/data-api/api-reference/v1-0-0/getEnergyUsage`
+- [Get institution by id](data-api/api-reference/v1-0-0/get-institution-by-id.mdx) - `/data-api/api-reference/v1-0-0/get-institution-by-id`
+- [Get Scheduled Payments](data-api/api-reference/v1-0-0/getScheduledPayments.mdx) - `/data-api/api-reference/v1-0-0/getScheduledPayments`
+- [List products products](data-api/api-reference/v1-0-0/listBankingProducts.mdx) - `/data-api/api-reference/v1-0-0/listBankingProducts`
+- [List consents](data-api/api-reference/v1-0-0/list-consents.mdx) - `/data-api/api-reference/v1-0-0/list-consents`
+- [List end users](data-api/api-reference/v1-0-0/list-end-users.mdx) - `/data-api/api-reference/v1-0-0/list-end-users`
+- [List institutions by client](data-api/api-reference/v1-0-0/list-institutions-by-client.mdx) - `/data-api/api-reference/v1-0-0/list-institutions-by-client`
+- [List permissions](data-api/api-reference/v1-0-0/list-permissions.mdx) - `/data-api/api-reference/v1-0-0/list-permissions`
+- [Override Transaction Category](data-api/api-reference/v1-0-0/overrideTransactionCategory.mdx) - `/data-api/api-reference/v1-0-0/overrideTransactionCategory`
+- [Revoke consent](data-api/api-reference/v1-0-0/revoke-consent.mdx) - `/data-api/api-reference/v1-0-0/revoke-consent`
+- [Update end user](data-api/api-reference/v1-0-0/update-end-user.mdx) - `/data-api/api-reference/v1-0-0/update-end-user`
+- [Create auth session](data-api/api-reference/v2-0-0/create-auth-session.mdx) - `/data-api/api-reference/v2-0-0/create-auth-session`
+- [Create end user](data-api/api-reference/v2-0-0/create-end-user.mdx) - `/data-api/api-reference/v2-0-0/create-end-user`
+- [Delete end user](data-api/api-reference/v2-0-0/delete-end-user.mdx) - `/data-api/api-reference/v2-0-0/delete-end-user`
+- [Handle Accounts](data-api/api-reference/v2-0-0/getBankingAccountsV2.mdx) - `/data-api/api-reference/v2-0-0/getBankingAccountsV2`
+- [Get Balances](data-api/api-reference/v2-0-0/getBankingBalances.mdx) - `/data-api/api-reference/v2-0-0/getBankingBalances`
+- [Handle Income](data-api/api-reference/v2-0-0/getBankingIncome.mdx) - `/data-api/api-reference/v2-0-0/getBankingIncome`
+- [Get Payees](data-api/api-reference/v2-0-0/getBankingPayees.mdx) - `/data-api/api-reference/v2-0-0/getBankingPayees`
+- [Get product details](data-api/api-reference/v2-0-0/getBankingProductDetailV2.mdx) - `/data-api/api-reference/v2-0-0/getBankingProductDetailV2`
+- [Get Transactions](data-api/api-reference/v2-0-0/getBankingTransactionsV2.mdx) - `/data-api/api-reference/v2-0-0/getBankingTransactionsV2`
+- [Get customer details](data-api/api-reference/v2-0-0/getCustomerIdentity.mdx) - `/data-api/api-reference/v2-0-0/getCustomerIdentity`
+- [Get direct debits](data-api/api-reference/v2-0-0/getDirectDebits.mdx) - `/data-api/api-reference/v2-0-0/getDirectDebits`
+- [Get end user by id](data-api/api-reference/v2-0-0/get-end-user-by-id.mdx) - `/data-api/api-reference/v2-0-0/get-end-user-by-id`
+- [List energy accounts](data-api/api-reference/v2-0-0/getEnergyAccounts.mdx) - `/data-api/api-reference/v2-0-0/getEnergyAccounts`
+- [List energy account balances](data-api/api-reference/v2-0-0/getEnergyBalances.mdx) - `/data-api/api-reference/v2-0-0/getEnergyBalances`
+- [Get billing transactions](data-api/api-reference/v2-0-0/getEnergyBilling.mdx) - `/data-api/api-reference/v2-0-0/getEnergyBilling`
+- [List concessions](data-api/api-reference/v2-0-0/getEnergyConcessions.mdx) - `/data-api/api-reference/v2-0-0/getEnergyConcessions`
+- [List DER (Distributed Energy Resources)](data-api/api-reference/v2-0-0/getEnergyDer.mdx) - `/data-api/api-reference/v2-0-0/getEnergyDer`
+- [List invoices](data-api/api-reference/v2-0-0/getEnergyInvoices.mdx) - `/data-api/api-reference/v2-0-0/getEnergyInvoices`
+- [List payment schedules](data-api/api-reference/v2-0-0/getEnergyPaymentSchedules.mdx) - `/data-api/api-reference/v2-0-0/getEnergyPaymentSchedules`
+- [Get energy plan details](data-api/api-reference/v2-0-0/getEnergyPlanDetail.mdx) - `/data-api/api-reference/v2-0-0/getEnergyPlanDetail`
+- [List Plans](data-api/api-reference/v2-0-0/getEnergyPlans.mdx) - `/data-api/api-reference/v2-0-0/getEnergyPlans`
+- [Get service points](data-api/api-reference/v2-0-0/getEnergyServicePoints.mdx) - `/data-api/api-reference/v2-0-0/getEnergyServicePoints`
+- [Get usage](data-api/api-reference/v2-0-0/getEnergyUsage.mdx) - `/data-api/api-reference/v2-0-0/getEnergyUsage`
+- [Get institution by id](data-api/api-reference/v2-0-0/get-institution-by-id.mdx) - `/data-api/api-reference/v2-0-0/get-institution-by-id`
+- [Get Scheduled Payments](data-api/api-reference/v2-0-0/getScheduledPayments.mdx) - `/data-api/api-reference/v2-0-0/getScheduledPayments`
+- [List products products](data-api/api-reference/v2-0-0/listBankingProducts.mdx) - `/data-api/api-reference/v2-0-0/listBankingProducts`
+- [List consents](data-api/api-reference/v2-0-0/list-consents.mdx) - `/data-api/api-reference/v2-0-0/list-consents`
+- [List end users](data-api/api-reference/v2-0-0/list-end-users.mdx) - `/data-api/api-reference/v2-0-0/list-end-users`
+- [List institutions by client](data-api/api-reference/v2-0-0/list-institutions-by-client.mdx) - `/data-api/api-reference/v2-0-0/list-institutions-by-client`
+- [List permissions](data-api/api-reference/v2-0-0/list-permissions.mdx) - `/data-api/api-reference/v2-0-0/list-permissions`
+- [Override Transaction Category](data-api/api-reference/v2-0-0/overrideTransactionCategory.mdx) - `/data-api/api-reference/v2-0-0/overrideTransactionCategory`
+- [Revoke consent](data-api/api-reference/v2-0-0/revoke-consent.mdx) - `/data-api/api-reference/v2-0-0/revoke-consent`
+- [Update end user](data-api/api-reference/v2-0-0/update-end-user.mdx) - `/data-api/api-reference/v2-0-0/update-end-user`
+- [Legacy Changelog](data-api/changelog/legacy.mdx) - `/data-api/changelog/legacy`
+- [Upgrade to v2](data-api/changelog/upgrade-guide.mdx) - `/data-api/changelog/upgrade-guide`
+- [Monitoring & Logs](data-api/guides/account-access/monitoring-and-logs.mdx) - `/data-api/guides/account-access/monitoring-and-logs`
+- [Security](data-api/guides/account-access/security.mdx) - `/data-api/guides/account-access/security`
+- [SSO Logins](data-api/guides/account-access/sso-login.mdx) - `/data-api/guides/account-access/sso-login`
+- [Configure Microsoft (Entra ID) as a SSO Provider](data-api/guides/account-access/sso-login/microsoft.mdx) - `/data-api/guides/account-access/sso-login/microsoft`
+- [Team & Roles](data-api/guides/account-access/team-and-roles.mdx) - `/data-api/guides/account-access/team-and-roles`
+- [Overview](data-api/guides/ai-tools.mdx) - `/data-api/guides/ai-tools`
+- [MCP Server](data-api/guides/ai-tools/mcp.mdx) - `/data-api/guides/ai-tools/mcp`
+- [Auth Sessions](data-api/guides/core-concepts/auth-sessions.mdx) - `/data-api/guides/core-concepts/auth-sessions`
+- [Consents](data-api/guides/core-concepts/consents.mdx) - `/data-api/guides/core-concepts/consents`
+- [End Users](data-api/guides/core-concepts/end-users.mdx) - `/data-api/guides/core-concepts/end-users`
+- [Overview](data-api/guides/core-concepts/overview.mdx) - `/data-api/guides/core-concepts/overview`
+- [Testing](data-api/guides/core-concepts/testing.mdx) - `/data-api/guides/core-concepts/testing`
+- [API Versioning](data-api/guides/core-concepts/versioning.mdx) - `/data-api/guides/core-concepts/versioning`
+- [Webhooks](data-api/guides/core-concepts/webhooks.mdx) - `/data-api/guides/core-concepts/webhooks`
+- [Banking](data-api/guides/data-domains/banking.mdx) - `/data-api/guides/data-domains/banking`
+- [Energy Data](data-api/guides/data-domains/energy.mdx) - `/data-api/guides/data-domains/energy`
+- [Identity Data](data-api/guides/data-domains/identity.mdx) - `/data-api/guides/data-domains/identity`
+- [Income](data-api/guides/data-domains/income.mdx) - `/data-api/guides/data-domains/income`
+- [Authentication](data-api/guides/getting-started/authentication.mdx) - `/data-api/guides/getting-started/authentication`
+- [Quick Start](data-api/guides/getting-started/quick-start.mdx) - `/data-api/guides/getting-started/quick-start`
+- [Start Exploring](data-api/guides/getting-started/start-exploring.mdx) - `/data-api/guides/getting-started/start-exploring`
+- [Banking - Business Accounts](data-api/guides/help-center/business-accounts.mdx) - `/data-api/guides/help-center/business-accounts`
+- [Energy - Business Accounts](data-api/guides/help-center/energy-accounts.mdx) - `/data-api/guides/help-center/energy-accounts`
+- [Migrating to Fiskil APIs](data-api/guides/help-center/migrations.mdx) - `/data-api/guides/help-center/migrations`
+- [Introduction](data-api/guides/link-widget.mdx) - `/data-api/guides/link-widget`
+- [Flow Overview](data-api/guides/link-widget/flow-overview.mdx) - `/data-api/guides/link-widget/flow-overview`
+- [Integrating the Link SDK](data-api/guides/link-widget/integrating-the-link-sdk.mdx) - `/data-api/guides/link-widget/integrating-the-link-sdk`
+- [Best Practices](data-api/guides/resources/best-practices.mdx) - `/data-api/guides/resources/best-practices`
+- [Go Live Checklist](data-api/guides/resources/go-live-checklist.mdx) - `/data-api/guides/resources/go-live-checklist`
+- [Mobile Integration](data-api/guides/resources/mobile-integration.mdx) - `/data-api/guides/resources/mobile-integration`
+- [Troubleshooting](data-api/guides/support/troubleshooting.mdx) - `/data-api/guides/support/troubleshooting`

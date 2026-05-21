@@ -1,0 +1,51 @@
+﻿# Override Transaction Category (/data-api/api-reference/v1-0-0/overrideTransactionCategory)
+
+Overrides the Fiskil predicted category of a specific banking transaction.
+
+## POST /v1/banking/transactions/category
+
+**Override Transaction Category**
+
+Overrides the Fiskil predicted category of a specific banking transaction.
+
+**Tags:** Transactions, v1, v2, banking
+
+### Request Body
+
+**Content-Type:** `application/json` (required)
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `fiskil_transaction_id` | string | the unique identifier (fiskil_id) of the transaction. |
+| `secondary_category` | string | secondary category to override the transaction with. Must be a valid secondary category from the Fiskil taxonomy. |
+
+### Responses
+
+**200:** OK
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `message` | string |  |
+
+**400:** Bad Request
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string |  |
+| `message` | string |  |
+| `name` | string |  |
+
+**500:** Internal Server Error
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string |  |
+| `message` | string |  |
+| `name` | string |  |
+
+### Example Request
+```bash
+curl -X POST "https://api.fiskil.com/v1/banking/transactions/category" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json"
+```

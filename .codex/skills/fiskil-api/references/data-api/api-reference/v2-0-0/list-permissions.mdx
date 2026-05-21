@@ -1,0 +1,60 @@
+﻿# List permissions (/data-api/api-reference/v2-0-0/list-permissions)
+
+Returns a list of Fiskil permissions.
+
+## GET /permissions
+
+**List permissions**
+
+Returns a list of Fiskil permissions.
+
+**Tags:** permissions, public
+
+### Parameters
+
+| Name | In | Type | Required | Description |
+|------|----|------|----------|-------------|
+| `industry` | query | string | No | The industry to filter on |
+
+### Responses
+
+**200:** OK response.
+
+**Example:**
+```json
+[
+  {
+    "description": "This will give the provider access to all of your transaction information",
+    "industry": "banking",
+    "name": "transactions",
+    "scope": "bank:transactions:read",
+    "standards": [
+      "CDR"
+    ]
+  },
+  {
+    "description": "This will give the provider access to all of your transaction information",
+    "industry": "banking",
+    "name": "transactions",
+    "scope": "bank:transactions:read",
+    "standards": [
+      "CDR"
+    ]
+  },
+  {
+    "description": "This will give the provider access to all of your transaction information",
+    "industry": "banking",
+    "name": "transactions",
+    "scope": "bank:transactions:read",
+    "standards": [
+      "CDR"
+    ]
+  }
+]
+```
+
+### Example Request
+```bash
+curl -X GET "https://api.fiskil.com/permissions" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```

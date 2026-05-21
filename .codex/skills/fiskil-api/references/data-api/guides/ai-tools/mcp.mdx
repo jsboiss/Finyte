@@ -1,0 +1,359 @@
+﻿# MCP Server (/data-api/guides/ai-tools/mcp)
+
+Connect AI tools directly to Fiskil documentation using Model Context Protocol
+
+
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+The Fiskil MCP server gives your AI assistant direct access to Fiskil documentation, API references, and code examples. It works with any editor or tool that supports [Model Context Protocol](https://modelcontextprotocol.io/) — including Cursor, Claude Desktop, Windsurf, and VS Code Copilot.
+
+**What your AI assistant can do once connected:**
+
+* Full-text search across all documentation
+* Retrieve complete page content including API reference details
+* Browse the documentation tree by product and section
+* Look up API endpoint details with request/response schemas
+* Get copy-paste code examples in TypeScript, Python, JavaScript, and cURL
+* Follow guided prompts for onboarding and integration
+
+Server URL [#server-url]
+
+```
+https://docs.fiskil.com/api/ai/mcp
+```
+
+Setup [#setup]
+
+Cursor [#cursor]
+
+Add to your `.cursor/mcp.json` file:
+
+```json
+{
+  "mcpServers": {
+    "fiskil": {
+      "url": "https://docs.fiskil.com/api/ai/mcp"
+    }
+  }
+}
+```
+
+Restart Cursor to apply changes.
+
+Claude Desktop [#claude-desktop]
+
+Add to your Claude Desktop config file:
+
+* **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
+* **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
+
+```json
+{
+  "mcpServers": {
+    "fiskil": {
+      "url": "https://docs.fiskil.com/api/ai/mcp"
+    }
+  }
+}
+```
+
+Restart Claude Desktop to apply changes.
+
+Windsurf [#windsurf]
+
+Add to `~/.codeium/windsurf/mcp_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "fiskil": {
+      "serverUrl": "https://docs.fiskil.com/api/ai/mcp"
+    }
+  }
+}
+```
+
+<Callout type="info">
+  Windsurf uses `serverUrl` instead of `url` for remote MCP servers.
+</Callout>
+
+VS Code Copilot [#vs-code-copilot]
+
+Add to `.vscode/mcp.json` in your workspace (or use the **MCP: Open User Configuration** command for global setup):
+
+```json
+{
+  "servers": {
+    "fiskil": {
+      "type": "http",
+      "url": "https://docs.fiskil.com/api/ai/mcp"
+    }
+  }
+}
+```
+
+<Callout type="info">
+  VS Code uses a `servers` key (not `mcpServers`) and requires `"type": "http"` for remote servers.
+</Callout>
+
+Other MCP Clients [#other-mcp-clients]
+
+Any MCP-compatible client can connect using the server URL above. Consult your client's documentation for configuration instructions.
+
+***
+
+Tools [#tools]
+
+The MCP server provides six tools that your AI assistant can call.
+
+search_docs [#search_docs]
+
+Full-text search across Fiskil documentation. Searches page titles, headings, and body content. Returns matching pages with relevant text snippets and direct URLs.
+
+| Parameter | Type   | Required | Default | Description                                            |
+| --------- | ------ | -------- | ------- | ------------------------------------------------------ |
+| `query`   | string | Yes      | —       | Search query to find relevant documentation            |
+| `product` | string | No       | `all`   | Filter by product: `all`, `data-api`, or `data-holder` |
+| `limit`   | number | No       | `10`    | Maximum number of results (1–20)                       |
+
+**Example prompts:**
+
+> "Search Fiskil docs for webhook signature verification"
+>
+> "Search for authentication in the Data API docs, limit to 5 results"
+
+Each result includes a `fullUrl` field with the absolute URL you can open directly in your browser.
+
+***
+
+get_page [#get_page]
+
+Retrieve the full markdown content of a specific documentation page. For API reference pages, this includes the HTTP method, path, parameters, request/response schemas, and examples.
+
+| Parameter | Type   | Required | Description                                                               |
+| --------- | ------ | -------- | ------------------------------------------------------------------------- |
+| `path`    | string | Yes      | URL path of the page, e.g. `/data-api/guides/getting-started/quick-start` |
+
+**Example prompts:**
+
+> "Get the full content of the Fiskil authentication guide"
+>
+> "Fetch the page at /data-api/guides/core-concepts/webhooks"
+
+<Callout type="info">
+  If the page is not found, the response will suggest using `search_docs` or `list_pages` to discover valid paths.
+</Callout>
+
+***
+
+list_pages [#list_pages]
+
+Browse the documentation tree. Returns all available pages grouped by product and section. Use this to discover what documentation exists before searching or fetching specific pages.
+
+| Parameter | Type   | Required | Default | Description                                                         |
+| --------- | ------ | -------- | ------- | ------------------------------------------------------------------- |
+| `product` | string | No       | `all`   | Filter by product: `all`, `data-api`, or `data-holder`              |
+| `section` | string | No       | `all`   | Filter by section: `all`, `guides`, `api-reference`, or `changelog` |
+
+**Example prompts:**
+
+> "List all Fiskil Data API guide pages"
+>
+> "Show me the API reference pages for Data API"
+
+***
+
+list_api_endpoints [#list_api_endpoints]
+
+List API endpoints from the Fiskil OpenAPI reference. Returns the HTTP method, path, summary, operationId, and tags for each endpoint.
+
+| Parameter  | Type   | Required | Default | Description                                                                                                 |
+| ---------- | ------ | -------- | ------- | ----------------------------------------------------------------------------------------------------------- |
+| `product`  | string | No       | `all`   | Filter by product: `all`, `data-api`, or `data-holder`                                                      |
+| `category` | string | No       | —       | Filter by category/tag (case-insensitive), e.g. `Banking`, `Energy`, `auth`, `Common`, `cdr`, `fdx`, `psd2` |
+
+**Example prompts:**
+
+> "List all Fiskil banking API endpoints"
+>
+> "Show me the energy endpoints in the Data API"
+
+<Callout type="info">
+  Data Holder endpoints (CDR, FDX, PSD2) are currently in preview. If Data Holder is not yet enabled for your environment, the tool will let you know and suggest contacting Fiskil for early access.
+</Callout>
+
+***
+
+get_api_endpoint_details [#get_api_endpoint_details]
+
+Look up detailed information for a specific API endpoint. Returns parameters, request/response schemas with field-level descriptions, examples, and a ready-to-use cURL snippet.
+
+You can look up an endpoint in two ways:
+
+1. **By method + path** — e.g. `GET /v1/accounts`
+2. **By operationId** — e.g. `getBankingTransactions` or `add-auth-session`
+
+| Parameter     | Type   | Required    | Default    | Description                                                                               |
+| ------------- | ------ | ----------- | ---------- | ----------------------------------------------------------------------------------------- |
+| `method`      | string | Conditional | —          | HTTP method: `GET`, `POST`, `PUT`, `PATCH`, or `DELETE`. Required when using path lookup. |
+| `path`        | string | Conditional | —          | API path, e.g. `/v1/token` or `/v1/accounts`                                              |
+| `operationId` | string | Conditional | —          | Operation ID or slug, e.g. `getBankingTransactions`. Alternative to method + path.        |
+| `product`     | string | No          | `data-api` | Which product to search: `data-api` or `data-holder`                                      |
+
+<Callout type="info">
+  You must provide **either** `method` + `path` **or** `operationId`. The operationId supports both camelCase (`getBankingAccounts`) and kebab-case (`get-banking-accounts`) formats.
+</Callout>
+
+**Example prompts:**
+
+> "Get details for GET /v1/accounts from Fiskil"
+>
+> "Look up the getBankingTransactions endpoint"
+>
+> "Show me the request and response schema for POST /v1/auth/session"
+
+If the endpoint is not found, the tool suggests similar endpoints you might have meant.
+
+***
+
+get_code_examples [#get_code_examples]
+
+Get copy-paste code examples for common Fiskil integration patterns. Available in TypeScript, Python, JavaScript, and cURL.
+
+| Parameter  | Type   | Required | Default       | Description                                                                                                   |
+| ---------- | ------ | -------- | ------------- | ------------------------------------------------------------------------------------------------------------- |
+| `topic`    | string | Yes      | —             | Integration topic: `auth`, `end-users`, `auth-session`, `link-sdk`, `webhooks`, `banking`, `energy`, or `all` |
+| `language` | string | No       | all languages | Programming language: `typescript`, `python`, `javascript`, or `curl`                                         |
+
+**Available topics:**
+
+| Topic          | What it covers                                          |
+| -------------- | ------------------------------------------------------- |
+| `auth`         | Authenticate with client credentials (`POST /v1/token`) |
+| `end-users`    | Create end users                                        |
+| `auth-session` | Create auth sessions for the Link SDK                   |
+| `link-sdk`     | Embed the Link SDK in React/JavaScript                  |
+| `webhooks`     | Webhook verification and event handling                 |
+| `banking`      | Fetch banking data (accounts, transactions, balances)   |
+| `energy`       | Fetch energy data (usage, billing, service points)      |
+| `all`          | All of the above                                        |
+
+**Example prompts:**
+
+> "Show me a TypeScript example for Fiskil authentication"
+>
+> "Get Python code examples for handling webhooks"
+>
+> "Show all Fiskil banking code examples"
+
+***
+
+Prompts [#prompts]
+
+The MCP server includes two guided prompts that provide structured workflows. Your AI assistant can use these to give you step-by-step guidance.
+
+fiskil_getting_started [#fiskil_getting_started]
+
+A recommended workflow for new developers integrating with Fiskil APIs. No parameters required.
+
+Walks you through a 6-step onboarding process:
+
+1. **Authenticate** — get an access token with client credentials
+2. **Create an End User** — register the user who will link their accounts
+3. **Create an Auth Session** — generate a session for the Link SDK
+4. **Embed the Link SDK** — install and launch the consent flow in your app
+5. **Set Up Webhooks** — listen for data sync events with signature verification
+6. **Fetch Data** — use the consent ID to call banking or energy data endpoints
+
+**Example prompt:**
+
+> "Use the Fiskil getting started guide to walk me through integration"
+
+fiskil_integration_guide [#fiskil_integration_guide]
+
+A tailored integration guide filtered by your use case. Returns relevant API endpoints, webhook events, and implementation guidance.
+
+| Parameter  | Type   | Required | Description                                              |
+| ---------- | ------ | -------- | -------------------------------------------------------- |
+| `use_case` | string | Yes      | The data domain you need: `banking`, `energy`, or `both` |
+
+**What's included by use case:**
+
+* **banking** — Accounts, Transactions, Balances, Payees, Direct Debits, Scheduled Payments endpoints + `banking.transactions.sync.completed` webhook
+* **energy** — Energy Accounts, Usage, Billing, Service Points, DER, Concessions endpoints + `energy.usage.sync.completed` webhook
+* **both** — All of the above
+
+**Example prompt:**
+
+> "Give me the Fiskil integration guide for banking"
+
+***
+
+Resources [#resources]
+
+docs://overview [#docsoverview]
+
+The MCP server exposes a documentation overview resource at `docs://overview`. This provides a summary of:
+
+* Available products (Data API, Data Holder) with page counts
+* All available MCP tools and prompts
+* Quick links to key documentation pages
+* Links to LLM resources
+
+***
+
+Usage Tips [#usage-tips]
+
+1. **Start with search** — ask your AI to search for topics rather than guessing page URLs
+2. **Browse first** — use `list_pages` to discover what documentation is available
+3. **Get full pages** — once you find relevant results, use `get_page` for the complete content
+4. **Look up endpoints** — use `list_api_endpoints` to find endpoints, then `get_api_endpoint_details` for schemas and examples
+5. **Grab code snippets** — use `get_code_examples` to get working starter code in your language
+6. **Follow guided prompts** — use the getting started or integration guide prompts for a structured walkthrough
+7. **Combine with the integration prompt** — use MCP alongside the [Fiskil Integration Prompt](/data-api/guides/ai-tools) for best results
+
+***
+
+Troubleshooting [#troubleshooting]
+
+Connection Issues [#connection-issues]
+
+If your AI tool can't connect to the MCP server:
+
+1. Verify the server URL is exactly `https://docs.fiskil.com/api/ai/mcp`
+2. Check that your network allows outbound HTTPS connections
+3. Restart your AI application after making configuration changes
+4. For Windsurf, make sure you're using `serverUrl` (not `url`) in the config
+
+No Results [#no-results]
+
+If searches return no results:
+
+1. Try broader or different search terms
+2. Use the `product` filter to narrow scope (e.g., `data-api`)
+3. Use `list_pages` to browse available documentation
+4. Check [`/llms.txt`](https://docs.fiskil.com/llms.txt) for a list of all available pages
+
+Rate Limiting [#rate-limiting]
+
+The MCP server allows up to **100 requests per minute**. If you exceed this limit, you'll receive a `429 Too Many Requests` response with a `Retry-After` header indicating how long to wait before retrying.
+
+***
+
+LLM Resources [#llm-resources]
+
+In addition to MCP, the following resources are available for AI tools:
+
+| Resource        | URL                                                     | Description                                  |
+| --------------- | ------------------------------------------------------- | -------------------------------------------- |
+| `llms.txt`      | [/llms.txt](https://docs.fiskil.com/llms.txt)           | Lightweight index of all documentation pages |
+| `llms-full.txt` | [/llms-full.txt](https://docs.fiskil.com/llms-full.txt) | Full documentation content in a single file  |
+| `skill.md`      | [/skill.md](https://docs.fiskil.com/skill.md)           | Integration prompt for AI assistants         |
+
+***
+
+Security [#security]
+
+The MCP server provides **read-only** access to public documentation. No authentication is required, and no sensitive data is exposed.
+

@@ -1,0 +1,89 @@
+﻿# Permissions (/data-api/api-reference/permissions)
+
+Understanding data permissions and scopes in the Fiskil API.
+
+
+
+Permissions define what data your application can access from an end user's accounts. When an end user authorizes your application, they grant specific permissions that determine which API endpoints you can call.
+
+Permission Scopes [#permission-scopes]
+
+Fiskil organizes permissions into logical groups based on the type of data they provide access to.
+
+Banking Permissions [#banking-permissions]
+
+| Permission           | Description                             | Related Endpoints                                                |
+| -------------------- | --------------------------------------- | ---------------------------------------------------------------- |
+| `accounts`           | Access to account details               | [Accounts](/data-api/api-reference/accounts)                     |
+| `balances`           | Access to account balances              | [Balance](/data-api/api-reference/balance)                       |
+| `transactions`       | Access to transaction history           | [Transactions](/data-api/api-reference/getBankingTransactions)   |
+| `payees`             | Access to payee information             | [Payee](/data-api/api-reference/payee)                           |
+| `direct_debits`      | Access to direct debit information      | [Direct Debits](/data-api/api-reference/direct-debits)           |
+| `scheduled_payments` | Access to scheduled payment information | [Scheduled Payments](/data-api/api-reference/scheduled-payments) |
+
+Energy Permissions [#energy-permissions]
+
+| Permission         | Description                                 | Related Endpoints                                            |
+| ------------------ | ------------------------------------------- | ------------------------------------------------------------ |
+| `energy_accounts`  | Access to energy account details            | [Energy Accounts](/data-api/api-reference/energy-accounts)   |
+| `energy_balances`  | Access to energy account balances           | [Energy Balances](/data-api/api-reference/energy-balances)   |
+| `usage`            | Access to energy usage data                 | [Usage](/data-api/api-reference/usage)                       |
+| `billing`          | Access to billing information               | [Billing](/data-api/api-reference/billing)                   |
+| `invoices`         | Access to invoice data                      | [Invoices](/data-api/api-reference/invoices)                 |
+| `concessions`      | Access to concession information            | [Concessions](/data-api/api-reference/concessions)           |
+| `service_points`   | Access to service point information         | [Service Points](/data-api/api-reference/service-points)     |
+| `der`              | Access to Distributed Energy Resources data | [DER](/data-api/api-reference/der)                           |
+| `payment_schedule` | Access to payment schedule information      | [Payment Schedule](/data-api/api-reference/payment-schedule) |
+
+Common Permissions [#common-permissions]
+
+| Permission | Description                    | Related Endpoints                            |
+| ---------- | ------------------------------ | -------------------------------------------- |
+| `identity` | Access to identity information | [Identity](/data-api/api-reference/identity) |
+
+Requesting Permissions [#requesting-permissions]
+
+Permissions are requested during the [auth session](/data-api/api-reference/auth-session) creation. The end user will see which permissions your application is requesting and can choose to grant or deny access.
+
+Example: Requesting Permissions [#example-requesting-permissions]
+
+When creating an auth session, you can specify which permissions to request:
+
+```json
+{
+  "end_user_id": "482c0e2b-5866-46b1-b795-220b7bba45b5",
+  "permissions": ["accounts", "balances", "transactions"],
+  "redirect_uri": "https://yourapp.com/callback"
+}
+```
+
+Checking Granted Permissions [#checking-granted-permissions]
+
+You can check which permissions have been granted for a specific consent by using the [Consents API](/data-api/api-reference/consents). The `permissions` field in the consent response will list all granted permissions.
+
+Example Consent Response [#example-consent-response]
+
+```json
+{
+  "arrangement_id": "94549a73-a554-4b76-b824-d96898829751",
+  "end_user_id": "482c0e2b-5866-46b1-b795-220b7bba45b5",
+  "permissions": [
+    "accounts",
+    "balances",
+    "transactions"
+  ],
+  "active": true,
+  "expires_at": "2023-01-01T10:42:40Z"
+}
+```
+
+Best Practices [#best-practices]
+
+1. **Request Only What You Need**: Only request permissions for data you actually need. This improves user trust and conversion rates.
+
+2. **Explain Why You Need Each Permission**: In your UI, explain to users why you need each permission before they start the consent flow.
+
+3. **Handle Missing Permissions Gracefully**: If an API call fails due to missing permissions, provide clear guidance to users on how to grant additional permissions.
+
+4. **Monitor Permission Usage**: Track which permissions you're actively using and consider removing unused ones from your requests.
+

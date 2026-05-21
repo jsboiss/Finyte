@@ -1,0 +1,25 @@
+﻿# Consents (/data-api/guides/core-concepts/consents)
+
+Understanding how data sharing consent works in Fiskil
+
+
+
+Before you can access a user's data that user must consent to data sharing. Consents are started by creating an [Auth Session](/data-api/guides/core-concepts/auth-sessions). After creating the Auth Session, direct your user to the returned `auth_url` where they will sign in to the institution, select accounts to share from, and approve sharing of the data being requested.
+
+After the data sharing has been approved, the user will be redirected back to your application. You will also receive a [Webhook](/data-api/guides/core-concepts/webhooks) with the `end_user_id` and `consent_id`.
+
+<Callout type="info">
+  Tip: You can also use the [Consents API](/data-api/api-reference/consents#list-consents) to check if an End User has any active consents.
+</Callout>
+
+Ending of Consent [#ending-of-consent]
+
+Consents can be ended in multiple ways:
+
+* By the end user through the institution
+* By the institution when the sharing duration expires
+* By the institution when the user closes all of their accounts
+* By you on behalf of the end user
+
+In all of these instances you will receieve a [Webhook](/data-api/guides/core-concepts/webhooks) to inform you that the consent has ended.
+

@@ -1,0 +1,137 @@
+﻿# Legacy Changelog (/data-api/changelog/legacy)
+
+Pre-reset changelog entries for the Fiskil Data API (prior to the 2026-04-07 v2.0.0 version reset).
+
+
+
+<Callout type="info" title="Pre-reset historical changelog">
+  These entries are from before 7 April 2026, when we reset the Data API to v2.0.0 and adopted a new versioning policy. They use the previous v2.0.x numbering and are kept here for historical reference only. For current releases, see the [Changelog](/data-api/changelog).
+</Callout>
+
+<ChangelogLayout>
+  v2 (Pre-reset) [#v2-pre-reset]
+
+  26-02-2026 (v2.0.11) [#26-02-2026-v2011]
+
+  Updated Data Services APIs to v1.8.2
+
+  Energy: Plans endpoint [#energy-plans-endpoint]
+
+  * Added a new `status` query parameter to filter returned plans by `active` or `all` (defaults to `active`).
+
+  ***
+
+  16-01-2026 (v2.0.10) [#16-01-2026-v2010]
+
+  Updated Core APIs to v1.1.9
+
+  Core: Institutions endpoint [#core-institutions-endpoint]
+
+  * Added new `status` field to the response.
+
+  The institutions endpoint now returns a `status` field which indicates the current connection or consent flow status of the institution.
+
+  ***
+
+  14-01-2026 (v2.0.9) [#14-01-2026-v209]
+
+  Updated Data Services APIs to v1.8.1
+
+  Banking: Balance endpoint [#banking-balance-endpoint]
+
+  * Introduced optional `X-Fiskil-*` request headers to improve real-time balance retrieval.
+
+  When provided, these headers allow the request to be treated as a consumer-present API call, improving traffic classification and handling.
+
+  ***
+
+  18-12-2025 (v2.0.8) [#18-12-2025-v208]
+
+  Updated Data Services APIs to v1.8.0
+
+  Energy: ServicePoints [#energy-servicepoints]
+
+  * Added new Date field: `ServicePoint.lastConsumerChangeDate` - The date the account holder changed for the NMI
+
+  Banking: Transactions [#banking-transactions]
+
+  * Added new `extended_data` extension type: `nppPayload` - Payload specific to NPP overlay service
+  * Deprecated `extended_data.service` field - Identifier of the applicable overlay service
+  * Deprecated `extended_data.x2p101_payload` object - Payload specific to x2p101 overlay service
+
+  The deprecated fields in the Banking Transactions API will be removed in future releases. Please update your applications to use the new `nppPayload` extension instead of the deprecated `x2p101` extension.
+
+  ***
+
+  13-05-2025 (v2.0.7) [#13-05-2025-v207]
+
+  * Introduced delivery attempt field for webhook sync events to keep track of retries and handle deduplication.
+
+  ***
+
+  15-03-2025 (v2.0.6) [#15-03-2025-v206]
+
+  * Introduced `banking.transactions.basic.sync.completed` event for basic transaction data sync
+
+  ***
+
+  12-09-2024 (v2.0.5) [#12-09-2024-v205]
+
+  * Adds better example data and field descriptions to Banking APIs
+
+  ***
+
+  03-05-2024 (v2.0.4) [#03-05-2024-v204]
+
+  * APIs - Display a list of "enum" values, when applicable.
+
+  ***
+
+  16-04-2024 (v2.0.4) [#16-04-2024-v204]
+
+  * Errors page - Added details for various "error types".
+
+  ***
+
+  01-02-2024 (v2.0.4) [#01-02-2024-v204]
+
+  * Corrected typo in introduction
+  * Added missing /v1 to API endpoint
+  * Corrected institution model description
+  * Added endpoint for Info permission
+  * Email address is required to create end user
+  * Corrected description of Revoke Consent API
+  * Corrected description for `page[before]` query parameters
+  * Removed JWT parameter from identity API (All API endpoints should assume that an access token is required to invoke them)
+  * Added example for common/identity response
+
+  ***
+
+  29-01-2024 (v2.0.3) [#29-01-2024-v203]
+
+  * Energy APIs - Fixed a typo in the invoices endpoint path. Replaced "invoices" (plural) with "invoice" (single).
+
+  ***
+
+  14-12-2023 (v2.0.2) [#14-12-2023-v202]
+
+  * Energy APIs - Typo fix for all the properties containing "utype" at the end. Replaced "utype" with "u\_type". Here's the list of affected properties - `address_u_type`, `rate_block_u_type`, `method_u_type`, `tariff_u_type`, `transaction_u_type`, `payment_schedule_u_type`, `read_u_type`.
+
+  ***
+
+  01-12-2023 (v2.0.1) [#01-12-2023-v201]
+
+  * Core Resources - Added "Retrieve an institution by id" API
+
+  ***
+
+  25-09-2023 (v2.0.0) [#25-09-2023-v200]
+
+  Initial release of version 2.0.0.
+
+  * Full support for Energy APIs (Plans, Service Points, Invoices, Usage)
+  * Full support for Banking APIs (Accounts, Transactions, Balances, Direct Debits, Scheduled Payments)
+  * Core APIs for Institutions, Consents, and End Users
+  * Webhook event integrations for data sync notifications
+</ChangelogLayout>
+

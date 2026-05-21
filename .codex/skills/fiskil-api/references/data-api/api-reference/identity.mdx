@@ -1,0 +1,246 @@
+﻿# Identity (/data-api/api-reference/identity)
+
+Get identity information from the Fiskil API.
+
+
+
+The Identity endpoint provides identity information about the account holder. This works for both banking and energy accounts.
+
+Endpoints [#endpoints]
+
+| Method | Endpoint       | Description                       |
+| ------ | -------------- | --------------------------------- |
+| `GET`  | `/v1/identity` | Get identity data for an end user |
+
+The Identity Model [#the-identity-model]
+
+| Attribute           | Type   | Description                          |
+| ------------------- | ------ | ------------------------------------ |
+| `end_user_id`       | string | ID of the end user                   |
+| `type`              | string | Identity type (PERSON, ORGANISATION) |
+| `first_name`        | string | First name (for PERSON)              |
+| `last_name`         | string | Last name (for PERSON)               |
+| `middle_names`      | array  | Middle names (for PERSON)            |
+| `organisation_name` | string | Organisation name (for ORGANISATION) |
+| `date_of_birth`     | string | Date of birth (for PERSON)           |
+| `addresses`         | array  | List of addresses                    |
+| `emails`            | array  | List of email addresses              |
+| `phones`            | array  | List of phone numbers                |
+
+Example Response [#example-response]
+
+```json
+{
+  "end_user_id": "482c0e2b-5866-46b1-b795-220b7bba45b5",
+  "type": "PERSON",
+  "first_name": "John",
+  "last_name": "Smith",
+  "middle_names": ["William"],
+  "organisation_name": null,
+  "date_of_birth": "1985-06-15",
+  "addresses": [
+    {
+      "type": "RESIDENTIAL",
+      "street": "123 Example Street",
+      "suburb": "Sydney",
+      "state": "NSW",
+      "postcode": "2000",
+      "country": "AU"
+    }
+  ],
+  "emails": [
+    {
+      "type": "PRIMARY",
+      "address": "john.smith@example.com"
+    }
+  ],
+  "phones": [
+    {
+      "type": "MOBILE",
+      "number": "+61412345678"
+    }
+  ]
+}
+```
+
+Get Identity Data [#get-identity-data]
+
+Retrieve identity information for an end user.
+
+```
+GET https://api.fiskil.com/v1/identity
+```
+
+Query Parameters [#query-parameters]
+
+| Parameter     | Type   | Required | Description                |
+| ------------- | ------ | -------- | -------------------------- |
+| `end_user_id` | string | Yes      | The ID of the end user     |
+| `consent_id`  | string | No       | Filter by specific consent |
+
+Example Request [#example-request]
+
+<Tabs items={['cURL', 'Node.js', 'Python']}>
+  <Tab value="cURL">
+    ```bash
+    curl --request GET \
+      --url 'https://api.fiskil.com/v1/identity?end_user_id=482c0e2b-5866-46b1-b795-220b7bba45b5' \
+      --header 'Authorization: Bearer {access_token}' \
+      --header 'accept: application/json; charset=UTF-8'
+    ```
+  </Tab>
+
+  <Tab value="Node.js">
+    ```javascript
+    const response = await fetch(
+      'https://api.fiskil.com/v1/identity?end_user_id=482c0e2b-5866-46b1-b795-220b7bba45b5',
+      {
+        method: 'GET',
+        headers: {
+          'Authorization': 'Bearer {access_token}',
+          'accept': 'application/json; charset=UTF-8'
+        }
+      }
+    );
+
+    const identity = await response.json();
+    ```
+  </Tab>
+
+  <Tab value="Python">
+    ```python
+    import requests
+
+    response = requests.get(
+        'https://api.fiskil.com/v1/identity',
+        params={'end_user_id': '482c0e2b-5866-46b1-b795-220b7bba45b5'},
+        headers={
+            'Authorization': 'Bearer {access_token}',
+            'accept': 'application/json; charset=UTF-8'
+        }
+    )
+
+    identity = response.json()
+    ```
+  </Tab>
+</Tabs>
+
+Example Response (Person) [#example-response-person]
+
+```json
+{
+  "data": [
+    {
+      "end_user_id": "482c0e2b-5866-46b1-b795-220b7bba45b5",
+      "consent_id": "94549a73-a554-4b76-b824-d96898829751",
+      "type": "PERSON",
+      "first_name": "John",
+      "last_name": "Smith",
+      "middle_names": ["William"],
+      "date_of_birth": "1985-06-15",
+      "addresses": [
+        {
+          "type": "RESIDENTIAL",
+          "street": "123 Example Street",
+          "suburb": "Sydney",
+          "state": "NSW",
+          "postcode": "2000",
+          "country": "AU"
+        }
+      ],
+      "emails": [
+        {
+          "type": "PRIMARY",
+          "address": "john.smith@example.com"
+        }
+      ],
+      "phones": [
+        {
+          "type": "MOBILE",
+          "number": "+61412345678"
+        }
+      ]
+    }
+  ]
+}
+```
+
+Example Response (Organisation) [#example-response-organisation]
+
+```json
+{
+  "data": [
+    {
+      "end_user_id": "482c0e2b-5866-46b1-b795-220b7bba45b5",
+      "consent_id": "94549a73-a554-4b76-b824-d96898829751",
+      "type": "ORGANISATION",
+      "organisation_name": "ACME Corporation Pty Ltd",
+      "abn": "12345678901",
+      "addresses": [
+        {
+          "type": "BUSINESS",
+          "street": "456 Business Ave",
+          "suburb": "Melbourne",
+          "state": "VIC",
+          "postcode": "3000",
+          "country": "AU"
+        }
+      ],
+      "emails": [
+        {
+          "type": "PRIMARY",
+          "address": "accounts@acme.com.au"
+        }
+      ],
+      "phones": [
+        {
+          "type": "BUSINESS",
+          "number": "+61398765432"
+        }
+      ]
+    }
+  ]
+}
+```
+
+Identity Types [#identity-types]
+
+| Type           | Description               |
+| -------------- | ------------------------- |
+| `PERSON`       | Individual account holder |
+| `ORGANISATION` | Business or organisation  |
+
+Address Types [#address-types]
+
+| Type          | Description                 |
+| ------------- | --------------------------- |
+| `RESIDENTIAL` | Home address                |
+| `MAILING`     | Postal/mailing address      |
+| `BUSINESS`    | Business address            |
+| `REGISTERED`  | Registered business address |
+
+Phone Types [#phone-types]
+
+| Type       | Description    |
+| ---------- | -------------- |
+| `MOBILE`   | Mobile phone   |
+| `HOME`     | Home landline  |
+| `BUSINESS` | Business phone |
+
+Use Cases [#use-cases]
+
+* **KYC Verification**: Verify customer identity
+* **Pre-fill Forms**: Auto-fill application forms
+* **Address Verification**: Confirm customer addresses
+* **Contact Information**: Get up-to-date contact details
+
+<Callout type="info">
+  Identity information is subject to the permissions granted by the end user during consent. Not all fields may be available for all consents.
+</Callout>
+
+Related Endpoints [#related-endpoints]
+
+* [Accounts](/data-api/api-reference/accounts) - Get bank account details
+* [Energy Accounts](/data-api/api-reference/energy-accounts) - Get energy account details
+* [Consents](/data-api/api-reference/consents) - View consent permissions
+

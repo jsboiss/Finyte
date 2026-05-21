@@ -1,0 +1,182 @@
+﻿# Integrating the Link SDK (/data-api/guides/link-widget/integrating-the-link-sdk)
+
+Step-by-step guide to integrate the Fiskil Link SDK
+
+
+
+The [Fiskil Link SDK](https://github.com/Fiskil/link) makes it simple to launch the consent flow inside your web application. You provide an `auth_session_id` created on your backend, and the SDK handles the rest — from rendering the consent UI to returning the result of the flow.
+
+<Callout type="info">
+  To use this SDK, you'll need a Fiskil team account. If you don't have an account, you can [get in touch](https://www.fiskil.com/contact) for a quick demo. If you're new to the Fiskil platform, start with the [Quick Start Guide](/data-api/guides/getting-started/quick-start).
+</Callout>
+
+Integration Flow [#integration-flow]
+
+1) Install Link SDK [#1-install-link-sdk]
+
+This step is only required if you're using Node.js — for browser usage, you can import the SDK directly from CDN.
+
+```bash
+npm install @fiskil/link
+# or
+pnpm add @fiskil/link
+```
+
+2) Create an Auth Session [#2-create-an-auth-session]
+
+On your backend, call the [`/v1/auth/session`](/data-api/api-reference/linking-accounts#create-auth-session) endpoint with the end user ID. The `redirect_uri` and `cancel_uri` can be left blank (empty string) but `end_user_id` is required.
+
+```bash
+curl --request POST \
+  --url https://api.fiskil.com/v1/auth/session \
+  --header 'Authorization: Bearer ${access_token}' \
+  --header 'Content-Type: application/json' \
+  --data '{"end_user_id": "${end_user_id}"}'
+```
+
+3) Launch the SDK [#3-launch-the-sdk]
+
+In your frontend, call the `link()` function with the `auth_session_id` to open the consent flow. On success, the result contains a `consentID` which can be used to fetch user data from the Fiskil APIs, or an error `code` on error.
+
+4) Handle the Result [#4-handle-the-result]
+
+When the flow finishes, the SDK resolves with `{ consentID?, redirectURL? }`.
+If the flow fails or the user exits, it rejects with a typed error.
+
+Quick Start (ESM / TypeScript) [#quick-start-esm--typescript]
+
+```typescript
+import { link } from '@fiskil/link';
+
+// Start the consent flow
+const flow = link('auth_session_id');
+
+try {
+  const result = await flow;
+  console.log('Consent ID:', result.consentID);
+  // Use consentID to fetch data via Fiskil APIs
+} catch (err) {
+  console.log('Link error code:', (err as any).code);
+}
+
+// To cancel the flow programmatically
+// flow.close();
+```
+
+Quick Start (UMD / CDN) [#quick-start-umd--cdn]
+
+```html
+<!-- Include the SDK from the Fiskil CDN -->
+<script src="https://cdn.jsdelivr.net/npm/@fiskil/link@0.1.6-beta/dist/fiskil-link.umd.js"></script>
+<script>
+  // Launch the consent flow with your auth_session_id
+  const flow = FiskilLink.link('auth_session_id');
+
+  // Handle the result
+  flow
+    .then((result) => {
+      console.log('Consent complete:', result.consentID);
+      // Use consentID to fetch data from Fiskil APIs
+    })
+    .catch((err) => {
+      console.error('Consent failed:', err);
+    });
+
+  // You can also close the flow programmatically if needed:
+  // flow.close();
+</script>
+```
+
+API Usage [#api-usage]
+
+link(sessionId, options?) [#linksessionid-options]
+
+Creates and mounts the consent UI. Returns a `LinkFlow` object that is both:
+
+* a **Promise** that resolves to either `LinkResult` or `LinkError` based on the flow result, and
+* a **controller** with `.close()` to cancel the flow programmatically
+
+Options [#options]
+
+| Option          | Type     | Description                                                                     |
+| --------------- | -------- | ------------------------------------------------------------------------------- |
+| `allowedOrigin` | `string` | Restrict postMessage origin (recommended in production).                        |
+| `timeoutMs`     | `number` | Rejects if no message is received within this time. Default: `600000` (10 min). |
+
+Result [#result]
+
+When the consent flow is completed successfully, the link flow resolves with the `LinkResult` payload, which includes the `consentID` to fetch user data from the Fiskil platform.
+
+```typescript
+type LinkResult = {
+  consentID?: string;
+};
+```
+
+* `consentID` — use this to retrieve data from Fiskil APIs
+
+Error Handling [#error-handling]
+
+The promise rejects with a `LinkError` if any error is encountered during the consent flow. For `LINK_INVALID_SESSION`, the iframe remains mounted. You can close it programmatically with `.close()`.
+
+```typescript
+interface LinkError extends Error {
+  name: 'LinkError';
+  code: LinkErrorCode;
+  details?: unknown;
+}
+```
+
+Error Codes [#error-codes]
+
+| Code                                | Description                                    |
+| ----------------------------------- | ---------------------------------------------- |
+| `LINK_NOT_FOUND`                    | Consent UI container not found in DOM          |
+| `LINK_TIMEOUT`                      | Flow exceeded timeout duration                 |
+| `LINK_USER_CANCELLED`               | User cancelled or flow closed programmatically |
+| `LINK_INVALID_SESSION`              | The provided Auth Session is invalid           |
+| `LINK_ORIGIN_MISMATCH`              | Message received from unexpected origin        |
+| `LINK_INTERNAL_ERROR`               | An unrecognized internal error occurred        |
+| `CONSENT_UPSTREAM_PROCESSING_ERROR` | Institution-level error during consent         |
+| `CONSENT_ENDUSER_DENIED`            | User denied consent                            |
+| `CONSENT_OTP_FAILURE`               | OTP verification failed                        |
+| `CONSENT_ENDUSER_INELIGIBLE`        | User not eligible for data sharing             |
+| `CONSENT_TIMEOUT`                   | User abandoned the flow before completing it   |
+
+For troubleshooting guidance, see [Error Types](/data-api/api-reference/errors#error-types).
+
+React Integration Example [#react-integration-example]
+
+```tsx
+import { useState } from 'react';
+import { link } from '@fiskil/link';
+
+function LinkAccountButton({ authSessionId, onSuccess }) {
+  const [loading, setLoading] = useState(false);
+
+  const handleClick = async () => {
+    setLoading(true);
+    try {
+      const result = await link(authSessionId);
+      onSuccess(result.consentID);
+    } catch (err) {
+      console.error('Link failed:', err.code);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <button onClick={handleClick} disabled={loading}>
+      {loading ? 'Connecting…' : 'Link Account'}
+    </button>
+  );
+}
+```
+
+Next Steps [#next-steps]
+
+* Review the [Flow Overview](/data-api/guides/link-widget/flow-overview) to understand the user experience.
+* Set up [Webhooks](/data-api/guides/core-concepts/webhooks) to listen for consent events.
+* Begin retrieving data through the [Banking API](/data-api/api-reference/banking) or [Energy API](/data-api/api-reference/energy).
+

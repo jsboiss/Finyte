@@ -1,0 +1,47 @@
+﻿# Get product details (/data-api/api-reference/v2-0-0/getBankingProductDetailV2)
+
+Returns detailed information about a banking product
+
+## GET /v1/banking/products/{product_id}
+
+**Get product details**
+
+Returns detailed information about a banking product
+
+**Tags:** Products, v2, banking
+
+### Parameters
+
+| Name | In | Type | Required | Description |
+|------|----|------|----------|-------------|
+| `product_id` | path | string | Yes | A unique identifier specifying product. |
+
+### Responses
+
+**200:** OK
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `product` | object | Details of the requested product |
+
+**400:** Bad Request
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string |  |
+| `message` | string |  |
+| `name` | string |  |
+
+**500:** Internal Server Error
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string |  |
+| `message` | string |  |
+| `name` | string |  |
+
+### Example Request
+```bash
+curl -X GET "https://api.fiskil.com/v1/banking/products/{product_id}" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```

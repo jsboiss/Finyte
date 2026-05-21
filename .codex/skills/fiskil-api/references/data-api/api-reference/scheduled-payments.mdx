@@ -1,0 +1,150 @@
+﻿# Scheduled Payments (/data-api/api-reference/scheduled-payments)
+
+Get scheduled payment information from the Fiskil API.
+
+
+
+The Scheduled Payments endpoint provides information about future scheduled payments on an end user's accounts.
+
+Endpoints [#endpoints]
+
+| Method | Endpoint                 | Description                            |
+| ------ | ------------------------ | -------------------------------------- |
+| `GET`  | `/v1/scheduled-payments` | Get scheduled payments for an end user |
+
+The Scheduled Payment Model [#the-scheduled-payment-model]
+
+| Attribute           | Type   | Description                                 |
+| ------------------- | ------ | ------------------------------------------- |
+| `id`                | string | Unique identifier for the scheduled payment |
+| `account_id`        | string | ID of the source account                    |
+| `payee_reference`   | string | Reference or description for the payment    |
+| `amount`            | number | Payment amount                              |
+| `currency`          | string | Currency code                               |
+| `frequency`         | string | Payment frequency                           |
+| `next_payment_date` | string | Date of the next scheduled payment          |
+| `status`            | string | Status of the scheduled payment             |
+
+Example Response [#example-response]
+
+```json
+{
+  "id": "sp_123",
+  "account_id": "acc_123456789",
+  "payee_reference": "Rent Payment",
+  "amount": 1500.00,
+  "currency": "AUD",
+  "frequency": "MONTHLY",
+  "next_payment_date": "2023-02-01",
+  "status": "ACTIVE"
+}
+```
+
+Get Scheduled Payments [#get-scheduled-payments]
+
+Retrieve scheduled payment information for an end user.
+
+```
+GET https://api.fiskil.com/v1/scheduled-payments
+```
+
+Query Parameters [#query-parameters]
+
+| Parameter     | Type   | Required | Description                   |
+| ------------- | ------ | -------- | ----------------------------- |
+| `end_user_id` | string | Yes      | The ID of the end user        |
+| `account_id`  | string | No       | Filter by specific account ID |
+
+Example Request [#example-request]
+
+<Tabs items={['cURL', 'Node.js', 'Python']}>
+  <Tab value="cURL">
+    ```bash
+    curl --request GET \
+      --url 'https://api.fiskil.com/v1/scheduled-payments?end_user_id=482c0e2b-5866-46b1-b795-220b7bba45b5' \
+      --header 'Authorization: Bearer {access_token}' \
+      --header 'accept: application/json; charset=UTF-8'
+    ```
+  </Tab>
+
+  <Tab value="Node.js">
+    ```javascript
+    const response = await fetch(
+      'https://api.fiskil.com/v1/scheduled-payments?end_user_id=482c0e2b-5866-46b1-b795-220b7bba45b5',
+      {
+        method: 'GET',
+        headers: {
+          'Authorization': 'Bearer {access_token}',
+          'accept': 'application/json; charset=UTF-8'
+        }
+      }
+    );
+
+    const scheduledPayments = await response.json();
+    ```
+  </Tab>
+
+  <Tab value="Python">
+    ```python
+    import requests
+
+    response = requests.get(
+        'https://api.fiskil.com/v1/scheduled-payments',
+        params={'end_user_id': '482c0e2b-5866-46b1-b795-220b7bba45b5'},
+        headers={
+            'Authorization': 'Bearer {access_token}',
+            'accept': 'application/json; charset=UTF-8'
+        }
+    )
+
+    scheduled_payments = response.json()
+    ```
+  </Tab>
+</Tabs>
+
+Example Response [#example-response-1]
+
+```json
+{
+  "data": [
+    {
+      "id": "sp_123",
+      "account_id": "acc_123456789",
+      "payee_reference": "Rent Payment",
+      "amount": 1500.00,
+      "currency": "AUD",
+      "frequency": "MONTHLY",
+      "next_payment_date": "2023-02-01",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "sp_456",
+      "account_id": "acc_123456789",
+      "payee_reference": "Car Loan",
+      "amount": 450.00,
+      "currency": "AUD",
+      "frequency": "FORTNIGHTLY",
+      "next_payment_date": "2023-01-20",
+      "status": "ACTIVE"
+    }
+  ]
+}
+```
+
+Payment Frequencies [#payment-frequencies]
+
+| Frequency     | Description              |
+| ------------- | ------------------------ |
+| `WEEKLY`      | Every week               |
+| `FORTNIGHTLY` | Every two weeks          |
+| `MONTHLY`     | Every month              |
+| `QUARTERLY`   | Every three months       |
+| `ANNUALLY`    | Every year               |
+| `ONE_OFF`     | Single scheduled payment |
+
+Related Endpoints [#related-endpoints]
+
+* [Accounts](/data-api/api-reference/accounts) - Get account details
+* [Direct Debits](/data-api/api-reference/direct-debits) - Get direct debit arrangements
+* [Payee](/data-api/api-reference/payee) - Get payee information
+

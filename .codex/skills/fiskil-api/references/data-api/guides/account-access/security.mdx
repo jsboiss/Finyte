@@ -1,0 +1,43 @@
+﻿# Security (/data-api/guides/account-access/security)
+
+Fiskil provides multiple layers of security to protect your Console account and manage access to sensitive data.
+
+
+
+Fiskil provides multiple layers of security to protect your Console account and manage access to sensitive data. This page outlines authentication methods, session policies, and account protection guidance.
+
+Password Recovery [#password-recovery]
+
+If you forget your password, use the Forgot password link on the Console login page to initiate a secure reset process.
+
+You'll receive an email with a link to update your password. If your email address hasn't been verified, you'll need to complete that step before resetting your password.
+
+All password updates must be done via this flow — there is no in-app password change feature.
+
+Multi-Factor Authentication (MFA) [#multi-factor-authentication-mfa]
+
+MFA is enforced for all users of the Fiskil Console.
+
+During login, you'll be required to enter a time-based one-time password (TOTP) from a supported authenticator app such as Google Authenticator or Authy.
+
+MFA is mandatory and cannot be disabled.
+
+Session Expiry [#session-expiry]
+
+Fiskil Console sessions expire automatically after **2 hours** of inactivity. Once expired, users are logged out and prompted to re-authenticate using MFA.
+
+SSO Support [#sso-support]
+
+Fiskil supports Single Sign-On (SSO) for teams that use enterprise identity providers such as Okta, Google Workspaces, or Azure AD.
+
+SSO must be enabled by our support team. For configuration details and supported providers, see the [SSO Login guide](/data-api/guides/account-access/sso-login).
+
+Best Practices [#best-practices]
+
+* Avoid exposing API keys or tokens in frontend code
+* Remove unused team members promptly
+* Secure your MFA recovery codes
+* Use a strong, unique password
+
+If you suspect unauthorised access to your account, contact [Fiskil Support](https://fiskil.atlassian.net/servicedesk/customer/portal/6) immediately.
+

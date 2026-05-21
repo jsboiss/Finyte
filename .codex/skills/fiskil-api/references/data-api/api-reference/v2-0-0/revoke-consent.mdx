@@ -1,0 +1,27 @@
+﻿# Revoke consent (/data-api/api-reference/v2-0-0/revoke-consent)
+
+Allows a client to revoke a consent
+
+## DELETE /consent/{arrangement_id}
+
+**Revoke consent**
+
+Allows a client to revoke a consent
+
+**Tags:** consent, public
+
+### Parameters
+
+| Name | In | Type | Required | Description |
+|------|----|------|----------|-------------|
+| `arrangement_id` | path | string | Yes | CDR arrangement ID as returned by the list consents API. |
+
+### Responses
+
+**204:** No Content response.
+
+### Example Request
+```bash
+curl -X DELETE "https://api.fiskil.com/consent/{arrangement_id}" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```

@@ -1,0 +1,43 @@
+﻿# End Users (/data-api/guides/core-concepts/end-users)
+
+Understanding the core user entity in the Fiskil platform
+
+
+
+End Users are the core user entity in the Fiskil platform. An end user represents a person who has data they can to share with your application from an [Institution](/data-api/api-reference/institutions). After the end user gives consent, you can use the Fiskil APIs to collect their data. End Users are referenced by their **id**. You will see all Fiskil data APIs accept an `end_user_id` parameter, this identifies the user you want to fetch the data for. Typically you will save this ID and associate it with a user of your application so that you can fetch new data belonging to the user as it becomes available.
+
+Lifecycle [#lifecycle]
+
+Before you can access consumer data for your users you will need to create an End User in the Fiskil platform. You can use the [Add End User](/data-api/api-reference/end-user#add-end-user) API to do this.
+
+```bash
+curl --request POST \
+  --url https://api.fiskil.com/v1/end-users \
+  --header 'Authorization: Bearer {access_token}' \
+  --header 'accept: application/json; charset=UTF-8' \
+  --header 'content-type: application/json; charset=UTF-8' \
+  --data '{
+    "email": "john_starmer@gmail.com",
+    "name": "John Starmer",
+    "phone": "+614123456789"
+  }'
+```
+
+You will receive a response with the end user ID:
+
+```json
+{
+  "end_user_id": "83064af3-bb81-4514-a6d4-afba340825cd"
+}
+```
+
+<Callout type="info">
+  Tip: To prevent duplicate End Users being created for the same user of your application, be sure to save the end user ID against your own user identifier for future use.
+</Callout>
+
+Once you've created the end user, you can create [Auth Sessions](/data-api/guides/core-concepts/auth-sessions) so the user can link their accounts and consent to data sharing. You can use the same end user for multiple consents, there's no need to create a different End Users for different institutions. You can access the user's data from all consents by passing their end user ID to the Fiskil API.
+
+Deleting End Users [#deleting-end-users]
+
+If you don't want to maintain the relationship between your users and Fiskil End Users, you can [delete the end user](/data-api/api-reference/end-user#delete-end-user) after you're finished accessing their data. This is an optional step as there is no uniqueness requirement for end users. However, it might make it easier to identify End Users in the Fiskil platform if you remove them when you no longer need them.
+

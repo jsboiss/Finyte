@@ -1,0 +1,36 @@
+﻿# Overview (/data-api/guides/core-concepts/overview)
+
+API protocols, headers, and resources
+
+
+
+Endpoints [#endpoints]
+
+The Base URL for Fiskil's Data APIs is `https://api.fiskil.com/v1`
+
+API protocols and headers [#api-protocols-and-headers]
+
+The Fiskil API uses POST and GET requests to communicate and HTTP response codes to indicate status and errors. All responses come in standard JSON. The Fiskil API is served over HTTPS TLS v1.2+ to ensure data privacy; HTTP and HTTPS with TLS versions below 1.2 are not supported.
+
+Requests target a major API version selected by the `X-Fiskil-Version` header or your Console pin — see [API Versioning](/data-api/guides/core-concepts/versioning).
+
+Postman Collection [#postman-collection]
+
+The Postman collection is a convenient tool for exploring Fiskil API endpoints without writing code. The Postman collection provides pre-formatted requests for almost all of Fiskil API endpoints. All you have to do is fill in your API keys and any arguments.
+
+* [Download - Postman Collection](/assets/Data%20API%20Energy%20V2%20Customer%20Collection.postman_collection.json)
+* [Download - Postman Environment](/assets/Data%20API%20Energy%20V2%20Customer%20Environment.postman_environment.json)
+
+OpenAPI Specification [#openapi-specification]
+
+The OpenAPI specification provides a detailed description of the Fiskil API, including endpoints, request parameters, and response formats. You can use this specification to generate client libraries or to understand the API structure.
+
+<OpenAPIDownloads />
+
+Server-side code [#server-side-code]
+
+In your server-side code, ensure that:
+
+* All requests are being made successfully. You may find it useful to view your account's logs as you test your integration.
+* All API errors are handled properly.
+

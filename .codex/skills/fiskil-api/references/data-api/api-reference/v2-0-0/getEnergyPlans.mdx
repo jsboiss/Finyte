@@ -1,0 +1,45 @@
+﻿# List Plans (/data-api/api-reference/v2-0-0/getEnergyPlans)
+
+Obtain a list of energy plans that are offered to the market.
+
+## GET /v1/energy/plans
+
+**List Plans**
+
+Obtain a list of energy plans that are offered to the market.
+
+**Tags:** Plans, v1, v2, energy
+
+### Parameters
+
+| Name | In | Type | Required | Description |
+|------|----|------|----------|-------------|
+| `retailer_id` | query | string | No | A unique identifier for the Retailer object. It must be a valid CDR brand id, you can use AER website to know all available retailers. Exactly one of retailer_id or institution_id parameters is required. |
+| `institution_id` | query | string | No | A unique identifier for the Institution object. It must be a valid ID fetched from Institutions API. Exactly one of retailer_id or institution_id parameters is required. |
+| `status` | query | string | No | Filter plans by status. Allowed values: active, all. Defaults to active. |
+| `page[before]` | query | string | No | When the page[before] is specified, backwards pagination is achieved |
+| `page[after]` | query | string | No | When the page[after] is specified, forwards pagination is achieved |
+| `page[size]` | query | integer | No | When the page[size] is specified, no more than page[size] resources will be included in the response's data field. This parameter is set to a sensible default, which varies depending on the endpoint. It is capped at 1000. |
+
+### Responses
+
+**200:** OK
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `plans` | fiskil_energy.Plan[] |  |
+| `links` | object |  |
+
+**500:** Internal Server Error
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string |  |
+| `message` | string |  |
+| `name` | string |  |
+
+### Example Request
+```bash
+curl -X GET "https://api.fiskil.com/v1/energy/plans" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```

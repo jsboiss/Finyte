@@ -1,0 +1,415 @@
+﻿# Upgrade to v2 (/data-api/changelog/upgrade-guide)
+
+Migration guide for upgrading the Fiskil Data API from v1 to v2
+
+
+
+This guide covers breaking changes when upgrading from major version `v1` to
+`v2`. Fiskil aligns the v2 banking product and transaction models more closely
+with the shapes returned by banks, updates the banking accounts response shape,
+and removes a deprecated field from identity.
+
+<Callout type="warning" title="Before upgrading your pinned version">
+  Upgrade your pinned version in Console only after thorough testing with
+  `X-Fiskil-Version`. Console upgrades are one-way (for example, `v1` -> `v2`)
+  and cannot be downgraded in settings.
+</Callout>
+
+<Callout type="success" title="What hasn't changed">
+  * **No URL changes** — every endpoint path and HTTP method is identical
+  * **No request changes** — query params, path params, and request bodies are unchanged
+  * **No auth changes** — authentication, consents, and security are unchanged
+  * **Only four GET responses are affected** — see below for exact schema changes
+</Callout>
+
+1. Opt into v2 with a header [#1-opt-into-v2-with-a-header]
+
+`v1` and `v2` are served on the same base URL. Select `v2` per request with the
+`X-Fiskil-Version` header:
+
+```bash
+curl https://api.fiskil.com/v1/banking/products/{product_id} \
+  -H 'X-Fiskil-Version: v2' \
+  -H 'Authorization: Bearer {token}'
+```
+
+For the full header and Console-pin semantics, see [API Versioning](/data-api/guides/core-concepts/versioning#selecting-a-version).
+
+2. Migration checklist [#2-migration-checklist]
+
+<Steps>
+  <Step title="Pin production requests to v1">
+    Deploy a one-line change adding `X-Fiskil-Version: v1` header to your requests.
+    This freezes your current response shape while you prepare the upgrade.
+  </Step>
+
+  <Step title="Check whether affected endpoints are used">
+    If your integration uses any of these endpoints, review the exact schema
+    changes in the sections below:
+
+    * `GET /common/identity`
+    * `GET /banking/transactions`
+    * `GET /banking/products/{id}`
+    * `GET /banking/accounts`
+  </Step>
+
+  <Step title="Update affected parsers">
+    Work through the breaking changes below and update the fields your code
+    consumes.
+  </Step>
+
+  <Step title="Test v2 with production traffic">
+    Run `X-Fiskil-Version: v2` in production for a period of time and verify all
+    affected endpoints and downstream parsing before changing the Console pin.
+  </Step>
+
+  <Step title="Upgrade the Console pinned version">
+    After production validation, upgrade your account's pinned API version in
+    Console to `v2`.
+  </Step>
+</Steps>
+
+3. Breaking changes [#3-breaking-changes]
+
+<Callout type="info" title="What this section covers">
+  Only **breaking** changes are documented below (for example type changes,
+  structural replacements, or removed fields). **Additive** updates and other
+  non-breaking differences are not listed here. For full request and response
+  shapes, including new optional fields, see each endpoint's API reference and
+  OpenAPI specification.
+</Callout>
+
+GET /banking/products/id - deposit & lending rates changes [#get-bankingproductsid---deposit--lending-rates-changes]
+
+In `v2`, each **deposit rate** and **lending rate** stores tier bounds
+(`minimum_value`, `maximum_value`) as **strings**, not numbers.
+**Applicability** for a rate (or tier) is now an **array** of
+`applicability_conditions` objects, not a single nested object.
+
+| v1                                        | v2                             | Notes              |
+| ----------------------------------------- | ------------------------------ | ------------------ |
+| `tiers[].minimum_value` number            | `tiers[].minimum_value` string | Field type changed |
+| `tiers[].maximum_value` number            | `tiers[].maximum_value` string | Field type changed |
+| `applicability_conditions` object         | array of objects               | structure changed  |
+| `tiers[].applicability_conditions` object | array of objects               | structure changed  |
+
+**Example v2 response:**
+
+```json
+{
+  "deposit_rates": [
+    {
+      "additional_info": "Applicable to currency NZD",
+      "additional_info_uri": "https://www.commbank.com.au/business/international/international-payments/foreign-currency-accounts.html#rates",
+      "application_frequency": "P1M",
+      "application_type": "PERIODIC",
+      "calculation_frequency": "P1D",
+      "deposit_rate_type": "VARIABLE",
+      "rate": "0",
+      "tiers": [
+        {
+          "maximum_value": "59999.99",
+          "minimum_value": "0.00",
+          "name": "Amount",
+          "rate_application_method": "WHOLE_BALANCE",
+          "unit_of_measure": "DOLLAR"
+        }
+      ],
+      "applicability_conditions": [
+        {
+          "rate_applicability_type": "NEW_CUSTOMER",
+          "additional_value": "NZD",
+          "additional_info": "Applicable to currency NZD",
+          "additional_info_uri": "https://www.commbank.com.au/business/international/international-payments/foreign-currency-accounts.html#rates"
+        }
+      ]
+    }
+  ], 
+  "lending_rates": [
+    {
+        "additional_info": "Investment - Principal and Interest repayment type with Package",
+        "additional_info_uri": "https://www.commbank.com.au/content/dam/commbank/personal/apply-online/download-printed-forms/home-loan-update-002842.pdf",
+        "additional_value": "P1Y",
+        "application_frequency": "P1M",
+        "application_type": "PERIODIC",
+        "calculation_frequency": "P1D",
+        "comparison_rate": "0.0857",
+        "interest_payment_due": "IN_ARREARS",
+        "lending_rate_type": "FIXED",
+        "loan_purpose": "INVESTMENT",
+        "rate": "0.0654",
+        "repayment_type": "PRINCIPAL_AND_INTEREST",
+        "tiers": [
+            {
+                "maximum_value": "99999999.00",
+                "minimum_value": "10000",
+                "name": "BALANCE",
+                "rate_application_method": "WHOLE_BALANCE",
+                "unit_of_measure": "DOLLAR"
+            }
+        ]
+    }
+  ]
+}
+```
+
+**Migrate:** On every item in `deposit_rates[]` and `lending_rates[]`, treat
+`tiers[].minimum_value` and `tiers[].maximum_value` as **strings**, and parse
+`applicability_conditions` as an **array** of objects with the new shape.
+
+GET /banking/products/id - fees changes [#get-bankingproductsid---fees-changes]
+
+In `v2`, each fee and discount has a **type** field (`fee_method_u_type` or
+`discount_method_u_type`) that tells you how it is calculated. The amount or
+rate lives **inside** a nested object (for example `fixed_amount` or
+`rate_based`), not as a single top-level `amount` on the fee anymore.
+
+| v1                             | v2                                                    | Notes                      |
+| ------------------------------ | ----------------------------------------------------- | -------------------------- |
+| flat fee fields (`amount` etc) | `fee_method_u_type` with nested objects               | Fee structure changed      |
+| flat discount fields           | `discount_method_u_type` with nested discount objects | Discount structure changed |
+
+**Example v2 response:**
+
+```json
+{
+  "fees": [
+    {
+      "additional_info": "Any other cash withdrawals overseas will incur a $5.00 fee plus 3.5% of the transaction value. We will waive your fee if you meet certain criteria. Refer to the product terms and conditions.",
+      "additional_info_uri": "https://www.commbank.com.au/personal/apply-online/download-printed-forms/SavingsInvestment_ADB2852.pdf",
+      "currency": "AUD",
+      "fee_method_u_type": "rateBased",
+      "fee_type": "WITHDRAWAL",
+      "name": "Access fee - Overseas cash withdrawals",
+      "rate_based": {
+        "rate": "0.035",
+        "rate_type": "TRANSACTION"
+      }
+    },
+    {
+      "additional_info": "Any other cash withdrawals overseas will incur a $5.00 fee plus 3.5% of the transaction value. We will waive your fee if you meet certain criteria. Refer to the product terms and conditions.",
+      "additional_info_uri": "https://www.commbank.com.au/personal/apply-online/download-printed-forms/SavingsInvestment_ADB2852.pdf",
+      "currency": "AUD",
+      "fee_method_u_type": "fixedAmount",
+      "fee_type": "WITHDRAWAL",
+      "fixed_amount": {
+        "amount": "5.00"
+      },
+      "name": "Access fee - Overseas cash withdrawals"
+    }
+  ]
+}
+```
+
+**Migrate:** Branch on `fee_method_u_type` and read from `fixed_amount` or
+`rate_based` (and the same idea for `discount_method_u_type` on discounts).
+Review any `fee_type` switch logic or enum validation so new or removed values do
+not fail deserialization or routing.
+
+GET /banking/accounts - deposit & lending rates changes [#get-bankingaccounts---deposit--lending-rates-changes]
+
+In `v2`, **deposit\_rates** and **lending\_rates** on account payloads follow the
+same rules as on **product** detail: tier bounds are **strings**, and
+**applicability** is an **array** of `applicability_conditions` objects (on the
+rate and on tiers), not one nested object.
+
+| v1                                          | v2                               | Notes                  |
+| ------------------------------------------- | -------------------------------- | ---------------------- |
+| `*.tiers[].minimum_value` number            | `*.tiers[].minimum_value` string | Same as product detail |
+| `*.tiers[].maximum_value` number            | `*.tiers[].maximum_value` string | Same                   |
+| `*.applicability_conditions` object         | array of objects                 | Same                   |
+| `*.tiers[].applicability_conditions` object | array of objects                 | Same                   |
+
+**Example v2 response (fragment):**
+
+```json
+{
+  "deposit_rates": [
+    {
+      "application_frequency": "P1M",
+      "application_type": "PERIODIC",
+      "calculation_frequency": "P1D",
+      "deposit_rate_type": "VARIABLE",
+      "rate": "0",
+      "tiers": [
+        {
+          "maximum_value": "59999.99",
+          "minimum_value": "0.00",
+          "name": "Amount",
+          "rate_application_method": "WHOLE_BALANCE",
+          "unit_of_measure": "DOLLAR"
+        }
+      ],
+      "applicability_conditions": [
+        {
+          "rate_applicability_type": "NEW_CUSTOMER",
+          "additional_value": "NZD",
+          "additional_info": "Applicable to currency NZD",
+          "additional_info_uri": "https://www.commbank.com.au/business/international/international-payments/foreign-currency-accounts.html#rates"
+        }
+      ]
+    }
+  ],
+  "lending_rates": [
+    {
+      "application_frequency": "P1M",
+      "application_type": "PERIODIC",
+      "calculation_frequency": "P1D",
+      "lending_rate_type": "FIXED",
+      "loan_purpose": "INVESTMENT",
+      "rate": "0.0654",
+      "repayment_type": "PRINCIPAL_AND_INTEREST",
+      "tiers": [
+        {
+          "maximum_value": "99999999.00",
+          "minimum_value": "10000.00",
+          "name": "BALANCE",
+          "rate_application_method": "WHOLE_BALANCE",
+          "unit_of_measure": "DOLLAR"
+        }
+      ],
+      "applicability_conditions": [
+        {
+          "rate_applicability_type": "NEW_CUSTOMER",
+          "additional_value": "INVESTMENT",
+          "additional_info": "Investment - Principal and Interest repayment type with Package",
+          "additional_info_uri": "https://www.commbank.com.au/content/dam/commbank/personal/apply-online/download-printed-forms/home-loan-update-002842.pdf"
+        }
+      ]
+    }
+  ]
+}
+```
+
+**Migrate:** Apply the same parsing updates as for product detail: string tier
+bounds and array-shaped `applicability_conditions` on each rate and tier.
+
+GET /banking/accounts - fees & discounts changes [#get-bankingaccounts---fees--discounts-changes]
+
+In `v2`, each **fee** on an account uses `fee_method_u_type` and nests the
+amount or rate under `fixed_amount` or `rate_based`. **Discounts** on a fee use
+the same idea with `discount_method_u_type` instead of flat discount fields.
+
+| Area       | v1                                                                                             | v2                                                                              |
+| ---------- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| Fee        | top-level `amount`, `balance_rate`, `transaction_rate`, `accrued_rate`, `accrual_frequency`, … | `fee_method_u_type` + `fixed_amount` / `rate_based` (and related nested fields) |
+| Discount   | top-level `amount`, `balance_rate`, `transaction_rate`, `accrued_rate`, `fee_rate`, …          | `discount_method_u_type` + `fixed_amount` / `rate_based`                        |
+| `fee_type` | fixed enum in strict clients                                                                   | enum set can change; validate loosely or handle new values                      |
+
+**Example v2 response (fragment):**
+
+```json
+{
+  "fees": [
+    {
+      "currency": "AUD",
+      "fee_method_u_type": "fixedAmount",
+      "fee_type": "PERIODIC",
+      "fixed_amount": {
+        "amount": "5.00"
+      },
+      "name": "Monthly account fee",
+      "discounts": [
+        {
+          "discount_method_u_type": "fixedAmount",
+          "fixed_amount": {
+            "amount": "2.50"
+          }
+        }
+      ]
+    }
+  ]
+}
+```
+
+**Migrate:** Branch on `fee_method_u_type` and `discount_method_u_type`, read
+from nested objects, and revisit strict `fee_type` handling.
+
+GET /banking/accounts - features changes [#get-bankingaccounts---features-changes]
+
+In `v2`, **is\_activated** on a feature is a **string enum** (for example
+`ACTIVATED`), not a JSON boolean. Other feature fields stay on the same paths.
+
+| v1                     | v2                         | Notes                      |
+| ---------------------- | -------------------------- | -------------------------- |
+| `is_activated` boolean | `is_activated` string enum | Type and validation change |
+
+**Example v2 response (fragment):**
+
+```json
+{
+  "features": [
+    {
+      "additional_info": "See, track and easily pay your bills online in NetBank or on the go in the CommBank app.",
+      "additional_info_uri": "https://www.commbank.com.au/digital-banking/bpay-view.html",
+      "additional_value": "BPAY View",
+      "feature_type": "BILL_PAYMENT",
+      "is_activated": "ACTIVATED"
+    }
+  ]
+}
+```
+
+**Migrate:** Parse `is_activated` as a string and map allowed enum values
+instead of `true` / `false`.
+
+***
+
+GET /banking/transactions — extended_data changes [#get-bankingtransactions--extended_data-changes]
+
+In v2, old X2P1.01 fields at the root level are removed, and related fields
+are now grouped under `extended_data.npp_payload`.
+
+| v1                    | v2            | Notes                                                       |
+| --------------------- | ------------- | ----------------------------------------------------------- |
+| `nppPayload`          | `npp_payload` | Key renamed from camelCase to snake\_case                   |
+| `service`             | removed       | Removed from `extended_data` root                           |
+| `x2p101_payload`      | removed       | Removed from `extended_data` root                           |
+| split field locations | grouped       | Related fields now appear under `extended_data.npp_payload` |
+
+**Example v2 response:**
+
+```json
+{
+  "extended_data": {
+    "extension_u_type": "nppPayload",
+    "payee": "Alice",
+    "npp_payload": {
+      "extended_description": "Alphashare transfer",
+      "service": "X2P1",
+      "service_version": "04"
+    }
+  }
+}
+```
+
+**Migrate:** Rename `nppPayload` -> `npp_payload`. Stop reading root-level
+`service` and `x2p101_payload`. In `v2`, fields like `service` and
+`service_version` are provided under `extended_data.npp_payload`.
+
+***
+
+GET /common/identity — customer field removed [#get-commonidentity--customer-field-removed]
+
+In `v1`, the response includes both `customer` (deprecated) and `identities`.
+In `v2`, `customer` is removed and `identities` remains unchanged.
+
+| v1                      | v2                                  |
+| ----------------------- | ----------------------------------- |
+| `response.customer`     | removed                             |
+| `response.identities[]` | `response.identities[]` (unchanged) |
+
+**Migrate:** Stop reading `response.customer`. Use
+`response.identities[]` as the canonical identity list.
+
+4. Reference [#4-reference]
+
+**Version switcher in docs:** Toggle between `v1` and `v2` in the top
+navigation to compare API reference shapes. This only affects docs — runtime
+behavior is controlled by the `X-Fiskil-Version` header or your Console pin.
+
+**How versioning works at Fiskil:** For the versioning model, breaking-change
+policy, and support timeline, see [API Versioning](/data-api/guides/core-concepts/versioning).
+
+**Need help?** Use the AI chat in the bottom-right corner — it has context on both specs. For anything it can't resolve, reach out to Fiskil support.
+

@@ -1,0 +1,113 @@
+﻿# Monitoring & Logs (/data-api/guides/account-access/monitoring-and-logs)
+
+Understand how to monitor webhook deliveries and implement logging practices to keep your integration reliable.
+
+
+
+The Fiskil platform gives you clear visibility into activity across your account and API usage. Logs help you track changes, investigate issues, and maintain security and compliance. Fiskil provides multiple log types, **audit logs** for console actions, **request logs** for incoming API traffic, and **webhook logs** for outgoing API traffic, offering a complete view of your platform's operations.
+
+Log Types [#log-types]
+
+Fiskil provides multiple categories of logs to help you monitor activity, troubleshoot issues, and maintain visibility into your platform usage:
+
+| Log Type         | Description                                                                                                                         | Typical Use Cases                                               |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| **Audit Logs**   | Capture changes made in the Fiskil Console, such as billing updates, team management actions, or configuration changes.             | Security auditing, compliance tracking, change history.         |
+| **Request Logs** | Record incoming API requests made to the Fiskil platform using your API keys, including endpoint, method, status code, and latency. | Performance monitoring, debugging, traffic analysis.            |
+| **Webhook Logs** | Track outgoing webhook deliveries from Fiskil to your systems, including payload content, delivery attempts, and response status.   | Integration debugging, delivery confirmation, error resolution. |
+
+All logs can be viewed in the Fiskil Console. Exporting or log draining is not currently supported.
+
+Audit Logs [#audit-logs]
+
+Audit logs can be viewed in the Fiskil Console under [Settings > Data API > Audit Logs](https://console.fiskil.com). It is only available to team users with `owner` role.
+The following table lists the currently logged audit events, their categories, and descriptions.
+
+| Event                                    | Category               | Description                                                                     |
+| ---------------------------------------- | ---------------------- | ------------------------------------------------------------------------------- |
+| `billing.payment_method.added`           | Billing Management     | When a new payment method is added to an account.                               |
+| `billing.payment_method.deleted`         | Billing Management     | When an existing payment method is removed from the account.                    |
+| `billing.payment_method.default_changed` | Billing Management     | When the default payment method is changed to a different one.                  |
+| `branding.consent_flow.updated`          | Platform Configuration | When any consent UI settings under "Customize UI" are modified.                 |
+| `api_key.created`                        | Platform Configuration | When a new API key is generated for accessing the platform programmatically.    |
+| `api_key.deleted`                        | Platform Configuration | When an existing API key is deleted and access is revoked.                      |
+| `webhook.added`                          | Platform Configuration | When a new webhook is registered to receive system events.                      |
+| `webhook.deleted`                        | Platform Configuration | When a webhook is removed from the configuration.                               |
+| `team_member.invited`                    | Team Management        | When a new team member is invited to join a team.                               |
+| `team.member.added`                      | Team Management        | When a new team member accepts the invitation.                                  |
+| `team.member.removed`                    | Team Management        | When a team member is removed from the team.                                    |
+| `team.member.updated`                    | Team Management        | When a team member's role or permissions are updated.                           |
+| `team.information.updated`               | Team Management        | When team settings (contacts, company) are changed.                             |
+| `auth.mfa.added`                         | Authentication         | When multi-factor authentication (e.g. SMS or phone) is enabled for an account. |
+| `auth.mfa.removed`                       | Authentication         | When multi-factor authentication is disabled or removed.                        |
+| `auth.user.logged_in`                    | Authentication         | When a user logs into the Fiskil platform or switches teams.                    |
+
+Request Logs [#request-logs]
+
+Request logs record incoming API requests made to the Fiskil platform using your API keys.
+They are retained for **90 days** and can be viewed in the Fiskil Console under the **Logs** tab.
+
+For each request, the Console displays:
+
+* **Endpoint & Method** -- e.g., `GET /banking/accounts`.
+* **Team ID** and **End User ID** (if provided).
+* **Timestamp** -- When the request was received.
+* **Status Code** -- The HTTP status code returned.
+* **IP Address** -- Source of the request.
+* **User Agent** -- The client making the request.
+* **Response Size** and **Latency**.
+
+Logs can be filtered by date range, end\_user\_id and path. These logs help you debug requests, analyze API performance, and monitor traffic patterns.
+
+Webhook Logs [#webhook-logs]
+
+Webhook logs record outgoing webhook deliveries from the Fiskil platform to your configured endpoints.
+They are retained for **90 days** and can be viewed in the Fiskil Console by navigating to **[Settings > Webhooks](https://console.fiskil.com)** and selecting a registered webhook.
+
+For each webhook endpoint, the Console displays:
+
+* **Recent Events** -- A list of events delivered to the endpoint.
+* **Delivery Status** -- Whether the delivery was successful or failed.
+* **Response Status Code** -- The HTTP status code returned by your server.
+* **Timestamp** -- When the delivery attempt was made.
+
+This visibility helps you quickly identify and resolve integration issues, such as:
+
+* Unreachable or misconfigured endpoints.
+* Unexpected `4xx` or `5xx` responses.
+* Delivery retries due to timeouts or failures.
+
+Recommended Logging on Your Side [#recommended-logging-on-your-side]
+
+To better support observability, and troubleshooting within your own application, we recommend logging the following:
+
+* All incoming webhook payloads (excluding sensitive fields)
+* Response status codes your server returns
+* Any webhook verification failures (e.g. invalid signature)
+* Internal processing outcomes (e.g. sync success, validation errors)
+
+Your logs should include:
+
+* `message_id` from the webhook payload (for deduplication and tracing)
+* `event` name (e.g. `transactions.sync.completed`)
+* Timestamps for when your system processed each event
+
+These logs will be essential when debugging failed syncs or investigating data availability issues.
+
+Recommendations for Monitoring [#recommendations-for-monitoring]
+
+To get the most value from Fiskil's monitoring and logging capabilities, we recommend the following best practices:
+
+* **Regularly review audit logs** to track account changes and ensure compliance with organizational policies.
+* **Monitor request logs** to detect performance bottlenecks, unusual traffic patterns, or failed API calls that may indicate issues or misuse.
+* **Check webhook logs frequently** to verify successful deliveries and promptly resolve integration problems.
+* **Secure access to logs** by restricting viewing permissions to authorized team members, maintaining data privacy and integrity.
+
+Following these practices helps maintain operational visibility, detect issues early, and support security and compliance efforts effectively.
+
+Related Guides [#related-guides]
+
+* [Webhooks Guide](/docs/data-api/guides/core-concepts/webhooks)
+* [Security](/docs/data-api/guides/account-access/security)
+* [Support & Troubleshooting](/docs/data-api/guides/support/troubleshooting)
+

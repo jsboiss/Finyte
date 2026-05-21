@@ -1,0 +1,117 @@
+﻿# Best Practices (/data-api/guides/resources/best-practices)
+
+Recommendations for building robust Fiskil integrations
+
+
+
+Follow these best practices to build a reliable, secure, and user-friendly Fiskil integration.
+
+Security [#security]
+
+Protect Your Credentials [#protect-your-credentials]
+
+* Never expose your `client_secret` in frontend code
+* Store credentials in environment variables or a secrets manager
+* Rotate API keys periodically (every 90 days recommended)
+
+Server-Side Integration [#server-side-integration]
+
+* Make all API calls from your server, not the browser
+* Use HTTPS for all communications
+* Validate webhook signatures before processing
+
+Handle Tokens Securely [#handle-tokens-securely]
+
+* Don't store access tokens in browser storage
+* Implement proper token expiry handling
+* Never log tokens or credentials
+
+Data Handling [#data-handling]
+
+Request Only What You Need [#request-only-what-you-need]
+
+* Configure consent to request only essential data scopes
+* Shorter consent periods are more user-friendly
+* Limit data history to what's necessary
+
+Cache Wisely [#cache-wisely]
+
+* Use webhook events to know when new data is available
+* Don't poll APIs excessively
+* Implement proper cache invalidation
+
+Handle Data Updates [#handle-data-updates]
+
+* Data can change between syncs
+* Implement proper update/upsert logic in your database
+* Consider soft deletes for removed records
+
+User Experience [#user-experience]
+
+Clear Communication [#clear-communication]
+
+* Explain what data you're accessing and why
+* Be transparent about how data will be used
+* Provide easy access to consent management
+
+Error Handling [#error-handling]
+
+* Handle all error cases gracefully
+* Provide helpful error messages to users
+* Log errors for debugging
+
+Loading States [#loading-states]
+
+* Show progress indicators during the Link flow
+* Inform users when data is syncing
+* Handle timeouts appropriately
+
+Webhooks [#webhooks]
+
+Reliability [#reliability]
+
+* Always return 2xx status codes promptly
+* Process webhook payloads asynchronously
+* Implement idempotency using `message_id`
+
+Security [#security-1]
+
+* Verify webhook signatures
+* Only accept webhooks from Fiskil IPs
+* Use HTTPS endpoints
+
+Error Handling [#error-handling-1]
+
+* Handle retries gracefully
+* Log failed webhook processing for investigation
+* Monitor webhook delivery health
+
+Testing [#testing]
+
+Use the Sandbox [#use-the-sandbox]
+
+* Test all flows in sandbox before production
+* Create multiple test end-users for different scenarios
+* Verify webhook delivery in sandbox
+
+Test Edge Cases [#test-edge-cases]
+
+* User cancellation
+* Authentication failures
+* Network errors
+* Token expiry
+
+Monitoring [#monitoring]
+
+Log Important Events [#log-important-events]
+
+* API call successes and failures
+* Webhook receipts
+* Consent lifecycle events
+
+Set Up Alerts [#set-up-alerts]
+
+* Monitor for elevated error rates
+* Track API latency
+* Alert on webhook delivery failures
+

@@ -1,0 +1,61 @@
+﻿# Banking (/data-api/guides/data-domains/banking)
+
+Fiskil's Banking APIs provide secure, consent-driven access to a customer's financial data, retrieved directly from their connected bank accounts.
+
+
+
+Fiskil's Banking APIs provide secure, consent-driven access to a customer's financial data, retrieved directly from their connected bank accounts. This includes account metadata, transaction history, payees, balances, and more.
+
+Once a customer has successfully linked their bank, Fiskil syncs their data and emits webhook events to notify your system when each data type is available.
+
+What Data Can You Access? [#what-data-can-you-access]
+
+| Data Type              | Description                                                            |
+| ---------------------- | ---------------------------------------------------------------------- |
+| **Identity**           | Verified name, date of birth, contact details, and other personal data |
+| **Accounts**           | Account numbers, names, account types, financial institution metadata  |
+| **Balances**           | Current and available balances per account                             |
+| **Transactions**       | Categorised and enriched transaction history                           |
+| **Payees**             | Counterparties associated with outbound transactions                   |
+| **Direct Debits**      | Active debit mandates including frequency, status, and linked accounts |
+| **Scheduled Payments** | Future-dated outgoing payments scheduled via the institution           |
+
+Refer to the [Banking API Reference](/docs/data-api/api-reference/banking-overview) for full endpoint documentation.
+
+Data Availability and Integration Flow [#data-availability-and-integration-flow]
+
+Once a user has successfully linked a financial institution, Fiskil begins syncing data and emits webhook events as each dataset becomes available.
+
+For example:
+
+* `banking.transactions.sync.completed` → transaction history is ready
+* `banking.accounts.sync.completed` → account metadata is available
+
+We recommend using these webhooks to trigger your backend data fetches. Avoid polling.
+
+See the [Webhooks Guide](/docs/data-api/guides/core-concepts/webhooks) for integration details.
+
+Example Use Cases [#example-use-cases]
+
+Fiskil's Banking APIs can support a wide range of product experiences. For example:
+
+* **Account verification** -- Retrieve verified account ownership details to support onboarding, direct debit setup, or compliance workflows.
+* **Spending insights** -- Analyse transaction history to categorise spending or detect patterns.
+* **Balance aggregation** -- Show users a combined financial view across multiple institutions.
+* **Recurring payment summaries** -- Identify and summarise recurring debits or subscriptions.
+* **Cash flow tracking** -- Calculate inflows and outflows for budgeting or business finance use cases.
+
+Best Practices [#best-practices]
+
+* Always use `end_user_id` as your primary reference when fetching data.
+* Use pagination when retrieving transaction history (`page[size]`, `page[before]`, etc.).
+* Do not store account or balance data — always retrieve fresh when needed.
+* Handle webhook retries idempotently using the `message_id` field in the payload.
+* Ensure your webhook endpoints are HTTPS-secured and verified.
+
+Next Steps [#next-steps]
+
+* To understand how users link their accounts, read the [Auth Sessions](/docs/data-api/guides/core-concepts/auth-sessions)
+* For a breakdown of user identity data across domains, visit [Identity Data](/docs/data-api/guides/data-domains/identity)
+* To explore available API endpoints, see the [Banking API Reference](/docs/data-api/api-reference/banking-overview)
+

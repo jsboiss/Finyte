@@ -1,0 +1,123 @@
+﻿# Linking Accounts (/data-api/api-reference/linking-accounts)
+
+Understanding the account linking flow in the Fiskil API.
+
+
+
+Linking accounts is the process of connecting an end user's financial or energy accounts to your application. This enables you to access their data with their explicit consent.
+
+The Account Linking Flow [#the-account-linking-flow]
+
+The account linking process follows these steps:
+
+<Steps>
+  <Step>
+    Create an End User [#create-an-end-user]
+
+    First, [create an end user](/data-api/api-reference/end-user#add-end-user) in the Fiskil platform to represent your user.
+
+    ```bash
+    curl --request POST \
+      --url https://api.fiskil.com/v1/end-users \
+      --header 'Authorization: Bearer {access_token}' \
+      --header 'content-type: application/json' \
+      --data '{
+        "email": "user@example.com",
+        "name": "John Doe"
+      }'
+    ```
+  </Step>
+
+  <Step>
+    Start an Auth Session [#start-an-auth-session]
+
+    [Create an auth session](/data-api/api-reference/auth-session) for the end user. This generates a session ID that is used with the Link SDK to launch the consent flow.
+
+    ```bash
+    curl --request POST \
+      --url https://api.fiskil.com/v1/auth/session \
+      --header 'Authorization: Bearer {access_token}' \
+      --header 'content-type: application/json' \
+      --data '{
+        "end_user_id": "482c0e2b-5866-46b1-b795-220b7bba45b5"
+      }'
+    ```
+
+    <Callout type="info">
+      When using the Link SDK, you don't need to provide `redirect_uri` or `cancel_uri` — the SDK handles the flow result directly via a promise.
+    </Callout>
+  </Step>
+
+  <Step>
+    Launch the Link SDK [#launch-the-link-sdk]
+
+    In your frontend, pass the `auth_session_id` from the response to the Link SDK's `link()` function. This opens the consent UI embedded in your application. The user will:
+
+    1. Select their institution (bank or energy provider)
+    2. Log in to their institution
+    3. Select which accounts to share
+    4. Confirm the consent
+
+    ```javascript
+    import { link } from '@fiskil/link';
+
+    const flow = link(authSession.session_id);
+    ```
+  </Step>
+
+  <Step>
+    Handle the Result [#handle-the-result]
+
+    When the consent flow completes, the SDK resolves with a `consentID` you can use to fetch data. If the user cancels or an error occurs, the promise rejects with a typed error.
+
+    ```javascript
+    try {
+      const result = await flow;
+      console.log('Consent ID:', result.consentID);
+      // Use consentID to fetch data via Fiskil APIs
+    } catch (err) {
+      console.error('Link error:', err.code);
+    }
+    ```
+  </Step>
+
+  <Step>
+    Access Data [#access-data]
+
+    Once the consent is established, use the `consentID` to start accessing the user's data through the [Banking](/data-api/api-reference/accounts) and [Energy](/data-api/api-reference/energy-accounts) API endpoints.
+  </Step>
+</Steps>
+
+Integrating the Link SDK [#integrating-the-link-sdk]
+
+The [Fiskil Link SDK](https://github.com/Fiskil/link) supports both ESM/TypeScript and UMD/CDN usage, with options for timeout configuration, origin restrictions, and programmatic cancellation. For install instructions, full code examples, error codes, and a React integration example, see the [Integrating the Link SDK](/data-api/guides/link-widget/integrating-the-link-sdk) guide.
+
+Customizing the Flow [#customizing-the-flow]
+
+You can customize the consent flow experience through the [Fiskil Console](https://console.fiskil.com/customize-ui):
+
+* **Branding**: Add your logo and colors
+* **Institution Selection**: Control which institutions are displayed
+* **Copy**: Customize the text shown to users
+
+Handling Multiple Consents [#handling-multiple-consents]
+
+An end user can have multiple active consents:
+
+* Multiple consents to different institutions
+* Multiple consents to the same institution (e.g., different accounts)
+
+Use the [Consents API](/data-api/api-reference/consents) to manage and track all consents for an end user.
+
+Best Practices [#best-practices]
+
+1. **Handle Errors with Error Codes**: The Link SDK rejects with typed `LinkError` objects containing specific error codes (e.g., `LINK_USER_CANCELLED`, `CONSENT_ENDUSER_DENIED`). Use these codes to provide meaningful feedback to your users. See [Errors](/data-api/api-reference/errors) for a complete list.
+
+2. **Set `allowedOrigin` in Production**: When calling `link()`, pass the `allowedOrigin` option to restrict `postMessage` communication to your domain. This is recommended for production deployments.
+
+3. **Pre-select the Institution**: If you know which institution the user wants to connect, pass the `institution_id` in the auth session request to skip the institution selection step.
+
+4. **Monitor Consent Status**: Consents can expire or be revoked. Use [webhooks](/data-api/guides/core-concepts/webhooks) to stay informed about consent status changes.
+
+5. **Explain the Value**: Before starting the consent flow, explain to users what data you need and why, to improve conversion rates.
+

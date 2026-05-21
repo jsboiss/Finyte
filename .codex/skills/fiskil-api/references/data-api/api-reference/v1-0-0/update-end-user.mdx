@@ -1,0 +1,72 @@
+﻿# Update end user (/data-api/api-reference/v1-0-0/update-end-user)
+
+Update an end user
+
+## POST /end-users/{end_user_id}
+
+**Update end user**
+
+Update an end user
+
+**Tags:** end-users, public
+
+### Parameters
+
+| Name | In | Type | Required | Description |
+|------|----|------|----------|-------------|
+| `end_user_id` | path | string | Yes | ID of the end user |
+
+### Request Body
+
+**Content-Type:** `application/json` (required)
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `abn` | string | Australian Business Number (ABN) of the end user if they represent a business |
+| `email` | string | An End Users email address. This should be their primary email, as it is used for notifying the End User about their consents. |
+| `phone` | string | An End Users Phone number in E.164 format |
+| `session_id` | string | ID of the session |
+
+**Example:**
+```json
+{
+  "abn": "51 824 753 556",
+  "email": "john_starmer@gmail.com",
+  "phone": "+614123456789",
+  "session_id": "ses-123"
+}
+```
+
+### Responses
+
+**204:** No Content response.
+
+**400:** end_user_already_exists: user with that email already exists
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `fault` | boolean | Is the error a server-side fault? |
+| `id` | string | ID is a unique identifier for this particular occurrence of the problem. |
+| `message` | string | Message is a human-readable explanation specific to this occurrence of the problem. |
+| `name` | string | Name is the name of this class of errors. |
+| `temporary` | boolean | Is the error temporary? |
+| `timeout` | boolean | Is the error a timeout? |
+
+**404:** end_user_not_found: end user not found
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `fault` | boolean | Is the error a server-side fault? |
+| `id` | string | ID is a unique identifier for this particular occurrence of the problem. |
+| `message` | string | Message is a human-readable explanation specific to this occurrence of the problem. |
+| `name` | string | Name is the name of this class of errors. |
+| `temporary` | boolean | Is the error temporary? |
+| `timeout` | boolean | Is the error a timeout? |
+
+### Example Request
+```bash
+curl -X POST "https://api.fiskil.com/end-users/{end_user_id}" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"abn":"51 824 753 556","email":"john_starmer@gmail.com","phone":"+614123456789","session_id":"ses-123"}'
+```

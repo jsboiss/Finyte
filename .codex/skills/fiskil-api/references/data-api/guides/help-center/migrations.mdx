@@ -1,0 +1,103 @@
+﻿# Migrating to Fiskil APIs (/data-api/guides/help-center/migrations)
+
+Plan and execute a phased migration to Fiskil with minimal risk and disruption.
+
+
+
+Migrating from an existing data provider doesn't have to be a disruptive big-bang deployment. Whether you're moving from custom-built solutions, legacy aggregators, or screen-scraping services, Fiskil supports flexible migration strategies that let you test, learn, and scale at your own pace.
+
+This guide shows you how to design a migration that minimizes risk, maintains user experience, and unlocks the full value of real-time, user-consented data.
+
+Why Choose a Phased Migration? [#why-choose-a-phased-migration]
+
+We recommend a phased rollout. It reduces risk, preserves user experience, and accelerates time-to-value while you adopt Fiskil with confidence.
+
+Risk containment: Issues are isolated to a narrow scope, not your entire user base.
+
+Continuous improvement: Real production feedback guides rapid iteration before broad rollout.
+
+Business continuity: No downtime or disruption to existing flows while you adopt Fiskil.
+
+Progressive enablement: Your team builds expertise as coverage expands.
+
+Migration Strategies [#migration-strategies]
+
+Choose the approach that best aligns with your risk tolerance, technical constraints, and business requirements:
+
+Full Cutover [#full-cutover]
+
+Replace your existing provider completely in a single deployment. This is a viable, clean-slate option - particularly for new applications, pilots, or straightforward integrations - when you're ready to adopt Fiskil end-to-end.
+
+Institution-by-Institution Migration [#institution-by-institution-migration]
+
+Migrate one financial institution at a time. Start with a high-value institution, enable Fiskil for users connecting to that bank while maintaining your existing provider for others, then expand coverage as confidence grows.
+
+Best for: Most production applications where you want to validate data quality and user experience incrementally without disrupting existing flows.
+
+Alternative Approaches [#alternative-approaches]
+
+Parallel Data Collection: Run both providers simultaneously for the same users to compare data quality before switching - useful for mission-critical workloads.
+
+Feature-Based Migration: Move discrete features (e.g., account aggregation, transaction categorization) rather than entire institutions - effective for complex multi-use-case apps.
+
+Planning Your Institution-by-Institution Migration [#planning-your-institution-by-institution-migration]
+
+Before You Start [#before-you-start]
+
+Assess Your Current Integration: Document your existing data flows, user journeys, and business logic dependencies. Understanding these patterns helps you design an equivalent flow with Fiskil while identifying potential challenges early.
+
+Choose Your First Institution: Select a high-value institution with significant user volume but lower business criticality. This gives you meaningful data to validate your integration while minimizing risk.
+
+Set Success Criteria: Define clear metrics for each institution migration including conversion rates, data quality measures, and user satisfaction scores.
+
+Implementation Strategy [#implementation-strategy]
+
+Start small: Begin with a limited cohort for your first institution. Use configuration/feature flags to control routing and enable quick rollbacks.
+
+Observe and optimize: Monitor technical and user experience signals to validate your integration.
+
+Expand scope: Add more institutions and broaden user coverage as confidence grows.
+
+Technical Implementation [#technical-implementation]
+
+Targeting Specific Institutions [#targeting-specific-institutions]
+
+For institution-by-institution migrations, preselect institutions when creating Auth Sessions by passing `institution_id`. This bypasses the institution selection screen and takes users directly to their bank's login interface.
+
+```bash
+curl --request POST \
+ --url https://api.fiskil.com/v1/auth/session \
+ --header 'Authorization: Bearer {access_token}' \
+ --header 'Content-Type: application/json' \
+ --data '{
+ "end_user_id": "eu_12345",
+ "institution_id": "10",
+ "redirect_uri": "https://yourapp.com/auth/success",
+ "cancel_uri": "https://yourapp.com/auth/cancel"
+ }'
+```
+
+Embedding vs Redirecting [#embedding-vs-redirecting]
+
+When you create an Auth Session, Fiskil returns an `auth_url`. You can either redirect to our hosted consent UI or embed it via iframe to maintain brand continuity - both options deliver a secure, high-conversion experience.
+
+Data Mapping [#data-mapping]
+
+Keep your existing domain models and introduce a translation layer where needed. Fiskil's enrichment and data quality signals can be adopted incrementally without breaking current contracts.
+
+Common Migration Considerations [#common-migration-considerations]
+
+Data schema differences: Add a translation layer where needed; adopt enrichment and quality signals progressively.
+
+User experience: Redirect or embed to fit your UX. Embedded flows typically maximize brand continuity and conversion.
+
+Performance patterns: Enable monitoring/alerting and tune retries, caching, and backoffs as you expand coverage.
+
+Business logic coupling: Isolate provider-specific logic behind clear interfaces to simplify future changes.
+
+Expert Support [#expert-support]
+
+Our team partners with you on strategy and implementation - schema mapping, consent UX, and rollout best practices - so you can migrate with confidence and realize value quickly.
+
+Ready to get started? [Contact our implementation team](mailto:support@fiskil.com) to design a plan tailored to your stack and users.
+

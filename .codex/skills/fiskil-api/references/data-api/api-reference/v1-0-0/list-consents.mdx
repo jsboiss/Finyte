@@ -1,0 +1,142 @@
+﻿# List consents (/data-api/api-reference/v1-0-0/list-consents)
+
+List consents belonging to a client.
+
+## GET /consent
+
+**List consents**
+
+List consents belonging to a client.
+
+**Tags:** consent, public
+
+### Parameters
+
+| Name | In | Type | Required | Description |
+|------|----|------|----------|-------------|
+| `end_user_id` | query | string | No | The ID of the end user to list consents for |
+| `active` | query | boolean | No | Filter to include only active or inactive (i.e. revoked or expired) consents |
+
+### Responses
+
+**200:** OK response.
+
+**Example:**
+```json
+[
+  {
+    "account_ids": [
+      "1234567890",
+      "1234567891"
+    ],
+    "active": true,
+    "app_logo": "https://acme.com/app-logo.png",
+    "app_name": "MyCoolApp",
+    "arrangement_id": "94549a73-a554-4b76-b824-d96898829751",
+    "created_at": "2021-03-18T02:46:42Z",
+    "duration": 7776000,
+    "end_user_email": "tony.stark@example.com",
+    "end_user_id": "eu_2yRHN2ag2y4p8kCtm5DOeccZEXB",
+    "expires_at": "2023-01-01T10:42:40Z",
+    "institution_id": "11",
+    "institution_logo": "https://example.com/images/gringotts-logo.png",
+    "institution_name": "Gringgotts",
+    "institution_type": "banking",
+    "last_accessed": "2023-01-02T10:42:42Z",
+    "last_consent": "2023-01-01T10:42:40Z",
+    "permissions": [
+      "accounts",
+      "balances",
+      "transactions"
+    ],
+    "termination_reason": "Expired or Revoked"
+  },
+  {
+    "account_ids": [
+      "1234567890",
+      "1234567891"
+    ],
+    "active": true,
+    "app_logo": "https://acme.com/app-logo.png",
+    "app_name": "MyCoolApp",
+    "arrangement_id": "94549a73-a554-4b76-b824-d96898829751",
+    "created_at": "2021-03-18T02:46:42Z",
+    "duration": 7776000,
+    "end_user_email": "tony.stark@example.com",
+    "end_user_id": "eu_2yRHN2ag2y4p8kCtm5DOeccZEXB",
+    "expires_at": "2023-01-01T10:42:40Z",
+    "institution_id": "11",
+    "institution_logo": "https://example.com/images/gringotts-logo.png",
+    "institution_name": "Gringgotts",
+    "institution_type": "banking",
+    "last_accessed": "2023-01-02T10:42:42Z",
+    "last_consent": "2023-01-01T10:42:40Z",
+    "permissions": [
+      "accounts",
+      "balances",
+      "transactions"
+    ],
+    "termination_reason": "Expired or Revoked"
+  },
+  {
+    "account_ids": [
+      "1234567890",
+      "1234567891"
+    ],
+    "active": true,
+    "app_logo": "https://acme.com/app-logo.png",
+    "app_name": "MyCoolApp",
+    "arrangement_id": "94549a73-a554-4b76-b824-d96898829751",
+    "created_at": "2021-03-18T02:46:42Z",
+    "duration": 7776000,
+    "end_user_email": "tony.stark@example.com",
+    "end_user_id": "eu_2yRHN2ag2y4p8kCtm5DOeccZEXB",
+    "expires_at": "2023-01-01T10:42:40Z",
+    "institution_id": "11",
+    "institution_logo": "https://example.com/images/gringotts-logo.png",
+    "institution_name": "Gringgotts",
+    "institution_type": "banking",
+    "last_accessed": "2023-01-02T10:42:42Z",
+    "last_consent": "2023-01-01T10:42:40Z",
+    "permissions": [
+      "accounts",
+      "balances",
+      "transactions"
+    ],
+    "termination_reason": "Expired or Revoked"
+  },
+  {
+    "account_ids": [
+      "1234567890",
+      "1234567891"
+    ],
+    "active": true,
+    "app_logo": "https://acme.com/app-logo.png",
+    "app_name": "MyCoolApp",
+    "arrangement_id": "94549a73-a554-4b76-b824-d96898829751",
+    "created_at": "2021-03-18T02:46:42Z",
+    "duration": 7776000,
+    "end_user_email": "tony.stark@example.com",
+    "end_user_id": "eu_2yRHN2ag2y4p8kCtm5DOeccZEXB",
+    "expires_at": "2023-01-01T10:42:40Z",
+    "institution_id": "11",
+    "institution_logo": "https://example.com/images/gringotts-logo.png",
+    "institution_name": "Gringgotts",
+    "institution_type": "banking",
+    "last_accessed": "2023-01-02T10:42:42Z",
+    "last_consent": "2023-01-01T10:42:40Z",
+    "permissions": [
+      "accounts",
+      "balances",
+      "transactions"
+    ],
+    "termination_reason": "Expired or Revoked"
+  }
+]
+```
+
+### Example Request
+```bash
+curl -X GET "https://api.fiskil.com/consent" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```

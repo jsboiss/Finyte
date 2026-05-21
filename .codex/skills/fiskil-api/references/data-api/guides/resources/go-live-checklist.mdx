@@ -1,0 +1,92 @@
+﻿# Go Live Checklist (/data-api/guides/resources/go-live-checklist)
+
+Everything you need to complete before launching your Fiskil integration in production
+
+
+
+Work through this checklist before launching your Fiskil integration in production. Not every item is strictly required for basic operation, but completing the full list will result in a more robust, secure, and maintainable integration.
+
+Request Live Access [#request-live-access]
+
+Live access is requested and granted entirely through the [Fiskil Console](https://console.fiskil.com/) — there is no separate email or paperwork to complete. Open the [onboarding questionnaire](https://console.fiskil.com/data-api/onboarding-questionnaire) in the Console and complete the steps below to unlock the production environment.
+
+<Callout type="info">
+  Once you submit your questionnaire, our team will review it and follow up directly in the Console. You can track the status of your request from the same page.
+</Callout>
+
+<Steps>
+  <Step title="Complete Your Application and Company Profile">
+    Fill in your application and company profile in the [onboarding questionnaire](https://console.fiskil.com/data-api/onboarding-questionnaire). Some institutions require this information before they will grant access.
+  </Step>
+
+  <Step title="Submit Your Security Questionnaire">
+    Submit your security questionnaire from the same [onboarding flow](https://console.fiskil.com/data-api/onboarding-questionnaire). This is required for live access.
+  </Step>
+
+  <Step title="Review the Compliance Checklist">
+    Review the [Compliance Checklist](#compliance-checklist) below to ensure your integration meets all mandatory compliance requirements.
+  </Step>
+
+  <Step title="Work Through the Developer Checklist">
+    Work through the [Developer Checklist](#developer-checklist) below to verify your technical integration is production-ready.
+  </Step>
+
+  <Step title="Set Up Your Production Environment">
+    Once your access is approved, configure your production environment in the [Fiskil Console](https://console.fiskil.com/) and run a final end-to-end test before going live.
+  </Step>
+</Steps>
+
+Compliance Checklist [#compliance-checklist]
+
+All items in this checklist are mandatory requirements for production access.
+
+Consent UI Requirements [#consent-ui-requirements]
+
+In the [Fiskil Console](https://console.fiskil.com/), use “Customize UI” to:
+
+* [ ] Customize the UI branding to match your product or brand identity.
+* [ ] Configure an appropriate consent period that aligns with your use case. For example, use a one-time consent for single affordability checks, or up to 12 months for ongoing financial monitoring.
+* [ ] Clearly document and communicate all intended data usage purposes in your Consent UI.
+
+Data Management Requirements [#data-management-requirements]
+
+Fiskil will provide guidance and support to ensure you establish the following controls:
+
+* [ ] Implement and document your data minimization strategy, ensuring you only store essential data.
+* [ ] Establish processes for data deletion or de-identification when no longer needed.
+* [ ] Implement testing procedures to verify compliance with data management requirements.
+* [ ] Ensure any storage of identifiable customer data complies with local data sovereignty regulations.
+
+Developer Checklist [#developer-checklist]
+
+Verify the following technical requirements before taking your Fiskil integration live.
+
+Error Handling [#error-handling]
+
+Discovering an unhandled error type after launch is painful. Make sure your code is defensive and handles every error case — not just the common ones, but also those you expect to “never” happen.
+
+* [ ] Account for different error types that may be thrown by Fiskil APIs and ensure each edge case is handled.
+* [ ] Implement retry logic or error handling for intermittent outages or connectivity errors at supported institutions. Fiskil API calls may occasionally fail due to issues at data holder institutions.
+
+Storage and Logging [#storage-and-logging]
+
+Log Fiskil identifiers and IDs properly to enhance security. When contacting Support about a specific request or webhook, these will be required.
+
+Ensure the following identifiers are securely logged:
+
+| Identifier    | Description                                                                      |
+| ------------- | -------------------------------------------------------------------------------- |
+| `end_user_id` | Included in most requests to identify the end user whose data is being accessed. |
+| `consent_id`  | The consent identifier associated with each data sharing consent.                |
+| `session_id`  | The session identifier associated with every consent created or attempted.       |
+| `error_id`    | Included in all errors returned to uniquely identify the error reported.         |
+
+End User Management [#end-user-management]
+
+* [ ] Delete end users that are no longer using the product or receiving a service from your product.
+
+Product-Specific Recommendation: Transaction API [#product-specific-recommendation-transaction-api]
+
+* [ ] If fetching historical transaction data, make sure your app implements pagination logic.
+* [ ] The Transaction API natively supports the categorization of transactions through the `categories` object. For a comprehensive understanding of the classification system, download the [Categories Taxonomy CSV](/downloads/categories-taxonomy.csv), which provides detailed information on all category types, subtypes, and their hierarchical relationships supported by Fiskil.
+

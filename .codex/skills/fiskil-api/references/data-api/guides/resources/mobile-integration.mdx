@@ -1,0 +1,270 @@
+﻿# Mobile Integration (/data-api/guides/resources/mobile-integration)
+
+Integrate the Fiskil consent flow into iOS and Android apps using the Link SDK in a WebView
+
+
+
+The Fiskil Link SDK currently provides a **JavaScript client SDK** ([`@fiskil/link`](https://github.com/Fiskil/link)) for web applications. Native Android and iOS SDKs will be available in the coming months.
+
+In the meantime, you can integrate the full consent flow into your mobile app by embedding the Link SDK inside a **WebView**. This is the recommended approach -- it uses the same SDK as a web integration, runs the consent flow in an overlay managed by the SDK, and communicates results back to your native code through a JavaScript bridge.
+
+<Callout type="info">
+  This guide assumes you've already set up your backend to [create Auth Sessions](/data-api/guides/core-concepts/auth-sessions) and are familiar with the [Link SDK](/data-api/guides/link-widget/integrating-the-link-sdk). If you're new to the Fiskil platform, start with the [Quick Start Guide](/data-api/guides/getting-started/quick-start).
+</Callout>
+
+How It Works [#how-it-works]
+
+1. Your **backend** creates an Auth Session via `POST /v1/auth/session` and returns the `auth_session_id` to the mobile app
+2. The mobile app loads a **local HTML page** in a WebView that includes the `@fiskil/link` SDK from CDN
+3. The native app passes the `auth_session_id` into the WebView via a JavaScript bridge
+4. The Link SDK opens the consent flow overlay inside the WebView
+5. When the flow completes (or fails), the SDK resolves and the HTML page sends the result back to native code through the JavaScript bridge
+
+<Mermaid
+  chart="sequenceDiagram
+    participant App as Mobile App
+    participant Backend as Your Backend
+    participant WebView as WebView
+    participant SDK as Link SDK
+    participant Fiskil as Fiskil Auth
+
+    App->>Backend: Request auth session
+    Backend->>Fiskil: POST /v1/auth/session
+    Fiskil-->>Backend: auth_session_id
+    Backend-->>App: auth_session_id
+    App->>WebView: Load HTML with Link SDK
+    App->>WebView: Pass auth_session_id via JS bridge
+    WebView->>SDK: link(auth_session_id)
+    SDK->>Fiskil: Open consent flow overlay
+    Fiskil-->>SDK: consentID or error
+    SDK-->>WebView: Result
+    WebView->>App: Send result via JS bridge"
+/>
+
+Create the Auth Session [#create-the-auth-session]
+
+On your backend, create an Auth Session. When using the Link SDK, you only need to provide the `end_user_id` -- no `redirect_uri` or `cancel_uri` is required.
+
+```bash
+curl --request POST \
+  --url https://api.fiskil.com/v1/auth/session \
+  --header 'Authorization: Bearer ${access_token}' \
+  --header 'Content-Type: application/json' \
+  --data '{"end_user_id": "${end_user_id}"}'
+```
+
+The response includes the `session_id` to pass to the Link SDK:
+
+```json
+{
+  "id": "5qcql2s0bn9qfh1m5qd1sl4gth",
+  "session_id": "ea564d-56012s4-6ds4564",
+  "auth_url": "https://auth.fiskil.com/consent?session=ea564d-56012s4-6ds4564",
+  "expires_at": 1621083785
+}
+```
+
+The Bridge HTML Page [#the-bridge-html-page]
+
+Create a lightweight HTML page that loads the Link SDK from CDN and communicates with your native app through a JavaScript bridge. Bundle this file with your app so the WebView loads it locally.
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://cdn.jsdelivr.net/npm/@fiskil/link@0.1.6-beta/dist/fiskil-link.umd.js"></script>
+</head>
+<body>
+  <script>
+    function startLink(authSessionId) {
+      var flow = FiskilLink.link(authSessionId);
+
+      flow
+        .then(function(result) {
+          sendToNative('success', { consentID: result.consentID });
+        })
+        .catch(function(err) {
+          sendToNative('error', { code: err.code, message: err.message });
+        });
+    }
+
+    function sendToNative(type, payload) {
+      var message = JSON.stringify({ type: type, payload: payload });
+
+      // iOS (WKWebView)
+      if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.fiskil) {
+        window.webkit.messageHandlers.fiskil.postMessage(message);
+        return;
+      }
+
+      // Android (WebView)
+      if (window.FiskilBridge) {
+        window.FiskilBridge.onResult(message);
+        return;
+      }
+    }
+  </script>
+</body>
+</html>
+```
+
+The `sendToNative` function detects which platform it's running on and routes the message to the appropriate native handler. The native side calls `startLink()` to kick off the flow once the page is loaded.
+
+iOS Integration (WKWebView) [#ios-integration-wkwebview]
+
+Load the bridge HTML page in a `WKWebView`. There are two key integration points: registering a script message handler so the JavaScript `sendToNative` function can reach your Swift code, and calling `startLink()` once the page finishes loading.
+
+**Register the JS bridge** by adding a `WKScriptMessageHandler` with the name `fiskil` -- this matches the `window.webkit.messageHandlers.fiskil` call in the bridge HTML:
+
+```swift
+let configuration = WKWebViewConfiguration()
+configuration.userContentController.add(self, name: "fiskil")
+
+let webView = WKWebView(frame: view.bounds, configuration: configuration)
+```
+
+**Start the flow** once the page has loaded by calling `startLink()` with the auth session ID via `evaluateJavaScript`:
+
+```swift
+func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+    webView.evaluateJavaScript("startLink('\(authSessionId)')")
+}
+```
+
+**Handle the result** in your `WKScriptMessageHandler` implementation. The message body is the JSON string sent by `sendToNative`:
+
+```swift
+func userContentController(
+    _ userContentController: WKUserContentController,
+    didReceive message: WKScriptMessage
+) {
+    // message.body is the JSON string: {"type": "success"|"error", "payload": {...}}
+    // Parse and handle accordingly
+}
+```
+
+<Callout type="info">
+  Bundle the `fiskil-link.html` file in your app and load it with `loadFileURL(_:allowingReadAccessTo:)`. Make sure JavaScript and DOM storage are enabled on the WebView configuration.
+</Callout>
+
+Android Integration (WebView) [#android-integration-webview]
+
+Load the bridge HTML page in an Android `WebView`. The two key integration points are: adding a JavaScript interface so `window.FiskilBridge.onResult()` can reach your Kotlin code, and calling `startLink()` once the page finishes loading.
+
+**Register the JS bridge** by adding a JavaScript interface named `FiskilBridge` -- this matches the `window.FiskilBridge` call in the bridge HTML:
+
+```kotlin
+val webView = WebView(this).apply {
+    settings.javaScriptEnabled = true
+    settings.domStorageEnabled = true
+}
+
+webView.addJavascriptInterface(object {
+    @JavascriptInterface
+    fun onResult(message: String) {
+        // message is the JSON string: {"type": "success"|"error", "payload": {...}}
+        // Parse and handle accordingly
+    }
+}, "FiskilBridge")
+```
+
+**Start the flow** once the page has loaded by calling `startLink()` with the auth session ID:
+
+```kotlin
+webView.webViewClient = object : WebViewClient() {
+    override fun onPageFinished(view: WebView?, url: String?) {
+        view?.evaluateJavascript("startLink('$authSessionId')", null)
+    }
+}
+
+webView.loadUrl("file:///android_asset/fiskil-link.html")
+```
+
+<Callout type="info">
+  Place the `fiskil-link.html` file in your `assets/` directory. Note that `@JavascriptInterface` methods are called on a background thread -- switch to the main thread before updating UI.
+</Callout>
+
+Institution Selection Strategies [#institution-selection-strategies]
+
+You have two options for how users select their institution (bank or energy provider) during the consent flow.
+
+Option A: Use Fiskil's Built-In Institution List [#option-a-use-fiskils-built-in-institution-list]
+
+The simplest approach. When you create an Auth Session **without** an `institution_id`, the consent flow rendered by the Link SDK begins with Fiskil's hosted institution picker. The user selects their institution, then proceeds to authenticate.
+
+No additional work is required -- just pass the `auth_session_id` to the Link SDK as shown above.
+
+```json
+{
+  "end_user_id": "eu_12345"
+}
+```
+
+Option B: Build Your Own Institution List [#option-b-build-your-own-institution-list]
+
+For a fully native experience, you can build your own institution picker in your app and pass the selected `institution_id` when creating the Auth Session. This skips Fiskil's institution selection screen entirely, taking the user straight to authentication.
+
+**Step 1: Fetch institutions from the API**
+
+Call [`GET /v1/institutions`](/data-api/api-reference/institutions) with your `client_id` to retrieve the list of available institutions. You can filter by `industry` to show only banking or energy providers.
+
+```bash
+curl --request GET \
+  --url 'https://api.fiskil.com/v1/institutions?industry=banking&client_id={client_id}' \
+  --header 'accept: application/json; charset=UTF-8'
+```
+
+Each institution in the response includes fields you can use to build your UI:
+
+| Field                       | Description                                              |
+| --------------------------- | -------------------------------------------------------- |
+| `id`                        | The institution ID to pass when creating an Auth Session |
+| `name`                      | Display name of the institution                          |
+| `icon`                      | URL to a square icon (suitable for list items)           |
+| `logo`                      | URL to the full logo                                     |
+| `industry`                  | `banking` or `energy`                                    |
+| `status.connections.status` | `HEALTHY`, `DEGRADED`, or `OUTAGE`                       |
+
+**Step 2: Render a native institution picker**
+
+Use the institution data to build a native list or grid in your app. You can add search, filtering, and custom branding that matches your app's design.
+
+**Step 3: Pass the selected institution ID**
+
+When the user selects an institution, create the Auth Session with the `institution_id` parameter. The consent flow will skip the institution picker and go directly to the selected institution's login screen.
+
+```bash
+curl --request POST \
+  --url https://api.fiskil.com/v1/auth/session \
+  --header 'Authorization: Bearer ${access_token}' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "end_user_id": "eu_12345",
+    "institution_id": "22"
+  }'
+```
+
+Then pass the returned `session_id` to the Link SDK as normal. The user will skip institution selection and go straight to authentication.
+
+<Callout type="info">
+  Check the `status.connections.status` field before presenting an institution to users. If the status is `OUTAGE`, consider hiding the institution or showing a notice that it is temporarily unavailable.
+</Callout>
+
+Best Practices [#best-practices]
+
+* **Enable JavaScript and DOM storage** in your WebView configuration -- the Link SDK requires both
+* **Bundle the HTML page locally** rather than hosting it remotely, so the WebView loads instantly without a network request
+* **Handle external links** by opening them in the system browser rather than inside the WebView (e.g., privacy policy or help links)
+* **Support back navigation** so users can go back within the consent flow without dismissing the entire WebView
+* **Clear WebView data** between sessions if multiple users share the same device
+* **Test with sandbox credentials** on both iOS and Android before going live -- see the [Testing guide](/data-api/guides/core-concepts/testing) for details
+* **Handle session expiry** gracefully -- Auth Sessions expire after 5 days, so create a new session if the user returns after a delay
+
+Next Steps [#next-steps]
+
+* Review the [Link SDK reference](/data-api/guides/link-widget/integrating-the-link-sdk) for the full list of options and error codes
+* Set up [Webhooks](/data-api/guides/core-concepts/webhooks) to receive consent and data sync notifications
+* See [Error Types](/data-api/api-reference/errors) for handling error codes returned by the SDK
+* Read the [Best Practices](/data-api/guides/resources/best-practices) guide for general integration recommendations
+

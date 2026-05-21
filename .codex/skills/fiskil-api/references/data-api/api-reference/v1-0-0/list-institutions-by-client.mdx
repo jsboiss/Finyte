@@ -1,0 +1,75 @@
+﻿# List institutions by client (/data-api/api-reference/v1-0-0/list-institutions-by-client)
+
+Gets a list of institutions a client subscribes to.
+
+## GET /institutions
+
+**List institutions by client**
+
+Gets a list of institutions a client subscribes to.
+
+**Tags:** institutions, public
+
+### Parameters
+
+| Name | In | Type | Required | Description |
+|------|----|------|----------|-------------|
+| `industry` | query | string | No | The type of the institution e.g. “banking” or “energy” |
+| `client_id` | query | string | Yes | Your team ID. You can get this from the settings menu of the Fiskil Console |
+| `sess_id` | query | string | No | The auth session id |
+| `institution_mode` | query | string | No | The institution mode. If set to recommended, will load recommended institution data only |
+
+### Responses
+
+**200:** OK response.
+
+**Example:**
+```json
+[
+  {
+    "icon": "https://eastpaclogo.com.au/eastpac-icon.svg",
+    "id": "22",
+    "industry": "banking",
+    "is_accessible": true,
+    "logo": "https://eastpaclogo.com.au/eastpac.svg",
+    "name": "Eastpac",
+    "priority": 1,
+    "status": {
+      "connections": {
+        "status": "OUTAGE"
+      }
+    }
+  },
+  {
+    "icon": "https://eastpaclogo.com.au/eastpac-icon.svg",
+    "id": "22",
+    "industry": "banking",
+    "is_accessible": true,
+    "logo": "https://eastpaclogo.com.au/eastpac.svg",
+    "name": "Eastpac",
+    "priority": 1,
+    "status": {
+      "connections": {
+        "status": "OUTAGE"
+      }
+    }
+  }
+]
+```
+
+**400:** bad_request: EndUserID is not associated with clientID passed in request
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `fault` | boolean | Is the error a server-side fault? |
+| `id` | string | ID is a unique identifier for this particular occurrence of the problem. |
+| `message` | string | Message is a human-readable explanation specific to this occurrence of the problem. |
+| `name` | string | Name is the name of this class of errors. |
+| `temporary` | boolean | Is the error temporary? |
+| `timeout` | boolean | Is the error a timeout? |
+
+### Example Request
+```bash
+curl -X GET "https://api.fiskil.com/institutions" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```

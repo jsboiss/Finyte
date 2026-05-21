@@ -1,0 +1,51 @@
+﻿# List concessions (/data-api/api-reference/v2-0-0/getEnergyConcessions)
+
+Returns the details of any concessions or arrangements applied to a energy accounts authorised by the end user
+
+## GET /v1/energy/concessions
+
+**List concessions**
+
+Returns the details of any concessions or arrangements applied to a energy accounts authorised by the end user
+
+**Tags:** Concessions, v1, v2, energy
+
+### Parameters
+
+| Name | In | Type | Required | Description |
+|------|----|------|----------|-------------|
+| `end_user_id` | query | string | Yes | A unique identifier for the End User object. |
+| `page[before]` | query | string | No | When the page[before] is specified, backwards pagination is achieved |
+| `page[after]` | query | string | No | When the page[after] is specified, forwards pagination is achieved |
+| `page[size]` | query | integer | No | When the page[size] is specified, no more than page[size] resources will be included in the response's data field. This parameter is set to a sensible default, which varies depending on the endpoint. It is capped at 1000. |
+
+### Responses
+
+**200:** OK
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `concessions` | fiskil_energy.Concession[] |  |
+| `links` | httputil.Links |  |
+
+**400:** Bad Request
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string |  |
+| `message` | string |  |
+| `name` | string |  |
+
+**500:** Internal Server Error
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string |  |
+| `message` | string |  |
+| `name` | string |  |
+
+### Example Request
+```bash
+curl -X GET "https://api.fiskil.com/v1/energy/concessions" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```

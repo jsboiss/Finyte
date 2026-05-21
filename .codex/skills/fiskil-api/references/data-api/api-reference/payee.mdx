@@ -1,0 +1,142 @@
+﻿# Payee (/data-api/api-reference/payee)
+
+Get payee information from the Fiskil API.
+
+
+
+The Payee endpoint provides information about saved payees on an end user's accounts.
+
+Endpoints [#endpoints]
+
+| Method | Endpoint     | Description                |
+| ------ | ------------ | -------------------------- |
+| `GET`  | `/v1/payees` | Get payees for an end user |
+
+The Payee Model [#the-payee-model]
+
+| Attribute        | Type   | Description                                     |
+| ---------------- | ------ | ----------------------------------------------- |
+| `id`             | string | Unique identifier for the payee                 |
+| `nickname`       | string | Nickname or description for the payee           |
+| `type`           | string | Type of payee (DOMESTIC, BILLER, INTERNATIONAL) |
+| `account_number` | string | Payee's account number (may be masked)          |
+| `bsb`            | string | Payee's BSB (for domestic payees)               |
+| `biller_code`    | string | Biller code (for BPAY payees)                   |
+| `created_date`   | string | When the payee was created                      |
+
+Example Response [#example-response]
+
+```json
+{
+  "id": "payee_123",
+  "nickname": "Rent - ABC Property",
+  "type": "DOMESTIC",
+  "account_number": "****5678",
+  "bsb": "123-456",
+  "biller_code": null,
+  "created_date": "2022-06-15"
+}
+```
+
+Get Payees [#get-payees]
+
+Retrieve payee information for an end user.
+
+```
+GET https://api.fiskil.com/v1/payees
+```
+
+Query Parameters [#query-parameters]
+
+| Parameter     | Type   | Required | Description                                            |
+| ------------- | ------ | -------- | ------------------------------------------------------ |
+| `end_user_id` | string | Yes      | The ID of the end user                                 |
+| `type`        | string | No       | Filter by payee type (DOMESTIC, BILLER, INTERNATIONAL) |
+
+Example Request [#example-request]
+
+<Tabs items={['cURL', 'Node.js', 'Python']}>
+  <Tab value="cURL">
+    ```bash
+    curl --request GET \
+      --url 'https://api.fiskil.com/v1/payees?end_user_id=482c0e2b-5866-46b1-b795-220b7bba45b5' \
+      --header 'Authorization: Bearer {access_token}' \
+      --header 'accept: application/json; charset=UTF-8'
+    ```
+  </Tab>
+
+  <Tab value="Node.js">
+    ```javascript
+    const response = await fetch(
+      'https://api.fiskil.com/v1/payees?end_user_id=482c0e2b-5866-46b1-b795-220b7bba45b5',
+      {
+        method: 'GET',
+        headers: {
+          'Authorization': 'Bearer {access_token}',
+          'accept': 'application/json; charset=UTF-8'
+        }
+      }
+    );
+
+    const payees = await response.json();
+    ```
+  </Tab>
+
+  <Tab value="Python">
+    ```python
+    import requests
+
+    response = requests.get(
+        'https://api.fiskil.com/v1/payees',
+        params={'end_user_id': '482c0e2b-5866-46b1-b795-220b7bba45b5'},
+        headers={
+            'Authorization': 'Bearer {access_token}',
+            'accept': 'application/json; charset=UTF-8'
+        }
+    )
+
+    payees = response.json()
+    ```
+  </Tab>
+</Tabs>
+
+Example Response [#example-response-1]
+
+```json
+{
+  "data": [
+    {
+      "id": "payee_123",
+      "nickname": "Rent - ABC Property",
+      "type": "DOMESTIC",
+      "account_number": "****5678",
+      "bsb": "123-456",
+      "biller_code": null,
+      "created_date": "2022-06-15"
+    },
+    {
+      "id": "payee_456",
+      "nickname": "Electricity",
+      "type": "BILLER",
+      "account_number": null,
+      "bsb": null,
+      "biller_code": "12345",
+      "created_date": "2022-08-20"
+    }
+  ]
+}
+```
+
+Payee Types [#payee-types]
+
+| Type            | Description                   |
+| --------------- | ----------------------------- |
+| `DOMESTIC`      | Australian bank account payee |
+| `BILLER`        | BPAY biller                   |
+| `INTERNATIONAL` | International transfer payee  |
+
+Related Endpoints [#related-endpoints]
+
+* [Accounts](/data-api/api-reference/accounts) - Get account details
+* [Scheduled Payments](/data-api/api-reference/scheduled-payments) - Get scheduled payments
+

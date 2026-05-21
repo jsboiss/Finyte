@@ -1,0 +1,51 @@
+﻿# Get direct debits (/data-api/api-reference/v1-0-0/getDirectDebits)
+
+Returns list of banking account direct debits available under the authorised consent
+
+## GET /v1/banking/acccounts/direct-debits
+
+**Get direct debits**
+
+Returns list of banking account direct debits available under the authorised consent
+
+**Tags:** Direct Debits, v1, v2, banking
+
+### Parameters
+
+| Name | In | Type | Required | Description |
+|------|----|------|----------|-------------|
+| `end_user_id` | query | string | Yes | A unique identifier for the End User object. |
+| `page[before]` | query | string | No | When the page[before] is specified, backwards pagination is achieved |
+| `page[after]` | query | string | No | When the page[after] is specified, forwards pagination is achieved |
+| `page[size]` | query | integer | No | When the page[size] is specified, no more than page[size] resources will be included in the response's data field. This parameter is set to a sensible default, which varies depending on the endpoint. It is capped at 1000. |
+
+### Responses
+
+**200:** OK
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `direct_debits` | fiskil_banking.DirectDebit[] | A list of direct debits the end user has set up |
+| `links` | object | Links to be used for pagination |
+
+**400:** Bad Request
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string |  |
+| `message` | string |  |
+| `name` | string |  |
+
+**500:** Internal Server Error
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string |  |
+| `message` | string |  |
+| `name` | string |  |
+
+### Example Request
+```bash
+curl -X GET "https://api.fiskil.com/v1/banking/acccounts/direct-debits" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```

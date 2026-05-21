@@ -1,0 +1,63 @@
+﻿# Get Balances (/data-api/api-reference/v2-0-0/getBankingBalances)
+
+Returns list of banking account balances available under the authorised consent
+
+## GET /v1/banking/balances
+
+**Get Balances**
+
+Returns list of banking account balances available under the authorised consent
+
+**Tags:** Balances, v1, v2, banking
+
+### Parameters
+
+| Name | In | Type | Required | Description |
+|------|----|------|----------|-------------|
+| `end_user_id` | query | string | Yes | A unique identifier for the End User object. |
+| `account_id` | query | string | No | A unique identifier for the Account object. |
+| `page[before]` | query | string | No | When the page[before] is specified, backwards pagination is achieved |
+| `page[after]` | query | string | No | When the page[after] is specified, forwards pagination is achieved |
+| `page[size]` | query | integer | No | When the page[size] is specified, no more than page[size] resources will be included in the response's data field. This parameter is set to a sensible default, which varies depending on the endpoint. It is capped at 1000. |
+| `fetch` | query | string | No | fetch=true, combined with account_id, retrieves balance from data holder in real-time |
+| `x-fiskil-client-ip-address` | header | string | No | Client IP address to indicate consumer present API requests. Used when fetch=true to forward to data holder. |
+| `x-fiskil-client-user-agent` | header | string | No | Client User-Agent header to indicate consumer present API requests. Used when fetch=true to forward to data holder. |
+
+### Responses
+
+**200:** OK
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `balances` | fiskil_banking.Balance[] | A list of bank account balances for the end user |
+| `links` | object | Links to be used for pagination |
+
+**400:** Bad Request
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string |  |
+| `message` | string |  |
+| `name` | string |  |
+
+**500:** Internal Server Error
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string |  |
+| `message` | string |  |
+| `name` | string |  |
+
+**502:** Bad Gateway
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string |  |
+| `message` | string |  |
+| `name` | string |  |
+
+### Example Request
+```bash
+curl -X GET "https://api.fiskil.com/v1/banking/balances" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```

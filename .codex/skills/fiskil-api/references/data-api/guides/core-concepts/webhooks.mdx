@@ -1,0 +1,203 @@
+﻿# Webhooks (/data-api/guides/core-concepts/webhooks)
+
+Receive real-time updates from Fiskil directly to your application
+
+
+
+Introduction [#introduction]
+
+Webhooks are a powerful way to receive real-time updates from Fiskil directly to your application. Rather than constantly polling Fiskil's API, webhooks allow Fiskil to push notifications to your app whenever specific events occur. This not only optimises performance but also ensures that your app reacts immediately to critical updates like new user consents or fresh banking transactions.
+
+Fiskil sends these notifications over HTTPS in a structured JSON format, making it easy to integrate and automate responses in your backend systems. Whether you're handling financial transactions, energy data, or user consents, webhooks streamline your workflows with up-to-the-minute accuracy.
+
+Why Use Webhooks? [#why-use-webhooks]
+
+* **Real-Time Updates**: Get notified instantly when important events occur, reducing the need for frequent API polling.
+* **Automated Workflows**: Trigger backend processes like updating account balances or alerting users as soon as new data is available.
+* **Resource Efficient**: Save bandwidth and server resources by receiving data only when it changes.
+
+Common Use Cases [#common-use-cases]
+
+* **User Consent Notifications**: Receive alerts when an end user consents to share their data (`consent.received`), enabling immediate onboarding or data access.
+* **Transaction Updates**: Get notified when new transactions are available (`banking.transactions.sync.completed`), allowing your app to update balances or generate spending reports.
+* **Energy Data Syncs**: Automatically update your system with the latest energy usage or billing data, keeping your dashboards current.
+
+Webhook Setup [#webhook-setup]
+
+Step 1: Create Your Webhook Endpoint [#step-1-create-your-webhook-endpoint]
+
+Before Fiskil can send you notifications, you need to set up an endpoint to receive them. Here's how:
+
+Create an HTTP/HTTPS Endpoint: [#create-an-httphttps-endpoint]
+
+* Build a URL on your server that can accept POST requests.
+* Ensure this endpoint is publicly accessible.
+* For production, HTTPS is mandatory to secure data in transit.
+
+Handle Incoming JSON Payloads: [#handle-incoming-json-payloads]
+
+* Your endpoint should parse and handle JSON payloads. The payload structure is documented [below](#payload-format).
+* Additionally, to ensure the authenticity of the incoming request, the endpoint should validate it using the secret key provided during webhook registration. See details [below](#verifying-webhook-signatures).
+* Use the event data to trigger actions within your application.
+
+Step 2: Register Your Webhook in Fiskil [#step-2-register-your-webhook-in-fiskil]
+
+Access the Fiskil Console: [#access-the-fiskil-console]
+
+* Log in with an account that has Owner or Developer access.
+
+Navigate to Webhooks: [#navigate-to-webhooks]
+
+* Go to [Settings > Teams > Webhooks](https://console.fiskil.com).
+
+Register Your Endpoint: [#register-your-endpoint]
+
+* Enter your endpoint URL.
+* Select the events you want to subscribe to (e.g., `banking.transactions.sync.completed`).
+* Note: You can modify the endpoint URL later, but event subscriptions cannot be changed once created.
+
+Save Your Webhook: [#save-your-webhook]
+
+* After registration, Fiskil will start sending events to your endpoint as they occur.
+
+Event Types [#event-types]
+
+Consent Events [#consent-events]
+
+* `consent.received`: Triggered when an end user grants data-sharing consent.
+* `consent.updated`: Triggered when an end user modifies their consent.
+* `consent.revoked`: Triggered when consent expires or is revoked.
+
+Identity Sync Events [#identity-sync-events]
+
+* `common.identity.sync.completed`: Indicates successful syncing of an end user's identity data.
+
+Customer Data Sync Events [#customer-data-sync-events]
+
+Triggered when end-user data is cached or updated in Fiskil's platform.
+
+Energy Industry [#energy-industry]
+
+* `energy.billing.sync.completed`: Billing data synced.
+* `energy.usage.sync.completed`: Usage data synced.
+* `energy.servicepoints.sync.completed`: Service point data synced.
+* `energy.accounts.sync.completed`: Account data synced.
+* `energy.concessions.sync.completed`: Concession data synced.
+* `energy.der.sync.completed`: Distributed Energy Resource data synced.
+* `energy.invoices.sync.completed`: Invoices synced.
+* `energy.paymentschedules.sync.completed`: Payment schedules synced.
+* `energy.plans.sync.completed`: Energy plans synced.
+
+Banking Industry [#banking-industry]
+
+* `banking.accounts.sync.completed`: Banking account data synced.
+* `banking.balances.sync.completed`: Balance data synced.
+* `banking.transactions.basic.sync.completed`: Basic transaction data synced.
+* `banking.transactions.sync.completed`: Detailed transactions synced (including metadata).
+* `banking.payees.sync.completed`: Payees synced.
+* `banking.directdebits.sync.completed`: Direct debits synced.
+* `banking.scheduledpayments.sync.completed`: Scheduled payments synced.
+* `banking.products.sync.completed`: Banking product data synced.
+
+Delivery & Payload Structure [#delivery--payload-structure]
+
+Payload Format [#payload-format]
+
+Fiskil delivers webhook payloads in JSON format with the following structure. However, please note that some events may include additional fields specific to the event type, not listed below.
+
+```json
+{
+  "delivery_attempt": 1,
+  "publish_time": "2023-11-24T05:10:03.957Z",
+  "message_id": "9061924608716421",
+  "data": {
+    "consent_id": "1a460c22-c3ca-4901-8269-0b65c155b483",
+    "client_id": "2XbIEYCqr3rBLrjPNGmxuB5rqwy",
+    "end_user_id": "2XpN1YbKmoFcqbcN1Ji58kWyv3e",
+    "event": "energy.accounts.sync.completed",
+    "institution_id": "1",
+    "account_ids": ["262c6cc1-1b35-4f3f-b3d0-98976a86c6ee"]
+  }
+}
+```
+
+Payload Fields [#payload-fields]
+
+* `delivery_attempt`: Number of retry attempts made to deliver the event (1-5).
+* `publish_time`: Timestamp of the event (RFC3339 format).
+* `message_id`: Unique identifier for the event (useful for deduplication).
+* `data`: Contains event-specific data, including:
+  * `event`: Type of event triggered.
+  * `end_user_id`: Unique ID of the end user.
+  * `client_id`: Your app's unique identifier.
+  * `institution_id`: The data holder's ID.
+  * `consent_id`: The ID of the user's consent.
+  * `account_ids`: the list of accounts related to synced data. It is only available for:
+    * `*.accounts.sync.completed`,
+    * `*.balances.sync.completed`,
+    * `banking.transactions.sync.completed` and
+    * `banking.transactions.basic.sync.completed` events.
+  * `payee_ids`: the list of payees related to synced data. It is only available for `banking.payees.sync.completed` event.
+
+Retry Logic [#retry-logic]
+
+If Fiskil cannot deliver an event (e.g., server unreachable or non-2xx response), it retries up to 5 times with backoff intervals between 1 to 10 minutes. After exhausting retries, the event is discarded.
+
+Security [#security]
+
+HTTPS Enforcement [#https-enforcement]
+
+For secure data transmission, Fiskil enforces HTTPS on all webhook endpoints in production.
+
+Verifying Webhook Signatures [#verifying-webhook-signatures]
+
+Fiskil includes an HMAC SHA256 signature in the X-Fiskil-Signature header. This ensures that the event comes from Fiskil and hasn't been tampered with.
+
+Verifying Signatures in Go [#verifying-signatures-in-go]
+
+Here's how to verify the signature using Go:
+
+```go
+package main
+
+import (
+  "crypto/hmac"
+  "crypto/sha256"
+  "encoding/base64"
+  "fmt"
+)
+
+func main() {
+  var payloadData = `{"publish_time":"2023-11-23T03:03:30.792Z","message_id":"9790112556309026","data":{"consent_id":"4a726862-6b39-4cd5-92c0-3d20fe96a202","client_id":"2XbIYazvJeBwaJx1xCaFar64uVk","end_user_id":"2YPr9YiWLNj3KZt9ycjbvy4bRx5","institution_id":"1"}}`
+  var signingSecret = "jf+cnWPind3y0kYqJM4cPAC/8kNcwVXE8/fKs/Kz/SxXIkhVfvV8yh8dtEX9+K2PsmItKu5Jqqwy7cw2JQ+ozsSo2M9qmwpPxRMCREO+"
+  secretBytes, err := base64.StdEncoding.DecodeString(signingSecret)
+  if err != nil {
+    panic(err)
+  }
+  hmac := hmac.New(sha256.New, secretBytes)
+  hmac.Write([]byte(payloadData))
+  signature := base64.StdEncoding.EncodeToString(hmac.Sum(nil))
+  fmt.Println(signature) // Compare this with X-Fiskil-Signature header
+}
+```
+
+Verifying with OpenSSL [#verifying-with-openssl]
+
+```bash
+# Base64 decode the signing secret
+$ echo 'jf+cnWPind3y0kYqJM4cPAC/8kNcwVXE8/fKs/Kz/SxXIkhVfvV8yh8dtEX9+K2PsmItKu5Jqqwy7cw2JQ+ozsSo2M9qmwpPxRMCREO+' | base64 -d > secret.key
+
+# Generate the HMAC signature
+$ cat data.json | tr -d '\n ' | openssl dgst -sha256 -mac HMAC -macopt key:secret.key
+
+# Compare the output to the X-Fiskil-Signature header value
+```
+
+By verifying signatures, you ensure that only legitimate events from Fiskil are processed by your application.
+
+Conclusion [#conclusion]
+
+With Fiskil webhooks, you can build responsive, data-driven applications that react to real-time financial and energy data. By following this guide, you'll be able to securely set up, manage, and verify webhooks to streamline your workflows and deliver timely updates to your users.
+
+For additional help or troubleshooting, refer to our API documentation or contact support.
+

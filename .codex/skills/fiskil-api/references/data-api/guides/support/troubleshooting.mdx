@@ -1,0 +1,83 @@
+﻿# Troubleshooting (/data-api/guides/support/troubleshooting)
+
+Troubleshoot common integration issues and find the right support resources.
+
+
+
+If something isn't working as expected, this page will help you troubleshoot common issues and guide you to the right place to get help.
+
+Where to Start [#where-to-start]
+
+Before raising a support request, we recommend checking:
+
+1. Has the user successfully linked their institution and granted consent?
+2. Are your API requests authenticated with a valid access token?
+3. Are you receiving webhook events correctly?
+4. Have you completed the steps in the [Quick Start](/docs/data-api/guides/getting-started/quick-start)?
+
+If you've confirmed these steps and are still encountering issues, continue below.
+
+Common Issues [#common-issues]
+
+Connection or Consent Flow Failing [#connection-or-consent-flow-failing]
+
+If users abandon or fail to complete the institution linking process, you may encounter errors such as:
+
+* `CONSENT_OTP_FAILURE`
+* `CONSENT_UPSTREAM_PROCESSING_ERROR`
+* `CONSENT_ENDUSER_DENIED`
+* `CONSENT_TIMEOUT`
+* `AUTH_SESSION_CANCELLED`
+
+These errors typically occur within the third-party institution's consent process. Review the [Error Types](https://docs.fiskil.com/errors#error-types) for causes, suggested responses, and retry strategies.
+
+Webhooks Not Received [#webhooks-not-received]
+
+If webhook events are not arriving:
+
+* Verify the HMAC signature in the `X-Fiskil-Signature` header to ensure payload authenticity
+* Check your server logs for incoming POST requests
+* Ensure your server is returning a `2xx` status code
+* Confirm that your webhook endpoint is correctly registered in the Fiskil Console under [Settings > Teams > Webhooks](https://console.fiskil.com)
+
+See the [Webhooks Guide](/docs/data-api/guides/core-concepts/webhooks) for implementation details and security verification steps.
+
+Data Not Available [#data-not-available]
+
+If an API response returns no data:
+
+* Use the [Consent API](/docs/data-api/api-reference/consents) to check if the user has an active consent
+* Ensure that the `end_user_id` is valid and that the user has completed a connection
+* Confirm that a relevant webhook (e.g. `transactions.sync.completed`) has been received
+
+Data is only available after consent has been granted and the data sync has completed.
+
+For more information, see:
+
+* [Consent Overview](/docs/data-api/guides/core-concepts/consents)
+* [End Users Guide](/docs/data-api/guides/core-concepts/end-users)
+
+Raising a Support Request [#raising-a-support-request]
+
+If you're blocked and can't resolve the issue through documentation:
+
+Gather the following (where available):
+
+* Environment (sandbox or production)
+* Timestamps and request/response logs
+* `error_id` (from query string or webhook)
+* `session_id` (if applicable)
+* `end_user_id`
+
+Submit a request via the Fiskil Support Desk: [https://fiskil.atlassian.net/servicedesk/customer/portal/6](https://fiskil.atlassian.net/servicedesk/customer/portal/6)
+
+We recommend providing as much detail as possible to help our team resolve your issue efficiently.
+
+Helpful Resources [#helpful-resources]
+
+* [Launch Checklist](/docs/data-api/guides/resources/go-live-checklist)
+* [End Users](/docs/data-api/guides/core-concepts/end-users)
+* [Consent](/docs/data-api/guides/core-concepts/consents)
+* [Webhooks Guide](/docs/data-api/guides/core-concepts/webhooks)
+* [Error Reference](https://docs.fiskil.com/errors)
+

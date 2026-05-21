@@ -1,0 +1,143 @@
+﻿# Energy Accounts (/data-api/api-reference/energy-accounts)
+
+List and retrieve energy account information from the Fiskil API.
+
+
+
+The Energy Accounts endpoint allows you to retrieve energy account information for an end user who has granted consent.
+
+Endpoints [#endpoints]
+
+| Method | Endpoint              | Description                              |
+| ------ | --------------------- | ---------------------------------------- |
+| `GET`  | `/v1/energy-accounts` | List all energy accounts for an end user |
+
+The Energy Account Model [#the-energy-account-model]
+
+| Attribute        | Type   | Description                       |
+| ---------------- | ------ | --------------------------------- |
+| `id`             | string | Unique identifier for the account |
+| `account_number` | string | The account number                |
+| `display_name`   | string | Display name for the account      |
+| `creation_date`  | string | When the account was created      |
+| `status`         | string | Account status (OPEN, CLOSED)     |
+| `institution_id` | string | ID of the energy retailer         |
+| `consent_id`     | string | ID of the consent granting access |
+| `plans`          | array  | Associated energy plans           |
+
+Example Response [#example-response]
+
+```json
+{
+  "id": "energy_acc_123",
+  "account_number": "12345678",
+  "display_name": "Home Electricity",
+  "creation_date": "2021-06-15",
+  "status": "OPEN",
+  "institution_id": "energy_retailer_1",
+  "consent_id": "94549a73-a554-4b76-b824-d96898829751",
+  "plans": [
+    {
+      "nickname": "Residential Saver",
+      "service_point_ids": ["NMI123456789"]
+    }
+  ]
+}
+```
+
+List Energy Accounts [#list-energy-accounts]
+
+Retrieve all energy accounts for an end user.
+
+```
+GET https://api.fiskil.com/v1/energy-accounts
+```
+
+Query Parameters [#query-parameters]
+
+| Parameter     | Type    | Required | Description                  |
+| ------------- | ------- | -------- | ---------------------------- |
+| `end_user_id` | string  | Yes      | The ID of the end user       |
+| `page[size]`  | integer | No       | Number of results (max 1000) |
+| `page[after]` | string  | No       | Cursor for pagination        |
+
+Example Request [#example-request]
+
+<Tabs items={['cURL', 'Node.js', 'Python']}>
+  <Tab value="cURL">
+    ```bash
+    curl --request GET \
+      --url 'https://api.fiskil.com/v1/energy-accounts?end_user_id=482c0e2b-5866-46b1-b795-220b7bba45b5' \
+      --header 'Authorization: Bearer {access_token}' \
+      --header 'accept: application/json; charset=UTF-8'
+    ```
+  </Tab>
+
+  <Tab value="Node.js">
+    ```javascript
+    const response = await fetch(
+      'https://api.fiskil.com/v1/energy-accounts?end_user_id=482c0e2b-5866-46b1-b795-220b7bba45b5',
+      {
+        method: 'GET',
+        headers: {
+          'Authorization': 'Bearer {access_token}',
+          'accept': 'application/json; charset=UTF-8'
+        }
+      }
+    );
+
+    const accounts = await response.json();
+    ```
+  </Tab>
+
+  <Tab value="Python">
+    ```python
+    import requests
+
+    response = requests.get(
+        'https://api.fiskil.com/v1/energy-accounts',
+        params={'end_user_id': '482c0e2b-5866-46b1-b795-220b7bba45b5'},
+        headers={
+            'Authorization': 'Bearer {access_token}',
+            'accept': 'application/json; charset=UTF-8'
+        }
+    )
+
+    accounts = response.json()
+    ```
+  </Tab>
+</Tabs>
+
+Example Response [#example-response-1]
+
+```json
+{
+  "data": [
+    {
+      "id": "energy_acc_123",
+      "account_number": "12345678",
+      "display_name": "Home Electricity",
+      "creation_date": "2021-06-15",
+      "status": "OPEN",
+      "institution_id": "energy_retailer_1",
+      "consent_id": "94549a73-a554-4b76-b824-d96898829751",
+      "plans": [
+        {
+          "nickname": "Residential Saver",
+          "service_point_ids": ["NMI123456789"]
+        }
+      ]
+    }
+  ],
+  "links": {
+    "next": "https://api.fiskil.com/v1/energy-accounts?end_user_id=482c0e2b-5866-46b1-b795-220b7bba45b5&page[after]=abc123"
+  }
+}
+```
+
+Related Endpoints [#related-endpoints]
+
+* [Energy Balances](/data-api/api-reference/energy-balances) - Get account balances
+* [Usage](/data-api/api-reference/usage) - Get usage data
+* [Service Points](/data-api/api-reference/service-points) - Get NMI information
+

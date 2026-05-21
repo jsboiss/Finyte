@@ -1,0 +1,154 @@
+﻿# Payment Schedule (/data-api/api-reference/payment-schedule)
+
+Get payment schedule information for energy accounts from the Fiskil API.
+
+
+
+The Payment Schedule endpoint provides information about payment arrangements and scheduled payments for energy accounts.
+
+Endpoints [#endpoints]
+
+| Method | Endpoint               | Description                           |
+| ------ | ---------------------- | ------------------------------------- |
+| `GET`  | `/v1/payment-schedule` | Get payment schedules for an end user |
+
+The Payment Schedule Model [#the-payment-schedule-model]
+
+| Attribute           | Type   | Description                                           |
+| ------------------- | ------ | ----------------------------------------------------- |
+| `id`                | string | Unique schedule identifier                            |
+| `account_id`        | string | Associated energy account ID                          |
+| `type`              | string | Payment type (DIRECT\_DEBIT, BILL\_SMOOTHING, MANUAL) |
+| `frequency`         | string | Payment frequency                                     |
+| `amount`            | number | Payment amount (for fixed payments)                   |
+| `next_payment_date` | string | Next scheduled payment date                           |
+| `payment_method`    | string | Payment method                                        |
+
+Example Response [#example-response]
+
+```json
+{
+  "id": "ps_123",
+  "account_id": "energy_acc_123",
+  "type": "DIRECT_DEBIT",
+  "frequency": "MONTHLY",
+  "amount": null,
+  "next_payment_date": "2023-02-15",
+  "payment_method": "BANK_ACCOUNT"
+}
+```
+
+Get Payment Schedules [#get-payment-schedules]
+
+Retrieve payment schedule information for an end user's energy accounts.
+
+```
+GET https://api.fiskil.com/v1/payment-schedule
+```
+
+Query Parameters [#query-parameters]
+
+| Parameter     | Type    | Required | Description                   |
+| ------------- | ------- | -------- | ----------------------------- |
+| `end_user_id` | string  | Yes      | The ID of the end user        |
+| `account_id`  | string  | No       | Filter by specific account ID |
+| `page[size]`  | integer | No       | Number of results (max 1000)  |
+| `page[after]` | string  | No       | Cursor for pagination         |
+
+Example Request [#example-request]
+
+<Tabs items={['cURL', 'Node.js', 'Python']}>
+  <Tab value="cURL">
+    ```bash
+    curl --request GET \
+      --url 'https://api.fiskil.com/v1/payment-schedule?end_user_id=482c0e2b-5866-46b1-b795-220b7bba45b5' \
+      --header 'Authorization: Bearer {access_token}' \
+      --header 'accept: application/json; charset=UTF-8'
+    ```
+  </Tab>
+
+  <Tab value="Node.js">
+    ```javascript
+    const response = await fetch(
+      'https://api.fiskil.com/v1/payment-schedule?end_user_id=482c0e2b-5866-46b1-b795-220b7bba45b5',
+      {
+        method: 'GET',
+        headers: {
+          'Authorization': 'Bearer {access_token}',
+          'accept': 'application/json; charset=UTF-8'
+        }
+      }
+    );
+
+    const schedules = await response.json();
+    ```
+  </Tab>
+
+  <Tab value="Python">
+    ```python
+    import requests
+
+    response = requests.get(
+        'https://api.fiskil.com/v1/payment-schedule',
+        params={'end_user_id': '482c0e2b-5866-46b1-b795-220b7bba45b5'},
+        headers={
+            'Authorization': 'Bearer {access_token}',
+            'accept': 'application/json; charset=UTF-8'
+        }
+    )
+
+    schedules = response.json()
+    ```
+  </Tab>
+</Tabs>
+
+Example Response [#example-response-1]
+
+```json
+{
+  "data": [
+    {
+      "id": "ps_123",
+      "account_id": "energy_acc_123",
+      "type": "DIRECT_DEBIT",
+      "frequency": "MONTHLY",
+      "amount": null,
+      "next_payment_date": "2023-02-15",
+      "payment_method": "BANK_ACCOUNT"
+    },
+    {
+      "id": "ps_456",
+      "account_id": "energy_acc_456",
+      "type": "BILL_SMOOTHING",
+      "frequency": "FORTNIGHTLY",
+      "amount": 85.00,
+      "next_payment_date": "2023-01-27",
+      "payment_method": "CREDIT_CARD"
+    }
+  ]
+}
+```
+
+Payment Types [#payment-types]
+
+| Type             | Description                                 |
+| ---------------- | ------------------------------------------- |
+| `DIRECT_DEBIT`   | Automatic payment of bill amount            |
+| `BILL_SMOOTHING` | Fixed regular payments to smooth bills      |
+| `MANUAL`         | Customer pays manually when bill issued     |
+| `PAYMENT_PLAN`   | Structured payment plan (e.g., for arrears) |
+
+Payment Methods [#payment-methods]
+
+| Method         | Description                    |
+| -------------- | ------------------------------ |
+| `BANK_ACCOUNT` | Direct debit from bank account |
+| `CREDIT_CARD`  | Credit card payment            |
+| `BPAY`         | BPAY payment                   |
+
+Related Endpoints [#related-endpoints]
+
+* [Energy Accounts](/data-api/api-reference/energy-accounts) - Get account details
+* [Billing](/data-api/api-reference/billing) - Get billing history
+* [Invoices](/data-api/api-reference/invoices) - Get invoice details
+

@@ -1,0 +1,174 @@
+﻿# Errors (/data-api/api-reference/errors)
+
+Understanding error responses from the Fiskil API.
+
+
+
+Fiskil uses conventional HTTP response codes to indicate the success or failure of an API request.
+
+* Codes in the **2xx** range indicate success.
+* Codes in the **4xx** range indicate an issue with request parameters.
+* Codes in the **5xx** range indicate an error with Fiskil's servers.
+
+In case of 4xx or 5xx errors, Fiskil returns an error response object with the following attributes.
+
+Error Response Object [#error-response-object]
+
+| Attribute | Type   | Description                                                                                                                   |
+| --------- | ------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| `id`      | string | A unique ID associated with the error. Fiskil uses it to debug issues. Clients can send it to us in case of 5xx errors.       |
+| `name`    | string | A short description of this error. This should be stable across multiple occurrences of this type of error.                   |
+| `message` | string | A detailed description of this error. This should be considered unique to individual occurrences and is useful for debugging. |
+
+Example Error Response [#example-error-response]
+
+```json
+{
+  "id": "err_acde070d-8c4c-4f0d-9d8a-162843c10333",
+  "name": "InvalidRequest",
+  "message": "The end_user_id parameter is required"
+}
+```
+
+<Callout type="info">
+  Note that direct requests to data holders (with `cdr` in the request URL) will follow the error response convention as per CDR guidelines.
+</Callout>
+
+HTTP Status Codes [#http-status-codes]
+
+| Code  | Description                                             |
+| ----- | ------------------------------------------------------- |
+| `200` | OK - Request succeeded                                  |
+| `201` | Created - Resource created successfully                 |
+| `400` | Bad Request - Invalid request parameters                |
+| `401` | Unauthorized - Invalid or missing authentication        |
+| `403` | Forbidden - Access denied                               |
+| `404` | Not Found - Resource not found                          |
+| `429` | Too Many Requests - Rate limit exceeded                 |
+| `500` | Internal Server Error - Something went wrong on our end |
+
+Error Types [#error-types]
+
+The following are consent lifecycle related errors that may occur during consent creation:
+
+AUTH_SESSION_INVALID [#auth_session_invalid]
+
+This error originates from the Auth UI when it detects that the current authorisation session is invalid or has reached a terminal state. The Auth UI propagates this error to the parent window, so it only applies to embedded flows (iframe or popup).
+
+**Example:**
+
+```json
+{
+  "isCompleted": false,
+  "error": "auth_session_invalid",
+  "errorDescription": "Auth session is either terminated or not found.",
+  "errorType": "AUTH_SESSION_INVALID",
+  "errorURI": "https://docs.fiskil.com/errors#AUTH_SESSION_INVALID"
+}
+```
+
+**Common Causes:**
+
+* The provided `session_id` does not exist or cannot be found (invalid session)
+* The authorisation session has expired, been terminated, or was already completed (terminal session)
+* The embedded flow (iframe/popup) was initialised after the session moved to a terminal state
+
+**Troubleshooting:**
+
+* Verify the `session_id` is valid and active before loading the Auth UI
+* Start a new authorisation session and re-initiate the flow
+* For iframe/popup integrations, ensure the parent window listens for the posted message and handles it appropriately
+* If the issue persists, raise a support ticket including `team_id` and `session_id` (or `error_id`)
+
+***
+
+AUTH_SESSION_CANCELLED [#auth_session_cancelled]
+
+This error originates from the Fiskil Auth UI when the end-user explicitly cancels the authorisation session before or after being redirected to/from the remote institution's consent flow.
+
+**Common Causes:**
+
+* The end-user clicked Cancel on the Fiskil-hosted authorisation screen
+
+**Troubleshooting:**
+
+* Unlike `CONSENT_ENDUSER_DENIED`, this error cannot be retried. The user must restart the authorisation flow from the beginning—a new `auth_session_id` is required.
+
+***
+
+CONSENT_UPSTREAM_PROCESSING_ERROR [#consent_upstream_processing_error]
+
+This error is returned by our API in the event of a remote institution's failure during consent creation by an end-user within the data holder's web application.
+
+**Common Causes:**
+
+* A non-recoverable application error occurred upstream in the remote institution's consent flow
+
+**Troubleshooting:**
+
+* Ask the user to retry the authorisation and complete the institution consent flow
+* If the error persists after multiple attempts, raise a ticket in the Fiskil support issue tracking system
+
+***
+
+CONSENT_ENDUSER_DENIED [#consent_enduser_denied]
+
+This error is returned by the API when the end-user aborts a consent creation flow within the remote institution consent authorisation.
+
+**Common Causes:**
+
+* The end-user clicks cancel during consent creation within the remote institution's consent flow
+
+***
+
+CONSENT_OTP_FAILURE [#consent_otp_failure]
+
+This error is returned by the API when the end-user experiences OTP authorisation failure during a consent creation flow within the remote institution consent process.
+
+**Common Causes:**
+
+* The user entered an incorrect one-time password presented by the selected institution
+* An OTP has been provided for a non-existing end-user email
+* The end-user state is unauthenticated
+
+**Troubleshooting:**
+
+* Validate with the user that they are accessing the correct remote institution where they have an account
+* The end-user should retry the authorisation and complete the institution consent flow
+* The end-user should contact the institution directly to validate the status of their account and eligibility
+* If the user still cannot log in despite providing correct information, submit a "Consent Failure" support ticket with: `team_id`, `session_id` or `error_id`, and `user_id`
+
+***
+
+CONSENT_ENDUSER_INELIGIBLE [#consent_enduser_ineligible]
+
+This error is returned by the API when an authorised end-user fails to select a valid remote institution account during a consent authorisation.
+
+**Common Causes:**
+
+* The end-user not having access to a valid account
+* The end-user not having pre-approval for an account
+* In the scenario of a business account, the user not being a Nominated Representative for the account
+
+**Troubleshooting:**
+
+* Validate the user is accessing the correct institution where they hold a valid account
+* Validate the user's account is an eligible account with the remote institution
+* If the account is a business account, ensure your user has listed themselves as a Nominated Representative to share data
+* The end-user should retry the authorisation and complete the institution consent flow
+
+***
+
+CONSENT_TIMEOUT [#consent_timeout]
+
+This error is returned by the API when an authorised end-user fails to complete a consent flow before the data holder's web application experiences a timeout. Reasons include leaving the web application open for too long, or closing the browser window before completing the flow.
+
+**Common Causes:**
+
+* The user abandoned the consent authorisation flow without completing it
+* Internet connection issues on the end-user device
+
+**Troubleshooting:**
+
+* The end-user should retry the authorisation and complete the institution consent flow
+

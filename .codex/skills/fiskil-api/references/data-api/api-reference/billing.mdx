@@ -1,0 +1,152 @@
+﻿# Billing (/data-api/api-reference/billing)
+
+Get billing information from the Fiskil API.
+
+
+
+The Billing endpoint provides billing transaction history for energy accounts.
+
+Endpoints [#endpoints]
+
+| Method | Endpoint      | Description                      |
+| ------ | ------------- | -------------------------------- |
+| `GET`  | `/v1/billing` | Get billing data for an end user |
+
+The Billing Model [#the-billing-model]
+
+| Attribute        | Type   | Description                                   |
+| ---------------- | ------ | --------------------------------------------- |
+| `account_id`     | string | ID of the energy account                      |
+| `transaction_id` | string | Unique billing transaction ID                 |
+| `type`           | string | Transaction type (USAGE, PAYMENT, ADJUSTMENT) |
+| `amount`         | number | Transaction amount                            |
+| `currency`       | string | Currency code                                 |
+| `date`           | string | Transaction date                              |
+| `description`    | string | Description of the transaction                |
+
+Example Response [#example-response]
+
+```json
+{
+  "account_id": "energy_acc_123",
+  "transaction_id": "bill_txn_456",
+  "type": "USAGE",
+  "amount": -185.50,
+  "currency": "AUD",
+  "date": "2023-01-15",
+  "description": "Electricity usage charges - December 2022"
+}
+```
+
+Get Billing Data [#get-billing-data]
+
+Retrieve billing information for an end user's energy accounts.
+
+```
+GET https://api.fiskil.com/v1/billing
+```
+
+Query Parameters [#query-parameters]
+
+| Parameter     | Type    | Required | Description                   |
+| ------------- | ------- | -------- | ----------------------------- |
+| `end_user_id` | string  | Yes      | The ID of the end user        |
+| `account_id`  | string  | No       | Filter by specific account ID |
+| `from_date`   | string  | No       | Start date (YYYY-MM-DD)       |
+| `to_date`     | string  | No       | End date (YYYY-MM-DD)         |
+| `page[size]`  | integer | No       | Number of results (max 1000)  |
+| `page[after]` | string  | No       | Cursor for pagination         |
+
+Example Request [#example-request]
+
+<Tabs items={['cURL', 'Node.js', 'Python']}>
+  <Tab value="cURL">
+    ```bash
+    curl --request GET \
+      --url 'https://api.fiskil.com/v1/billing?end_user_id=482c0e2b-5866-46b1-b795-220b7bba45b5' \
+      --header 'Authorization: Bearer {access_token}' \
+      --header 'accept: application/json; charset=UTF-8'
+    ```
+  </Tab>
+
+  <Tab value="Node.js">
+    ```javascript
+    const response = await fetch(
+      'https://api.fiskil.com/v1/billing?end_user_id=482c0e2b-5866-46b1-b795-220b7bba45b5',
+      {
+        method: 'GET',
+        headers: {
+          'Authorization': 'Bearer {access_token}',
+          'accept': 'application/json; charset=UTF-8'
+        }
+      }
+    );
+
+    const billing = await response.json();
+    ```
+  </Tab>
+
+  <Tab value="Python">
+    ```python
+    import requests
+
+    response = requests.get(
+        'https://api.fiskil.com/v1/billing',
+        params={'end_user_id': '482c0e2b-5866-46b1-b795-220b7bba45b5'},
+        headers={
+            'Authorization': 'Bearer {access_token}',
+            'accept': 'application/json; charset=UTF-8'
+        }
+    )
+
+    billing = response.json()
+    ```
+  </Tab>
+</Tabs>
+
+Example Response [#example-response-1]
+
+```json
+{
+  "data": [
+    {
+      "account_id": "energy_acc_123",
+      "transaction_id": "bill_txn_456",
+      "type": "USAGE",
+      "amount": -185.50,
+      "currency": "AUD",
+      "date": "2023-01-15",
+      "description": "Electricity usage charges - December 2022"
+    },
+    {
+      "account_id": "energy_acc_123",
+      "transaction_id": "bill_txn_457",
+      "type": "PAYMENT",
+      "amount": 200.00,
+      "currency": "AUD",
+      "date": "2023-01-20",
+      "description": "Payment received - Thank you"
+    }
+  ],
+  "links": {
+    "next": "https://api.fiskil.com/v1/billing?end_user_id=482c0e2b-5866-46b1-b795-220b7bba45b5&page[after]=abc123"
+  }
+}
+```
+
+Transaction Types [#transaction-types]
+
+| Type         | Description                  |
+| ------------ | ---------------------------- |
+| `USAGE`      | Energy usage charges         |
+| `PAYMENT`    | Payment received             |
+| `ADJUSTMENT` | Billing adjustment or credit |
+| `FEE`        | Fees and charges             |
+| `CONCESSION` | Concession discount applied  |
+
+Related Endpoints [#related-endpoints]
+
+* [Energy Accounts](/data-api/api-reference/energy-accounts) - Get account details
+* [Energy Balances](/data-api/api-reference/energy-balances) - Get current balance
+* [Invoices](/data-api/api-reference/invoices) - Get invoice documents
+

@@ -1,0 +1,73 @@
+﻿# SSO Logins (/data-api/guides/account-access/sso-login)
+
+Enable Single Sign-On authentication for your team to access the Fiskil Console using your existing identity provider.
+
+
+
+Single Sign-On (SSO) authentication lets your users log in to the Fiskil Console using the same credentials they use for other services.
+
+***
+
+import { Chrome as Google, AppWindow as Windows, ShieldCheck, Link, Settings } from 'lucide-react'
+
+Supported Providers [#supported-providers]
+
+Fiskil supports federated identity using Microsoft Entra ID with more identity providers coming, including:
+
+<CardGroup cols={3}>
+  <Card title="Google" icon={<Google />}>
+    Google Workspace and Gmail accounts
+  </Card>
+
+  <Card title="Microsoft" icon={<Windows />}>
+    Microsoft Identity Platform and [Microsoft Entra ID](https://learn.microsoft.com/en-us/entra/identity/)
+  </Card>
+
+  <Card title="Okta" icon={<ShieldCheck />}>
+    Okta identity management platform
+  </Card>
+
+  <Card title="OIDC" icon={<Link />}>
+    Any OIDC-compliant IdP
+  </Card>
+
+  <Card title="Custom Provider" icon={<Settings />}>
+    Contact support for additional providers
+  </Card>
+</CardGroup>
+
+<Info>
+  Authentication with additional OpenID Connect (OIDC) or Security Assertion Markup Language (SAML) 2.0 providers is available on request via the Fiskil team.
+</Info>
+
+***
+
+How to Enable SSO [#how-to-enable-sso]
+
+SSO can be configured in the [Fiskil Console](https://console.fiskil.com/data-holder/settings/sso)
+
+<Steps>
+  <Step title="Configure Your Identity Provider">
+    <Card title="Configure Microsoft (Entra ID) as a SSO Provider" href="/data-api/guides/account-access/sso-login/microsoft" icon={<Windows />}>
+      How to configure Single Sign-On authentication for your team to access the Fiskil Console using your existing Microsoft identity provider.
+    </Card>
+
+    <Tip>
+      Make note of your Client ID and Client Secret, you'll need these for the next steps.
+    </Tip>
+  </Step>
+
+  <Step title="Activate SSO">
+    Log in to the Fiskil Console and navigate to the [SSO menu](https://console.fiskil.com/data-holder/settings/sso). Select your identity provider
+    from the list and fill out the form. You'll need to provide your client ID, client secret, and any provider-specific metadata.
+
+    <Warning>
+      Double check your SSO parameters. Incorrect configuration could lock you out of the portal. If you get stuck, contact [Fiskil Support](https://fiskil.atlassian.net/servicedesk/customer/portal/6).
+    </Warning>
+  </Step>
+
+  <Step title="User Access">
+    Once enabled, users attempting to log in are redirected to your identity provider. After successful authentication, they return to the Fiskil Console signed in with the role assigned to them in **Settings > Members**.
+  </Step>
+</Steps>
+

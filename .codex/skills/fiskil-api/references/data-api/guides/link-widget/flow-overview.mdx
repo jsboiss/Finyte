@@ -1,0 +1,64 @@
+﻿# Flow Overview (/data-api/guides/link-widget/flow-overview)
+
+Understanding the steps in the Fiskil consent flow
+
+
+
+The Fiskil Link widget guides users through a multi-step consent flow. Understanding each step helps you design a better user experience and handle edge cases.
+
+Flow Steps [#flow-steps]
+
+1. Institution Selection [#1-institution-selection]
+
+Users first see a list of available institutions (banks or energy providers) they can connect. The list is filtered based on your account configuration.
+
+2. Authentication [#2-authentication]
+
+After selecting an institution, users authenticate with their existing credentials at that institution. This typically involves:
+
+* Username/password entry
+* Multi-factor authentication (SMS, email, or app-based)
+* Security questions
+
+3. Account Selection [#3-account-selection]
+
+Once authenticated, users see a list of their accounts at the institution. They select which accounts to share with your application.
+
+4. Consent Confirmation [#4-consent-confirmation]
+
+Users review the data being shared and the consent duration. This screen displays:
+
+* Your company name and logo
+* Data types being requested
+* Consent period (how long you'll have access)
+* Purpose of data access (your configured use cases)
+
+5. Completion [#5-completion]
+
+After confirming, users are returned to your application with a successful consent. You can now access their data via the Fiskil APIs.
+
+Handling Different Outcomes [#handling-different-outcomes]
+
+Successful Completion [#successful-completion]
+
+The user completed the entire flow. You receive a `consent_id` and can start fetching data.
+
+User Cancellation [#user-cancellation]
+
+The user closed the widget or clicked cancel. No consent was created.
+
+Authentication Failure [#authentication-failure]
+
+The user entered incorrect credentials or failed multi-factor authentication. They can retry or cancel.
+
+Institution Unavailable [#institution-unavailable]
+
+Occasionally an institution may be temporarily unavailable. The user will see an error message and can try again later.
+
+Best Practices [#best-practices]
+
+1. **Prepare Users**: Explain what data you'll access and why before launching the Link widget
+2. **Handle All Outcomes**: Implement proper error handling for cancellations and failures
+3. **Listen for Webhooks**: Don't rely solely on the client callback—use webhooks for reliable data sync notifications
+4. **Test Thoroughly**: Use the sandbox environment to test various scenarios
+

@@ -1,0 +1,51 @@
+﻿# Get service points (/data-api/api-reference/v2-0-0/getEnergyServicePoints)
+
+Returns detailed information about service points owned by the end user that has authorised the current session
+
+## GET /v1/energy/service-points
+
+**Get service points**
+
+Returns detailed information about service points owned by the end user that has authorised the current session
+
+**Tags:** ServicePoints, v1, v2, energy
+
+### Parameters
+
+| Name | In | Type | Required | Description |
+|------|----|------|----------|-------------|
+| `end_user_id` | query | string | Yes | A unique identifier for the End User object. |
+| `page[before]` | query | string | No | When the page[before] is specified, backwards pagination is achieved |
+| `page[after]` | query | string | No | When the page[after] is specified, forwards pagination is achieved |
+| `page[size]` | query | integer | No | When the page[size] is specified, no more than page[size] resources will be included in the response's data field. This parameter is set to a sensible default, which varies depending on the endpoint. It is capped at 1000. |
+
+### Responses
+
+**200:** OK
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `service_points` | fiskil_energy.ServicePoint[] |  |
+| `links` | object |  |
+
+**400:** Bad Request
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string |  |
+| `message` | string |  |
+| `name` | string |  |
+
+**500:** Internal Server Error
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string |  |
+| `message` | string |  |
+| `name` | string |  |
+
+### Example Request
+```bash
+curl -X GET "https://api.fiskil.com/v1/energy/service-points" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```

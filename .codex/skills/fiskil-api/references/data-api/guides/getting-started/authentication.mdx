@@ -1,0 +1,66 @@
+﻿# Authentication (/data-api/guides/getting-started/authentication)
+
+Learn how to authenticate with the Fiskil API
+
+
+
+To access the Fiskil API, all requests must be authenticated using a bearer token. This token is obtained by exchanging your API credentials (`client_id` and `client_secret`) via the `/v1/token` endpoint.
+
+Generate API Credentials [#generate-api-credentials]
+
+First, log in to the [Fiskil Console](https://console.fiskil.com) and navigate to **[Settings > API Keys](https://console.fiskil.com/data-api/settings/api-keys)**.
+
+From there, you can generate your `client_id` and `client_secret`. These values are sensitive and should be stored securely.
+
+> Note: You will not be able to view your `client_secret` again after creation.
+
+Obtain an Access Token [#obtain-an-access-token]
+
+Make a `POST` request to the `/v1/token` endpoint with your credentials:
+
+Request [#request]
+
+```bash
+curl --request POST https://api.fiskil.com/v1/token \
+--header 'Content-Type: application/json' \
+--header 'Accept: application/json' \
+--data-raw '{
+  "client_id": "your_client_id",
+  "client_secret": "your_client_secret"
+}'
+```
+
+Response [#response]
+
+```json
+{
+  "token": "your_token",
+  "token_type": "Bearer",
+  "expires_in": 900
+}
+```
+
+Use the Access Token [#use-the-access-token]
+
+Include the `token` in the `Authorization` header for all subsequent API requests:
+
+```bash
+curl --request GET https://api.fiskil.com/v1/end-users \
+--header "Authorization: Bearer your_token"
+```
+
+Token Expiry [#token-expiry]
+
+Tokens are valid for 15 minutes (`expires_in: 900`). When your token expires, repeat the token request process to obtain a new one.
+
+Fiskil does not support refresh tokens. Always handle token expiry on the server and regenerate securely when required.
+
+Best Practices [#best-practices]
+
+* Store your `client_secret` securely; do not expose it in frontend code or logs.
+* Only use server-side environments to request access tokens.
+* Use HTTPS for all requests to the Fiskil API.
+* Monitor for `401` responses and implement automatic token renewal on expiry.
+
+For more integration tips, see our [Quickstart guide](/data-api/guides/getting-started/quick-start) and [Go Live Checklist](/data-api/guides/resources/go-live-checklist).
+
