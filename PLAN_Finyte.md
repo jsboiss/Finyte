@@ -1,10 +1,12 @@
-# Finify Foundation Plan
+# Finyte Foundation Plan
 
 ## Product Goal
 
-Build a customer-facing bank account tracking service using the same core stack and product direction as the existing Finance application, but designed from the start for paying users, self-service bank connections, CDR consent, operational support, and future scale.
+Build a customer-facing household finance and bills intelligence app using the same core stack and product direction as the existing Finance application, but designed from the start for paying users, self-service CDR connections, provider consent, operational support, and future scale.
 
-The first version should not try to recreate every Finance feature. It should establish the foundation that makes those features safe to migrate later: identity, tenancy, subscription billing, Fiskil integration, customer-owned bank connections, secure data storage, support tooling, and a clean dashboard shell.
+Finyte should help households understand money coming in, money going out, upcoming bills, recurring payments, account balances, utility costs, and provider-linked obligations in one place.
+
+The first version should not try to recreate every Finance feature or every possible Fiskil data domain. It should establish the foundation that makes those features safe to expand later: identity, tenancy, subscription billing, Fiskil integration, customer-owned connections, secure data storage, support tooling, and a clean dashboard shell.
 
 ## Existing Reference
 
@@ -19,26 +21,40 @@ The Finance app provides the technical template:
 - Tailwind CSS and shadcn/ui.
 - Orval generated API client.
 - Banking ingestion, account, transaction, balance, metric, subscription, and budgeting concepts.
+- Household cashflow, recurring payment, bill, invoice, and utility-cost concepts.
 
-Finify should reuse the proven architectural shape, but it should not copy the old assumptions around personal use, external friend API access, or Redbark-specific banking flows.
+Finyte should reuse the proven architectural shape, but it should not copy the old assumptions around personal use, external friend API access, or Redbark-specific banking flows. The app should be shaped around household financial visibility, not only bank account tracking.
 
 ## Important Product Shift
 
 Finance was built for trusted personal use and a narrow external API surface.
 
-Finify needs to be built as a real service:
+Finyte needs to be built as a real service:
 
 - Users create and manage their own accounts.
-- Users control their own bank connections and CDR consent.
+- Users control their own banking, energy, and future CDR data-domain connections and consent.
 - Users pay through a subscription or billing portal.
-- Banking data must be isolated per customer and tenant.
+- Banking, income, identity, energy, bill, and invoice data must be isolated per customer and tenant.
 - Administrative access must be explicit, audited, and limited.
 - Provider integration should be Fiskil-first rather than Redbark-first.
 - Compliance, privacy, consent withdrawal, and data deletion must be product requirements, not later cleanup.
 
+## Product Scope Shift
+
+The Fiskil API surface supports more than bank accounts and transactions. Banking data can include accounts, balances, transactions, payees, direct debits, and scheduled payments. Energy data can include accounts, usage, billing history, invoices, concessions, service points, plans, distributed energy resources, and scheduled payments. Fiskil also exposes identity data and income insights derived from banking data.
+
+That means Finyte should be designed as a household intelligence product with multiple consented data domains:
+
+- Banking: balances, transactions, payees, direct debits, scheduled payments, recurring spending, and cashflow.
+- Income: salary and recurring inflow detection, payday cadence, and income stability.
+- Energy: utility accounts, bills, invoices, due dates, usage, concessions, service points, plans, and solar or battery data where available.
+- Identity: verified identity and account ownership checks where the product has a clear need and compliant retention rules.
+
+Do not model Fiskil as only a bank connection provider. Model it as a provider integration that can deliver multiple consented data domains for one household.
+
 ## Regulatory And Business Notes
 
-Fiskil appears to provide CDR-compliant banking API infrastructure and may support a CDR Representative style model. Before production customer onboarding, confirm directly with Fiskil what your business will be under their arrangement, what policies you must publish, what consent screens and disclosures are required, and what data retention/deletion obligations apply.
+Fiskil appears to provide CDR-compliant banking and energy API infrastructure and may support a CDR Representative style model. Before production customer onboarding, confirm directly with Fiskil what your business will be under their arrangement, what policies you must publish, what consent screens and disclosures are required for each data domain, and what data retention/deletion obligations apply.
 
 Do not treat this plan as legal or compliance advice. Before accepting paying customers, get explicit confirmation on:
 
@@ -47,7 +63,7 @@ Do not treat this plan as legal or compliance advice. Before accepting paying cu
 - Required business email, domain, ABN, support contact, and incident contact details.
 - Whether CDR data must remain hosted in Australia.
 - Whether any outsourced infrastructure or logging provider needs disclosure.
-- Rules around storing raw bank data, derived insights, backups, and deleted user data.
+- Rules around storing raw banking data, energy data, identity data, income insights, derived insights, backups, and deleted user data.
 
 ## Recommended Scope Strategy
 
@@ -76,11 +92,11 @@ Deliverables:
 
 Engineering outputs:
 
-- `PLAN_Finify.md`.
+- `PLAN_Finyte.md`.
 - Initial architecture decision records for Fiskil, auth, billing, and hosting assumptions.
 - Environment variable inventory for local, staging, and production.
 
-Do not build banking ingestion until Fiskil confirms the exact integration and consent model.
+Do not build production banking or energy ingestion until Fiskil confirms the exact integration, consent, permission, and retention model.
 
 ## Phase 1: Greenfield Application Skeleton
 
@@ -90,12 +106,12 @@ Backend:
 
 - Create `.slnx` solution targeting .NET 10.
 - Projects:
-  - `src/Finify.Api`
-  - `src/Finify.Core`
-  - `src/Finify.Data`
-  - `src/Finify.Web`
-  - `tests/Finify.Tests`
-  - `tests/Finify.IntegrationTests`
+  - `src/Finyte.Api`
+  - `src/Finyte.Core`
+  - `src/Finyte.Data`
+  - `src/Finyte.Web`
+  - `tests/Finyte.Tests`
+  - `tests/Finyte.IntegrationTests`
 - Add ASP.NET Core API host.
 - Add Postgres and EF Core.
 - Add migrations.
@@ -223,8 +239,8 @@ Frontend deliverables:
 
 Product rules:
 
-- Decide whether bank connection is allowed before payment.
-- Recommended v1: allow account creation without payment, but require an active trial or subscription before connecting banks.
+- Decide whether provider connections are allowed before payment.
+- Recommended v1: allow account creation without payment, but require an active trial or subscription before connecting banking or energy providers.
 
 Acceptance:
 
@@ -235,7 +251,7 @@ Acceptance:
 
 ## Phase 4: Fiskil Integration Spike
 
-Goal: prove the direct Fiskil integration in isolation before building the full banking product around it.
+Goal: prove the direct Fiskil integration in isolation before building the full household finance product around it.
 
 Scope:
 
@@ -244,16 +260,21 @@ Scope:
 - Callback handling.
 - Provider customer mapping.
 - Connection status retrieval.
+- Permission and data-domain mapping.
 - Accounts retrieval.
 - Balances retrieval.
 - Transactions retrieval.
+- Direct debits and scheduled payments retrieval.
+- Income retrieval after banking transaction sync.
+- Energy account, billing, invoice, and payment schedule retrieval if enabled in sandbox.
 - Webhook verification.
 - Consent withdrawal handling.
 
 Backend deliverables:
 
 - Typed Fiskil client.
-- Provider abstraction shaped around Finify concepts, not Fiskil names.
+- Provider abstraction shaped around Finyte concepts, not Fiskil names.
+- Data-domain abstraction for banking, income, identity, and energy datasets.
 - Secure storage for provider tokens or provider references, depending on Fiskil model.
 - Webhook endpoint with raw body verification if Fiskil signs payloads.
 - Durable provider event table.
@@ -261,37 +282,50 @@ Backend deliverables:
 
 Data model:
 
-- Bank connection.
+- Provider connection.
+- Connection consent.
+- Connection data domain.
 - Bank account.
 - Balance snapshot.
 - Transaction.
+- Direct debit.
+- Scheduled payment.
+- Income source.
+- Energy account.
+- Energy bill or billing transaction.
+- Energy invoice.
+- Energy usage read.
 - Provider event.
 - Import run.
-- Consent record.
 
 Important design rule:
 
 - Keep Fiskil-specific DTOs at the infrastructure boundary.
-- Store normalized Finify entities in the main banking tables.
+- Store normalized Finyte entities in domain tables.
+- Keep consent and permission state explicit per connection and data domain.
 - Keep selected raw provider JSON only where needed for audit/debugging and only if permitted.
 
 Acceptance:
 
-- A test user can start a Fiskil connection.
+- A test user can start a Fiskil banking connection.
 - Callback or consent completion is handled.
 - Accounts and balances import for one connection.
 - Transactions import idempotently.
+- Scheduled payments or direct debits import where available.
+- Energy billing or invoice data imports if enabled in the sandbox account.
 - Disconnect or consent withdrawal updates local state.
 
-## Phase 5: Customer Bank Connection Management
+## Phase 5: Customer Provider Connection Management
 
 Goal: users can manage their own connections without admin help.
 
 Frontend deliverables:
 
-- Connected banks page.
+- Connected providers page.
 - Add bank connection button.
+- Add energy connection button if enabled for the tenant.
 - Connection status display.
+- Connected data domains and granted permissions display.
 - Last sync time.
 - Reconnect or refresh action where supported.
 - Disconnect action.
@@ -316,11 +350,12 @@ Operational behavior:
 
 Acceptance:
 
-- User can add, view, refresh, and disconnect a bank.
+- User can add, view, refresh, and disconnect a banking provider.
+- User can add, view, refresh, and disconnect an energy provider when enabled.
 - Import progress is visible.
 - Errors do not expose sensitive provider details.
 
-## Phase 6: Banking Data Foundation UI
+## Phase 6: Household Finance And Bills Foundation UI
 
 Goal: deliver the minimum useful product after connection.
 
@@ -331,6 +366,10 @@ Views:
 - Account detail.
 - Transaction table.
 - Balance summary.
+- Upcoming payments and direct debits.
+- Bills and invoices.
+- Energy account summary if enabled.
+- Simple income and cashflow summary.
 - Recent sync/import status.
 
 Features:
@@ -338,6 +377,9 @@ Features:
 - Account filtering.
 - Date filtering.
 - Transaction search.
+- Bill and invoice filtering.
+- Upcoming payment timeline.
+- Basic cashflow projection from income, scheduled payments, direct debits, and known bill due dates.
 - Sorting.
 - Pagination.
 - Loading, empty, and error states.
@@ -346,8 +388,9 @@ Keep this phase deliberately simple. Do not migrate all Finance analytics yet.
 
 Acceptance:
 
-- A paying or trial user can connect a bank and see accounts, balances, and posted transactions.
-- The app is useful even without budgets, subscription detection, or advanced metrics.
+- A paying or trial user can connect a bank and see accounts, balances, posted transactions, and known upcoming payments.
+- If energy is enabled, the user can see energy accounts, recent bills or invoices, due dates, and billing history.
+- The app is useful even without budgets, subscription detection, plan comparison, solar analysis, or advanced metrics.
 
 ## Phase 7: Admin And Support Console
 
@@ -444,7 +487,7 @@ Migration approach:
 - Move one domain feature at a time.
 - Keep each feature tenant-safe from the first commit.
 - Add integration tests around tenant isolation.
-- Avoid copying Redbark-specific assumptions into Finify.
+- Avoid copying Redbark-specific assumptions into Finyte.
 - Reuse UI patterns, not necessarily files, where Finance was personal-use oriented.
 
 ## Phase 10: External API Access
@@ -489,6 +532,7 @@ Security:
 - Tenant isolation tests.
 - No plaintext API keys.
 - No bank credentials stored.
+- No utility provider credentials stored.
 - Secrets only in secret manager or local user secrets.
 - Secure cookies.
 - CSRF protection where needed.
@@ -502,7 +546,7 @@ Privacy and data:
 - Consent withdrawal workflow.
 - Audit logs.
 - Backups with retention policy.
-- Avoid logging CDR data, tokens, account numbers, or full transaction descriptions unless deliberately allowed.
+- Avoid logging CDR data, tokens, account numbers, invoice details, service point identifiers, identity data, or full transaction descriptions unless deliberately allowed.
 
 Reliability:
 
@@ -513,6 +557,7 @@ Reliability:
 - Provider error normalization.
 - Scheduled reconciliation.
 - Manual support retry.
+- Dataset-level sync status so one failed domain does not hide successful imports from another.
 
 Testing:
 
@@ -522,7 +567,7 @@ Testing:
 - Webhook signature tests.
 - Import idempotency tests.
 - Billing webhook tests.
-- Minimal Playwright coverage for signup, billing gate, connection page, and transaction table.
+- Minimal Playwright coverage for signup, billing gate, connection page, transaction table, and bills view.
 
 Observability:
 
@@ -532,6 +577,7 @@ Observability:
 - Background job logging.
 - Error tracking.
 - Metrics for imports, webhook failures, sync latency, and billing webhook failures.
+- Metrics by provider, data domain, and sync dataset.
 
 ## Suggested Initial Data Model
 
@@ -550,15 +596,39 @@ Billing:
 - `billing_events`
 - `entitlements`
 
+Provider integration:
+
+- `provider_connections`
+- `connection_consents`
+- `connection_data_domains`
+- `provider_events`
+- `import_runs`
+
 Banking:
 
-- `bank_connections`
-- `bank_connection_consents`
 - `bank_accounts`
 - `balance_snapshots`
 - `transactions`
-- `provider_events`
-- `import_runs`
+- `payees`
+- `direct_debits`
+- `scheduled_payments`
+- `income_sources`
+
+Energy and bills:
+
+- `energy_accounts`
+- `energy_service_points`
+- `energy_billing_transactions`
+- `energy_invoices`
+- `energy_usage_reads`
+- `energy_concessions`
+- `energy_payment_schedules`
+
+Household intelligence:
+
+- `bill_obligations`
+- `recurring_obligations`
+- `cashflow_forecasts`
 
 Operations:
 
@@ -575,15 +645,15 @@ External API later:
 
 The first real milestone should be:
 
-"A paying or trial user can sign up, verify email, subscribe or enter trial, connect one bank through Fiskil sandbox, and see accounts, balances, and posted transactions in their own dashboard."
+"A paying or trial user can sign up, verify email, subscribe or enter trial, connect one bank through Fiskil sandbox, optionally connect one energy provider if enabled, and see accounts, balances, posted transactions, upcoming payments, recent bills or invoices, and a simple household cashflow view in their own dashboard."
 
 That milestone proves the actual business:
 
 - User acquisition path.
 - Identity.
 - Billing.
-- Banking connection.
-- Data ingestion.
+- Provider connection and consent.
+- Banking and bills data ingestion.
 - Tenant isolation.
 - Customer-facing UI.
 - Provider integration.
@@ -594,12 +664,12 @@ Everything after that is product depth.
 ## Near-Term Build Order
 
 1. Confirm Fiskil onboarding requirements and legal/compliance obligations.
-2. Create the Finify solution and frontend shell.
+2. Create the Finyte solution and frontend shell.
 3. Add identity and tenant model.
 4. Add Stripe billing foundation.
-5. Build Fiskil sandbox spike.
-6. Add bank connection management.
-7. Add account, balance, and transaction UI.
+5. Build Fiskil sandbox spike for banking first, with provider/data-domain abstractions ready for energy.
+6. Add provider connection management.
+7. Add account, balance, transaction, upcoming payment, and bills UI.
 8. Add admin/support console.
 9. Deploy staging.
 10. Run private beta with one or two trusted users.
@@ -607,8 +677,9 @@ Everything after that is product depth.
 ## What Not To Do Yet
 
 - Do not migrate every Finance metric immediately.
+- Do not build every Fiskil data domain immediately.
 - Do not build external API access before the customer product is stable.
-- Do not design for 1000 users before one real customer can connect a bank reliably.
+- Do not design for 1000 users before one real customer can connect providers reliably.
 - Do not lock into a hosting provider before Fiskil confirms region, compliance, and data residency requirements.
 - Do not store more provider raw data than you need.
 - Do not make admin access informal.
@@ -621,8 +692,10 @@ The foundation is complete when:
 - Tenants are isolated by design and by tests.
 - Billing state controls product access.
 - Fiskil connections can be created, synced, and disconnected.
+- Provider consent and permission state is tracked per data domain.
 - Banking data imports idempotently.
-- Users can view their own accounts, balances, and transactions.
+- Energy bill or invoice data can be imported when enabled.
+- Users can view their own accounts, balances, transactions, upcoming payments, bills, and simple cashflow view.
 - You can diagnose failed imports without database spelunking.
 - Staging and production environments exist.
 - Legal, privacy, and support surfaces are ready for private beta.
