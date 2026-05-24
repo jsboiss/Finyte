@@ -1,16 +1,21 @@
 using Finyte.Data;
 using Microsoft.AspNetCore.Http.HttpResults;
-using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 
 namespace Finyte.Api.Endpoints;
 
 public static class EndpointRouteBuilderExtensions
 {
-    public static IEndpointRouteBuilder MapEndpoints(this IEndpointRouteBuilder app)
+    public static IEndpointRouteBuilder MapEndpoints(this IEndpointRouteBuilder app, bool authEnabled)
     {
         app.MapHealthChecks("/health").WithName("GetHealth");
 
         app.MapGet("/api/app/status", GetAppStatus).WithName("GetAppStatus");
+
+        if (authEnabled)
+        {
+            app.MapGet("/api/auth/me", GetCurrentUser).RequireAuthorization().WithName("GetCurrentUser");
+        }
 
         return app;
     }
@@ -21,11 +26,17 @@ public static class EndpointRouteBuilderExtensions
         CancellationToken cancellationToken)
     {
         var canConnect = await dbContext.Database.CanConnectAsync(cancellationToken);
+        var response = new AppStatusResponse("Finyte.Api", environment.EnvironmentName, canConnect, DateTimeOffset.UtcNow);
 
-        return TypedResults.Ok(new AppStatusResponse(
-            "Finyte.Api",
-            environment.EnvironmentName,
-            canConnect,
-            DateTimeOffset.UtcNow));
+        return TypedResults.Ok(response);
+    }
+
+    private static Ok<CurrentUserResponse> GetCurrentUser(ClaimsPrincipal user)
+    {
+        var userId = user.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? user.FindFirstValue("sub")
+            ?? string.Empty;
+
+        return TypedResults.Ok(new CurrentUserResponse(userId));
     }
 }

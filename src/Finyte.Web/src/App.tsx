@@ -1,8 +1,10 @@
+import { SignInButton, SignUpButton, UserButton, useAuth } from '@clerk/react'
 import { createRootRoute, createRoute, createRouter, Link, Outlet, RouterProvider } from '@tanstack/react-router'
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
 import { createColumnHelper, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table'
 import { Activity, Banknote, CalendarClock, Home, Settings } from 'lucide-react'
 import { getAppStatus } from './api/generated/finyteApi'
+import { AuthTokenProvider } from './auth/AuthTokenProvider'
 import './App.css'
 
 type DashboardItem = {
@@ -56,10 +58,32 @@ function DashboardShell() {
             Settings
           </Link>
         </nav>
+        <AuthControls />
       </aside>
       <main>
         <Outlet />
       </main>
+    </div>
+  )
+}
+
+function AuthControls() {
+  const { isLoaded, isSignedIn } = useAuth()
+
+  return (
+    <div className="auth-panel">
+      {isLoaded && isSignedIn ? (
+        <UserButton />
+      ) : (
+        <>
+          <SignInButton mode="modal">
+            <button className="auth-button secondary" type="button">Sign in</button>
+          </SignInButton>
+          <SignUpButton mode="modal">
+            <button className="auth-button primary" type="button">Create account</button>
+          </SignUpButton>
+        </>
+      )}
     </div>
   )
 }
@@ -176,7 +200,9 @@ declare module '@tanstack/react-router' {
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
+      <AuthTokenProvider>
+        <RouterProvider router={router} />
+      </AuthTokenProvider>
     </QueryClientProvider>
   )
 }
