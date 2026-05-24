@@ -5,7 +5,8 @@
 }
 
 .sidebar {
-  background: #103d34;
+  background: #18191b;
+  border-right: 1px solid #36393d;
   color: #e8f1ed;
   display: flex;
   flex-direction: column;
@@ -41,7 +42,7 @@
 
 .sidebar a {
   border-radius: 6px;
-  color: #c8d8d3;
+  color: #a7aaa8;
   font-size: 15px;
   min-height: 42px;
   padding: 0 12px;
@@ -50,12 +51,12 @@
 
 .sidebar a.active,
 .sidebar a:hover {
-  background: #1d5147;
+  background: #222426;
   color: #ffffff;
 }
 
 .auth-panel {
-  border-top: 1px solid rgb(255 255 255 / 16%);
+  border-top: 1px solid #36393d;
   display: grid;
   gap: 10px;
   margin-top: auto;
@@ -68,7 +69,7 @@ main {
 
 .auth-page {
   align-items: center;
-  background: #f4f7f5;
+  background: #101112;
   display: flex;
   justify-content: center;
   min-height: 100vh;
@@ -76,7 +77,7 @@ main {
 }
 
 .auth-loading {
-  color: #244b43;
+  color: #a7aaa8;
   font-size: 15px;
   font-weight: 650;
 }
@@ -97,7 +98,7 @@ main {
 }
 
 .page-header p {
-  color: #5d6d68;
+  color: #a7aaa8;
   font-size: 14px;
   font-weight: 650;
   margin: 0 0 6px;
@@ -112,10 +113,10 @@ main {
 }
 
 .status-pill {
-  background: #e4ebe7;
-  border: 1px solid #cad8d2;
+  background: #222426;
+  border: 1px solid #36393d;
   border-radius: 999px;
-  color: #244b43;
+  color: #c5c7c2;
   font-size: 14px;
   font-weight: 650;
   min-height: 36px;
@@ -131,8 +132,8 @@ main {
 
 .metric-grid div,
 .table-section {
-  background: #ffffff;
-  border: 1px solid #dfe6e2;
+  background: #18191b;
+  border: 1px solid #36393d;
   border-radius: 8px;
 }
 
@@ -143,12 +144,12 @@ main {
 }
 
 .metric-grid span {
-  color: #64736f;
+  color: #a7aaa8;
   font-size: 14px;
 }
 
 .metric-grid strong {
-  color: #18211f;
+  color: #eeeeec;
   font-size: 32px;
 }
 
@@ -169,19 +170,19 @@ table {
 
 th,
 td {
-  border-top: 1px solid #e6ece8;
+  border-top: 1px solid #36393d;
   padding: 14px 20px;
   text-align: left;
 }
 
 th {
-  background: #f2f5f2;
-  color: #5d6d68;
+  background: #222426;
+  color: #a7aaa8;
   font-size: 13px;
 }
 
 td {
-  color: #25312e;
+  color: #eeeeec;
   font-size: 14px;
 }
 
