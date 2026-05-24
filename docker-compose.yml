@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:18
+    container_name: finyte-postgres
+    environment:
+      POSTGRES_DB: finyte
+      POSTGRES_USER: finyte
+      POSTGRES_PASSWORD: finyte_dev_password
+    ports:
+      - "5433:5432"
+    volumes:
+      - finyte-postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U finyte -d finyte"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  finyte-postgres-data:

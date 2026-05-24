@@ -1,0 +1,7 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Finyte.Api/Finyte.Api.csproj" />
+    <Project Path="src/Finyte.Core/Finyte.Core.csproj" />
+    <Project Path="src/Finyte.Data/Finyte.Data.csproj" />
+  </Folder>
+</Solution>
