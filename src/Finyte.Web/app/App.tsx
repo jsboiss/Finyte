@@ -1,4 +1,4 @@
-import { SignInButton, SignUpButton, UserButton, useAuth } from '@clerk/react'
+import { SignIn, UserButton, useAuth } from '@clerk/react'
 import { createRootRoute, createRoute, createRouter, Link, Outlet, RouterProvider } from '@tanstack/react-router'
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
 import { createColumnHelper, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table'
@@ -37,6 +37,20 @@ const columns = [
 ]
 
 function DashboardShell() {
+  const { isLoaded, isSignedIn } = useAuth()
+
+  if (!isLoaded) {
+    return (
+      <div className="auth-page">
+        <div className="auth-loading">Loading</div>
+      </div>
+    )
+  }
+
+  if (!isSignedIn) {
+    return <SignInPage />
+  }
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -68,23 +82,18 @@ function DashboardShell() {
 }
 
 function AuthControls() {
-  const { isLoaded, isSignedIn } = useAuth()
-
   return (
     <div className="auth-panel">
-      {isLoaded && isSignedIn ? (
-        <UserButton />
-      ) : (
-        <>
-          <SignInButton mode="modal">
-            <button className="auth-button secondary" type="button">Sign in</button>
-          </SignInButton>
-          <SignUpButton mode="modal">
-            <button className="auth-button primary" type="button">Create account</button>
-          </SignUpButton>
-        </>
-      )}
+      <UserButton />
     </div>
+  )
+}
+
+function SignInPage() {
+  return (
+    <main className="auth-page">
+      <SignIn />
+    </main>
   )
 }
 
