@@ -4,11 +4,11 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
-    "generate:api": "orval --config orval.config.ts",
-    "lint": "eslint .",
-    "preview": "vite preview"
+    "dev": "vite --config config/vite.config.ts",
+    "build": "tsc -b && vite --config config/vite.config.ts build",
+    "generate:api": "orval --config config/orval.config.ts",
+    "lint": "eslint . --config config/eslint.config.js",
+    "preview": "vite --config config/vite.config.ts preview"
   },
   "dependencies": {
     "@clerk/react": "^6.7.1",
