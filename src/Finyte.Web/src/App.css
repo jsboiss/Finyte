@@ -54,6 +54,36 @@
   color: #ffffff;
 }
 
+.auth-panel {
+  border-top: 1px solid rgb(255 255 255 / 16%);
+  display: grid;
+  gap: 10px;
+  margin-top: auto;
+  padding: 16px 8px 0;
+}
+
+.auth-button {
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  min-height: 40px;
+  width: 100%;
+}
+
+.auth-button.primary {
+  background: #e7fff4;
+  color: #123c34;
+}
+
+.auth-button.secondary {
+  background: transparent;
+  border-color: rgb(255 255 255 / 24%);
+  color: #e8f1ed;
+}
+
 main {
   min-width: 0;
 }
