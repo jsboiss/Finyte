@@ -170,32 +170,33 @@ Recommended v1 model:
 
 Authentication options:
 
-- Use ASP.NET Core Identity if you want maximum .NET control.
-- Use a managed provider if you want less security surface and faster launch.
+- Email and password.
+- Google sign-in.
+- Apple sign-in.
+- Passkeys.
 
 Recommended decision:
 
-- For a solo-developed financial app, strongly consider managed auth unless you have a strong reason to own password storage, MFA, reset flows, breach handling, and account recovery yourself.
-- If using ASP.NET Core Identity, require email verification and design MFA support early.
+- Use Clerk as the managed authentication provider for v1.
+- Build the first release as a PWA, so Apple sign-in is useful for customer convenience but does not need to be driven by App Store requirements yet.
+- Require email verification before a user can connect bank data through Fiskil.
+- Make multi-factor authentication available for all users, preferably through passkeys or an authenticator app rather than SMS.
+- Require step-up authentication for sensitive actions: connecting bank accounts, exporting data, deleting an account, changing email or password, and disabling multi-factor authentication.
+- Before a user connects bank data, require acceptance of the current terms, privacy policy, and any required Fiskil/CDR consent disclosures.
 
 Backend deliverables:
 
-- Register.
-- Login.
-- Logout.
-- Email verification.
-- Password reset.
-- Current user endpoint.
+- Validate Clerk session tokens on protected API endpoints.
+- Current user endpoint backed by the authenticated Clerk user id.
 - Tenant resolution service.
 - Authorization policies.
 - Audit logging for identity and tenant-sensitive events.
 
 Frontend deliverables:
 
-- Login page.
-- Register page.
-- Verify email page.
-- Reset password page.
+- Clerk sign-in control.
+- Clerk sign-up control.
+- Clerk signed-in user menu.
 - Authenticated dashboard layout.
 - Account settings page.
 
