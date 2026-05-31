@@ -1,4 +1,5 @@
 using Finyte.Core.Accounts;
+using Finyte.Core.Analytics;
 using Finyte.Core.Tenancy;
 using Microsoft.EntityFrameworkCore;
 
@@ -9,6 +10,8 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
     public DbSet<Account> Accounts => Set<Account>();
 
     public DbSet<Transaction> Transactions => Set<Transaction>();
+
+    public DbSet<OverviewProjection> OverviewProjections => Set<OverviewProjection>();
 
     public DbSet<Tenant> Tenants => Set<Tenant>();
 
@@ -129,6 +132,44 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
             x.HasIndex(y => new { y.TenantId, y.FiskilTransactionId })
                 .IsUnique();
             x.HasIndex(y => y.PostedAt);
+        });
+
+        modelBuilder.Entity<OverviewProjection>(x =>
+        {
+            x.ToTable("overview_projections");
+
+            x.HasKey(y => y.Id);
+
+            x.Property(y => y.TenantId)
+                .IsRequired();
+
+            x.Property(y => y.MonthKey)
+                .HasMaxLength(7)
+                .IsRequired();
+
+            x.Property(y => y.Currency)
+                .HasMaxLength(3)
+                .IsRequired();
+
+            x.Property(y => y.PayloadJson)
+                .HasColumnType("jsonb")
+                .IsRequired();
+
+            x.Property(y => y.CalculatedAt)
+                .IsRequired();
+
+            x.Property(y => y.CreatedAt)
+                .IsRequired();
+
+            x.Property(y => y.UpdatedAt)
+                .IsRequired();
+
+            x.HasIndex(y => new { y.TenantId, y.AccountId, y.MonthKey })
+                .IsUnique()
+                .HasFilter("\"AccountId\" IS NOT NULL");
+            x.HasIndex(y => new { y.TenantId, y.MonthKey })
+                .IsUnique()
+                .HasFilter("\"AccountId\" IS NULL");
         });
 
         modelBuilder.Entity<Tenant>(x =>

@@ -8,6 +8,7 @@ public static class RouteBuilder
         app.MapAppEndpoints();
         app.MapAuthEndpoints();
         app.MapBankingAccountEndpoints();
+        app.MapOverviewEndpoints();
 
         return app;
     }

@@ -1,5 +1,7 @@
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using Finyte.Api.Auth;
 using Finyte.Api.Endpoints;
 using Finyte.Api.Tenancy;
 using Finyte.Data;
@@ -23,8 +25,15 @@ builder.Services.AddAuthorization();
 
 var clerkAuthority = builder.Configuration["Clerk:Authority"];
 var hasClerkAuthority = !string.IsNullOrWhiteSpace(clerkAuthority);
+var hasDevAuth = builder.Environment.IsDevelopment() && builder.Configuration.GetValue<bool>("DevAuth:Enabled");
 
-if (hasClerkAuthority)
+if (hasDevAuth)
+{
+    builder.Services
+        .AddAuthentication(DevAuthenticationHandler.SchemeName)
+        .AddScheme<AuthenticationSchemeOptions, DevAuthenticationHandler>(DevAuthenticationHandler.SchemeName, _ => { });
+}
+else if (hasClerkAuthority)
 {
     builder.Services
         .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -49,7 +58,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseSerilogRequestLogging();
 
-if (hasClerkAuthority)
+if (hasClerkAuthority || hasDevAuth)
 {
     app.UseAuthentication();
 }

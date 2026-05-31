@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Finyte.Data.Analytics;
 
 namespace Finyte.Data;
 
@@ -11,6 +12,7 @@ public static class DependencyInjection
         var connectionString = configuration.GetConnectionString("Finyte") ?? throw new InvalidOperationException("Connection string 'Finyte' is not configured.");
 
         services.AddDbContext<FinyteDbContext>(x => x.UseNpgsql(connectionString));
+        services.AddScoped<IOverviewProjector, OverviewProjector>();
 
         return services;
     }

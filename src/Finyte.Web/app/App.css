@@ -63,6 +63,12 @@
   padding: 16px 8px 0;
 }
 
+.dev-auth-panel span {
+  color: #eeeeec;
+  font-size: 14px;
+  font-weight: 650;
+}
+
 main {
   min-width: 0;
 }
@@ -124,6 +130,79 @@ main {
   white-space: nowrap;
 }
 
+.overview-header {
+  align-items: flex-start;
+}
+
+.overview-actions {
+  align-items: end;
+  display: flex;
+  gap: 10px;
+}
+
+.overview-actions label {
+  color: #a7aaa8;
+  display: grid;
+  font-size: 13px;
+  font-weight: 650;
+  gap: 6px;
+}
+
+.overview-actions select {
+  background: #18191b;
+  border: 1px solid #36393d;
+  border-radius: 6px;
+  color: #eeeeec;
+  font: inherit;
+  height: 40px;
+  min-width: 220px;
+  outline: none;
+  padding: 0 12px;
+}
+
+.overview-actions select:focus {
+  border-color: #7ccf9f;
+  box-shadow: 0 0 0 3px rgb(124 207 159 / 18%);
+}
+
+.icon-button {
+  align-items: center;
+  background: #222426;
+  border: 1px solid #36393d;
+  border-radius: 6px;
+  color: #eeeeec;
+  display: inline-flex;
+  height: 40px;
+  justify-content: center;
+  width: 40px;
+}
+
+.icon-button:disabled {
+  cursor: wait;
+  opacity: 0.58;
+}
+
+.icon-button svg {
+  height: 17px;
+  width: 17px;
+}
+
+.overview-status-row {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.freshness {
+  color: #a7aaa8;
+  font-size: 14px;
+}
+
+.freshness.is-refreshing {
+  color: #d5ddd8;
+}
+
 .metric-grid {
   display: grid;
   gap: 16px;
@@ -151,6 +230,283 @@ main {
 .metric-grid strong {
   color: #eeeeec;
   font-size: 32px;
+}
+
+.overview-metrics strong {
+  font-size: clamp(24px, 3vw, 32px);
+}
+
+.panel {
+  background: #18191b;
+  border: 1px solid #36393d;
+  border-radius: 8px;
+  display: grid;
+  gap: 20px;
+  padding: 20px;
+}
+
+.panel-header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.panel-header p {
+  color: #a7aaa8;
+  font-size: 13px;
+  font-weight: 650;
+  margin: 0 0 5px;
+  text-transform: uppercase;
+}
+
+.panel-header h2 {
+  color: #eeeeec;
+  font-size: 20px;
+  margin: 0;
+}
+
+.panel-header svg {
+  color: #7ccf9f;
+  height: 22px;
+  width: 22px;
+}
+
+.overview-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1.55fr) minmax(300px, 0.85fr);
+}
+
+.cash-flow-race {
+  display: grid;
+  gap: 16px;
+}
+
+.cash-flow-values {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.cash-flow-values div {
+  background: #222426;
+  border: 1px solid #36393d;
+  border-radius: 6px;
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+}
+
+.cash-flow-values span {
+  color: #a7aaa8;
+  font-size: 13px;
+}
+
+.cash-flow-values strong {
+  color: #eeeeec;
+  font-size: 22px;
+}
+
+.race-track {
+  background: #101112;
+  border: 1px solid #36393d;
+  border-radius: 999px;
+  display: flex;
+  height: 34px;
+  overflow: hidden;
+}
+
+.race-income {
+  background: #62bf89;
+  min-width: 0;
+  transition: width 180ms ease;
+}
+
+.race-expense {
+  background: #d36b5d;
+  min-width: 0;
+  transition: width 180ms ease;
+}
+
+.daily-chart {
+  display: grid;
+  gap: 14px;
+}
+
+.daily-bars {
+  align-items: end;
+  display: grid;
+  gap: 4px;
+  min-height: 280px;
+}
+
+.daily-bar {
+  display: grid;
+  gap: 7px;
+  height: 100%;
+  min-width: 0;
+  position: relative;
+}
+
+.daily-bar-stack {
+  align-items: end;
+  background: #222426;
+  border: 1px solid #36393d;
+  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  justify-content: end;
+  min-height: 250px;
+  overflow: hidden;
+}
+
+.daily-income,
+.daily-expense {
+  width: 100%;
+}
+
+.daily-income {
+  background: #62bf89;
+}
+
+.daily-expense {
+  background: #d36b5d;
+}
+
+.daily-bar > span {
+  color: #a7aaa8;
+  font-size: 10px;
+  min-height: 12px;
+  text-align: center;
+}
+
+.daily-tooltip {
+  background: #101112;
+  border: 1px solid #36393d;
+  border-radius: 6px;
+  box-shadow: 0 12px 28px rgb(0 0 0 / 32%);
+  color: #eeeeec;
+  display: none;
+  gap: 5px;
+  left: 50%;
+  min-width: 150px;
+  padding: 10px;
+  pointer-events: none;
+  position: absolute;
+  top: 42%;
+  transform: translate(-50%, -50%);
+  z-index: 10;
+}
+
+.daily-tooltip span {
+  color: #a7aaa8;
+  font-size: 12px;
+}
+
+.daily-bar:hover .daily-tooltip {
+  display: grid;
+}
+
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.chart-legend span {
+  align-items: center;
+  color: #a7aaa8;
+  display: inline-flex;
+  font-size: 13px;
+  gap: 7px;
+}
+
+.chart-legend i,
+.tag-list i {
+  border-radius: 999px;
+  display: inline-block;
+  height: 10px;
+  width: 10px;
+}
+
+.legend-income {
+  background: #62bf89;
+}
+
+.legend-expense {
+  background: #d36b5d;
+}
+
+.tag-chart {
+  align-items: center;
+  display: grid;
+  gap: 20px;
+  justify-items: center;
+}
+
+.pie-chart {
+  align-items: center;
+  border-radius: 999px;
+  display: flex;
+  height: 210px;
+  justify-content: center;
+  width: 210px;
+}
+
+.pie-chart > div {
+  align-items: center;
+  background: #18191b;
+  border: 1px solid #36393d;
+  border-radius: 999px;
+  display: grid;
+  height: 124px;
+  justify-items: center;
+  padding: 18px;
+  width: 124px;
+}
+
+.pie-chart span {
+  color: #a7aaa8;
+  font-size: 12px;
+}
+
+.pie-chart strong {
+  color: #eeeeec;
+  font-size: 21px;
+}
+
+.tag-list {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+}
+
+.tag-list div {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.tag-list span {
+  align-items: center;
+  color: #eeeeec;
+  display: inline-flex;
+  gap: 8px;
+  min-width: 0;
+}
+
+.tag-list strong {
+  color: #eeeeec;
+  white-space: nowrap;
+}
+
+.tag-list p {
+  color: #a7aaa8;
+  font-size: 13px;
+  line-height: 1.45;
+  margin: 4px 0 0;
 }
 
 .table-section {
@@ -208,11 +564,32 @@ td {
   }
 
   .page-header,
-  .metric-grid {
+  .metric-grid,
+  .overview-grid,
+  .cash-flow-values {
     grid-template-columns: 1fr;
   }
 
   .page-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .overview-actions {
+    align-items: stretch;
+    width: 100%;
+  }
+
+  .overview-actions label {
+    flex: 1;
+  }
+
+  .overview-actions select {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .overview-status-row {
     align-items: flex-start;
     flex-direction: column;
   }
