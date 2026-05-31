@@ -1,4 +1,5 @@
 using Finyte.Core.Accounts;
+using Finyte.Core.Tenancy;
 using Microsoft.EntityFrameworkCore;
 
 namespace Finyte.Data;
@@ -9,6 +10,10 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
 
     public DbSet<Transaction> Transactions => Set<Transaction>();
 
+    public DbSet<Tenant> Tenants => Set<Tenant>();
+
+    public DbSet<TenantMember> TenantMembers => Set<TenantMember>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Account>(x =>
@@ -17,8 +22,7 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
 
             x.HasKey(y => y.Id);
 
-            x.Property(y => y.UserId)
-                .HasMaxLength(128)
+            x.Property(y => y.TenantId)
                 .IsRequired();
 
             x.Property(y => y.FiskilAccountId)
@@ -65,8 +69,8 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
             x.Property(y => y.CreatedAt)
                 .IsRequired();
 
-            x.HasIndex(y => y.UserId);
-            x.HasIndex(y => new { y.UserId, y.FiskilAccountId })
+            x.HasIndex(y => y.TenantId);
+            x.HasIndex(y => new { y.TenantId, y.FiskilAccountId })
                 .IsUnique()
                 .HasFilter("\"FiskilAccountId\" IS NOT NULL");
         });
@@ -77,8 +81,7 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
 
             x.HasKey(y => y.Id);
 
-            x.Property(y => y.UserId)
-                .HasMaxLength(128)
+            x.Property(y => y.TenantId)
                 .IsRequired();
 
             x.Property(y => y.FiskilTransactionId)
@@ -121,11 +124,56 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
                 .HasForeignKey(y => y.AccountId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            x.HasIndex(y => y.UserId);
+            x.HasIndex(y => y.TenantId);
             x.HasIndex(y => y.AccountId);
-            x.HasIndex(y => new { y.UserId, y.FiskilTransactionId })
+            x.HasIndex(y => new { y.TenantId, y.FiskilTransactionId })
                 .IsUnique();
             x.HasIndex(y => y.PostedAt);
+        });
+
+        modelBuilder.Entity<Tenant>(x =>
+        {
+            x.ToTable("tenants");
+
+            x.HasKey(y => y.Id);
+
+            x.Property(y => y.Name)
+                .HasMaxLength(160)
+                .IsRequired();
+
+            x.Property(y => y.CreatedAt)
+                .IsRequired();
+        });
+
+        modelBuilder.Entity<TenantMember>(x =>
+        {
+            x.ToTable("tenant_members");
+
+            x.HasKey(y => y.Id);
+
+            x.Property(y => y.TenantId)
+                .IsRequired();
+
+            x.Property(y => y.UserId)
+                .HasMaxLength(128)
+                .IsRequired();
+
+            x.Property(y => y.Role)
+                .HasConversion<string>()
+                .HasMaxLength(32)
+                .IsRequired();
+
+            x.Property(y => y.CreatedAt)
+                .IsRequired();
+
+            x.HasOne(y => y.Tenant)
+                .WithMany(y => y.Members)
+                .HasForeignKey(y => y.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            x.HasIndex(y => y.TenantId);
+            x.HasIndex(y => y.UserId)
+                .IsUnique();
         });
     }
 }

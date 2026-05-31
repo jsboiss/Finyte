@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Finyte.Api.Endpoints;
+using Finyte.Api.Tenancy;
 using Finyte.Data;
 using Quartz;
 using Serilog;
@@ -14,9 +15,11 @@ builder.Host.UseSerilog((context, configuration) =>
 
 builder.Services.AddOpenApi();
 builder.Services.AddFinyteData(builder.Configuration);
+builder.Services.AddScoped<TenantResolver>();
 builder.Services.AddQuartz();
 builder.Services.AddQuartzHostedService(x => x.WaitForJobsToComplete = true);
 builder.Services.AddHealthChecks().AddNpgSql(builder.Configuration.GetConnectionString("Finyte")!);
+builder.Services.AddAuthorization();
 
 var clerkAuthority = builder.Configuration["Clerk:Authority"];
 var hasClerkAuthority = !string.IsNullOrWhiteSpace(clerkAuthority);
@@ -35,7 +38,6 @@ if (hasClerkAuthority)
             };
         });
 
-    builder.Services.AddAuthorization();
 }
 
 var app = builder.Build();
@@ -50,9 +52,12 @@ app.UseSerilogRequestLogging();
 if (hasClerkAuthority)
 {
     app.UseAuthentication();
-    app.UseAuthorization();
 }
 
-app.MapEndpoints(hasClerkAuthority);
+app.UseAuthorization();
+
+app.MapEndpoints();
 
 app.Run();
+
+public partial class Program;

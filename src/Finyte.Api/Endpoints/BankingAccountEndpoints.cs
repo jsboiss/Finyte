@@ -1,8 +1,8 @@
+using Finyte.Api.Tenancy;
 using Finyte.Core.Accounts;
 using Finyte.Data;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
-using System.Security.Claims;
 
 namespace Finyte.Api.Endpoints;
 
@@ -19,14 +19,15 @@ public static class BankingAccountEndpoints
     }
 
     private static async Task<Ok<IReadOnlyList<AccountResponse>>> GetAccounts(
-        ClaimsPrincipal user,
+        TenantResolver tenantResolver,
+        HttpContext httpContext,
         FinyteDbContext dbContext,
         CancellationToken cancellationToken)
     {
-        var userId = EndpointUser.GetUserId(user);
+        var currentTenant = await tenantResolver.Resolve(httpContext.User, cancellationToken);
         var accounts = await dbContext.Accounts
             .AsNoTracking()
-            .Where(x => x.UserId == userId)
+            .Where(x => x.TenantId == currentTenant.TenantId)
             .OrderBy(x => x.Name)
             .Select(x => new AccountResponse(x.Id, x.Name, x.CurrentBalance, x.AvailableBalance, x.Currency, x.CreatedAt))
             .ToListAsync(cancellationToken);
@@ -36,7 +37,8 @@ public static class BankingAccountEndpoints
 
     private static async Task<Results<Created<AccountResponse>, BadRequest<string>>> CreateAccount(
         CreateAccountRequest request,
-        ClaimsPrincipal user,
+        TenantResolver tenantResolver,
+        HttpContext httpContext,
         FinyteDbContext dbContext,
         CancellationToken cancellationToken)
     {
@@ -46,9 +48,10 @@ public static class BankingAccountEndpoints
         }
 
         var name = request.Name.Trim();
+        var currentTenant = await tenantResolver.Resolve(httpContext.User, cancellationToken);
         var account = new Account
         {
-            UserId = EndpointUser.GetUserId(user),
+            TenantId = currentTenant.TenantId,
             Name = name,
             CurrentBalance = request.CurrentBalance,
             AvailableBalance = request.AvailableBalance,

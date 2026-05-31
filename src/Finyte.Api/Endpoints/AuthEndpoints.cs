@@ -1,5 +1,5 @@
+using Finyte.Api.Tenancy;
 using Microsoft.AspNetCore.Http.HttpResults;
-using System.Security.Claims;
 
 namespace Finyte.Api.Endpoints;
 
@@ -12,12 +12,18 @@ public static class AuthEndpoints
         return app;
     }
 
-    private static Ok<CurrentUserResponse> GetCurrentUser(ClaimsPrincipal user)
+    private static async Task<Ok<CurrentUserResponse>> GetCurrentUser(
+        TenantResolver tenantResolver,
+        HttpContext httpContext,
+        CancellationToken cancellationToken)
     {
-        var userId = EndpointUser.GetUserId(user);
+        var currentTenant = await tenantResolver.Resolve(httpContext.User, cancellationToken);
+        var onboarding = new OnboardingState(HasTenant: true);
 
-        return TypedResults.Ok(new CurrentUserResponse(userId));
+        return TypedResults.Ok(new CurrentUserResponse(currentTenant.UserId, currentTenant.TenantId, currentTenant.Role.ToString(), onboarding));
     }
 
-    private sealed record CurrentUserResponse(string UserId);
+    private sealed record CurrentUserResponse(string UserId, Guid TenantId, string Role, OnboardingState Onboarding);
+
+    private sealed record OnboardingState(bool HasTenant);
 }
