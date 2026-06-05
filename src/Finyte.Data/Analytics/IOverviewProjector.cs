@@ -6,5 +6,5 @@ public interface IOverviewProjector
 {
     Task<OverviewResponse> GetOrRebuild(Guid tenantId, Guid? accountId, CancellationToken cancellationToken);
 
-    Task<OverviewResponse> Rebuild(Guid tenantId, Guid? accountId, CancellationToken cancellationToken);
+    Task<OverviewResponse> Rebuild(OverviewProjectionScope scope, CancellationToken cancellationToken);
 }

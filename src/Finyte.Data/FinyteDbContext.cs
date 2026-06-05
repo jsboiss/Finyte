@@ -13,6 +13,8 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
 
     public DbSet<OverviewProjection> OverviewProjections => Set<OverviewProjection>();
 
+    public DbSet<ProjectionState> ProjectionStates => Set<ProjectionState>();
+
     public DbSet<Tenant> Tenants => Set<Tenant>();
 
     public DbSet<TenantMember> TenantMembers => Set<TenantMember>();
@@ -170,6 +172,50 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
             x.HasIndex(y => new { y.TenantId, y.MonthKey })
                 .IsUnique()
                 .HasFilter("\"AccountId\" IS NULL");
+        });
+
+        modelBuilder.Entity<ProjectionState>(x =>
+        {
+            x.ToTable("projection_states");
+
+            x.HasKey(y => y.Id);
+
+            x.Property(y => y.TenantId)
+                .IsRequired();
+
+            x.Property(y => y.ProjectionKey)
+                .HasMaxLength(80)
+                .IsRequired();
+
+            x.Property(y => y.ScopeKey)
+                .HasMaxLength(256)
+                .IsRequired();
+
+            x.Property(y => y.ScopeJson)
+                .HasColumnType("jsonb")
+                .IsRequired();
+
+            x.Property(y => y.Status)
+                .HasMaxLength(32)
+                .IsRequired();
+
+            x.Property(y => y.IsStale)
+                .IsRequired();
+
+            x.Property(y => y.StaleReason)
+                .HasMaxLength(512);
+
+            x.Property(y => y.LastError)
+                .HasMaxLength(2048);
+
+            x.Property(y => y.CreatedAt)
+                .IsRequired();
+
+            x.Property(y => y.UpdatedAt)
+                .IsRequired();
+
+            x.HasIndex(y => new { y.TenantId, y.ProjectionKey, y.ScopeKey })
+                .IsUnique();
         });
 
         modelBuilder.Entity<Tenant>(x =>

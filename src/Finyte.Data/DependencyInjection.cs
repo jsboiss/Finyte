@@ -13,6 +13,8 @@ public static class DependencyInjection
 
         services.AddDbContext<FinyteDbContext>(x => x.UseNpgsql(connectionString));
         services.AddScoped<IOverviewProjector, OverviewProjector>();
+        services.AddScoped<IProjectionDispatcher, ProjectionDispatcher>();
+        services.AddScoped<IProjectionInvalidator, ProjectionInvalidator>();
 
         return services;
     }

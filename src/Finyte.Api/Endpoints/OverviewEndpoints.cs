@@ -12,6 +12,7 @@ public static class OverviewEndpoints
 
         group.MapGet("/", GetOverview).WithName("GetOverview");
         group.MapPost("/refresh", RefreshOverview).WithName("RefreshOverview");
+        group.MapPost("/repair", RepairOverview).WithName("RepairOverview");
 
         return app;
     }
@@ -20,21 +21,52 @@ public static class OverviewEndpoints
         Guid? accountId,
         TenantResolver tenantResolver,
         HttpContext httpContext,
-        IOverviewProjector overviewProjector,
+        IProjectionDispatcher projectionDispatcher,
         CancellationToken cancellationToken)
     {
         var currentTenant = await tenantResolver.Resolve(httpContext.User, cancellationToken);
-        return await overviewProjector.GetOrRebuild(currentTenant.TenantId, accountId, cancellationToken);
+        return await projectionDispatcher.GetOrRebuildOverview(
+            new OverviewProjectionScope(currentTenant.TenantId, accountId, GetCurrentMonthKey()),
+            cancellationToken);
     }
 
     private static async Task<OverviewResponse> RefreshOverview(
         Guid? accountId,
         TenantResolver tenantResolver,
         HttpContext httpContext,
-        IOverviewProjector overviewProjector,
+        IProjectionDispatcher projectionDispatcher,
         CancellationToken cancellationToken)
     {
         var currentTenant = await tenantResolver.Resolve(httpContext.User, cancellationToken);
-        return await overviewProjector.Rebuild(currentTenant.TenantId, accountId, cancellationToken);
+        return await projectionDispatcher.RebuildOverview(
+            new OverviewProjectionScope(currentTenant.TenantId, accountId, GetCurrentMonthKey()),
+            cancellationToken);
+    }
+
+    private static async Task<IResult> RepairOverview(
+        Guid? accountId,
+        TenantResolver tenantResolver,
+        HttpContext httpContext,
+        IWebHostEnvironment environment,
+        IProjectionDispatcher projectionDispatcher,
+        CancellationToken cancellationToken)
+    {
+        if (!environment.IsDevelopment())
+        {
+            return Results.NotFound();
+        }
+
+        var currentTenant = await tenantResolver.Resolve(httpContext.User, cancellationToken);
+        var response = await projectionDispatcher.RebuildOverview(
+            new OverviewProjectionScope(currentTenant.TenantId, accountId, GetCurrentMonthKey()),
+            cancellationToken);
+
+        return Results.Ok(response);
+    }
+
+    private static string GetCurrentMonthKey()
+    {
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        return $"{today.Year:D4}-{today.Month:D2}";
     }
 }

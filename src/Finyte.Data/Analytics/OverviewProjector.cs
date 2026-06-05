@@ -22,21 +22,24 @@ public sealed class OverviewProjector(FinyteDbContext dbContext) : IOverviewProj
             return Deserialize(projection.PayloadJson);
         }
 
-        return await Rebuild(tenantId, accountId, cancellationToken);
+        return await Rebuild(new OverviewProjectionScope(tenantId, accountId, monthKey), cancellationToken);
     }
 
-    public async Task<OverviewResponse> Rebuild(Guid tenantId, Guid? accountId, CancellationToken cancellationToken)
+    public async Task<OverviewResponse> Rebuild(OverviewProjectionScope scope, CancellationToken cancellationToken)
     {
         var now = DateTimeOffset.UtcNow;
+        var month = ParseMonthKey(scope.MonthKey);
         var today = DateOnly.FromDateTime(now.UtcDateTime);
-        var monthStart = new DateTimeOffset(today.Year, today.Month, 1, 0, 0, 0, TimeSpan.Zero);
+        var currentMonthKey = GetCurrentMonthKey();
+        var elapsedDays = scope.MonthKey == currentMonthKey
+            ? Math.Max(1, today.Day)
+            : DateTime.DaysInMonth(month.Year, month.Month);
+        var monthStart = new DateTimeOffset(month.Year, month.Month, 1, 0, 0, 0, TimeSpan.Zero);
         var nextMonthStart = monthStart.AddMonths(1);
-        var monthKey = $"{today.Year:D4}-{today.Month:D2}";
-        var elapsedDays = Math.Max(1, today.Day);
 
         var accountRows = await dbContext.Accounts
             .AsNoTracking()
-            .Where(x => x.TenantId == tenantId && (accountId == null || x.Id == accountId))
+            .Where(x => x.TenantId == scope.TenantId && (scope.AccountId == null || x.Id == scope.AccountId))
             .OrderBy(x => x.Name)
             .Select(x => new AccountRow(x.Id, x.Name, x.CurrentBalance, x.Currency, x.BalanceAsOf, x.CreatedAt))
             .ToListAsync(cancellationToken);
@@ -44,7 +47,7 @@ public sealed class OverviewProjector(FinyteDbContext dbContext) : IOverviewProj
         var accountIds = accountRows.Select(x => x.Id).ToList();
         var currency = accountRows.Select(x => x.Currency).FirstOrDefault() ?? "AUD";
         var accountBalanceMinorUnits = accountRows.Sum(x => ToMinorUnits(x.CurrentBalance));
-        var accountLabel = accountId is null
+        var accountLabel = scope.AccountId is null
             ? "All accounts"
             : accountRows.FirstOrDefault()?.Name ?? "Selected account";
 
@@ -52,7 +55,7 @@ public sealed class OverviewProjector(FinyteDbContext dbContext) : IOverviewProj
             ? new List<TransactionRow>()
             : await dbContext.Transactions
                 .AsNoTracking()
-                .Where(x => x.TenantId == tenantId
+                .Where(x => x.TenantId == scope.TenantId
                     && accountIds.Contains(x.AccountId)
                     && x.PostedAt >= monthStart
                     && x.PostedAt < nextMonthStart
@@ -67,8 +70,8 @@ public sealed class OverviewProjector(FinyteDbContext dbContext) : IOverviewProj
             .Where(x => x.Amount < 0)
             .Sum(x => Math.Abs(ToMinorUnits(x.Amount)));
         var averageDailySpendMinorUnits = expenseMinorUnits / elapsedDays;
-        var dailyMap = Enumerable.Range(1, DateTime.DaysInMonth(today.Year, today.Month))
-            .Select(x => new OverviewDailyCashFlowAccumulator(new DateOnly(today.Year, today.Month, x)))
+        var dailyMap = Enumerable.Range(1, DateTime.DaysInMonth(month.Year, month.Month))
+            .Select(x => new OverviewDailyCashFlowAccumulator(new DateOnly(month.Year, month.Month, x)))
             .ToDictionary(x => x.Date);
 
         foreach (var transaction in transactionRows)
@@ -109,8 +112,8 @@ public sealed class OverviewProjector(FinyteDbContext dbContext) : IOverviewProj
             .DefaultIfEmpty()
             .Max();
         var response = new OverviewResponse(
-            new OverviewScopeResponse(accountId, accountLabel),
-            monthKey,
+            new OverviewScopeResponse(scope.AccountId, accountLabel),
+            scope.MonthKey,
             currency,
             accountBalanceMinorUnits,
             expenseMinorUnits,
@@ -121,15 +124,15 @@ public sealed class OverviewProjector(FinyteDbContext dbContext) : IOverviewProj
             new OverviewFreshnessResponse(now, sourceWatermark == default ? null : sourceWatermark, IsRefreshing: false));
         var payloadJson = JsonSerializer.Serialize(response, JsonOptions);
         var existingProjection = await dbContext.OverviewProjections
-            .FirstOrDefaultAsync(x => x.TenantId == tenantId && x.AccountId == accountId && x.MonthKey == monthKey, cancellationToken);
+            .FirstOrDefaultAsync(x => x.TenantId == scope.TenantId && x.AccountId == scope.AccountId && x.MonthKey == scope.MonthKey, cancellationToken);
 
         if (existingProjection is null)
         {
             dbContext.OverviewProjections.Add(new OverviewProjection
             {
-                TenantId = tenantId,
-                AccountId = accountId,
-                MonthKey = monthKey,
+                TenantId = scope.TenantId,
+                AccountId = scope.AccountId,
+                MonthKey = scope.MonthKey,
                 Currency = currency,
                 PayloadJson = payloadJson,
                 SourceWatermark = sourceWatermark == default ? null : sourceWatermark,
@@ -164,6 +167,20 @@ public sealed class OverviewProjector(FinyteDbContext dbContext) : IOverviewProj
         return $"{today.Year:D4}-{today.Month:D2}";
     }
 
+    private static YearMonth ParseMonthKey(string monthKey)
+    {
+        if (monthKey.Length != 7
+            || monthKey[4] != '-'
+            || !int.TryParse(monthKey[..4], out var year)
+            || !int.TryParse(monthKey[5..], out var month)
+            || month is < 1 or > 12)
+        {
+            throw new ArgumentException("Month key must use yyyy-MM format.", nameof(monthKey));
+        }
+
+        return new YearMonth(year, month);
+    }
+
     private static long ToMinorUnits(decimal amount)
     {
         return (long)Math.Round(amount * 100, MidpointRounding.AwayFromZero);
@@ -172,6 +189,8 @@ public sealed class OverviewProjector(FinyteDbContext dbContext) : IOverviewProj
     private sealed record AccountRow(Guid Id, string Name, decimal CurrentBalance, string Currency, DateTimeOffset? BalanceAsOf, DateTimeOffset CreatedAt);
 
     private sealed record TransactionRow(decimal Amount, DateTimeOffset? PostedAt, DateTimeOffset CreatedAt);
+
+    private sealed record YearMonth(int Year, int Month);
 
     private sealed class OverviewDailyCashFlowAccumulator(DateOnly date)
     {
