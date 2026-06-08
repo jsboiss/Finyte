@@ -1,6 +1,7 @@
 using Finyte.Core.Accounts;
 using Finyte.Core.Analytics;
 using Finyte.Core.Billing;
+using Finyte.Core.ProviderSync;
 using Finyte.Core.Tenancy;
 using Microsoft.EntityFrameworkCore;
 
@@ -21,6 +22,12 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
     public DbSet<BillingSubscription> BillingSubscriptions => Set<BillingSubscription>();
 
     public DbSet<BillingEvent> BillingEvents => Set<BillingEvent>();
+
+    public DbSet<ProviderConnection> ProviderConnections => Set<ProviderConnection>();
+
+    public DbSet<ProviderWebhookEvent> ProviderWebhookEvents => Set<ProviderWebhookEvent>();
+
+    public DbSet<ProviderSyncRun> ProviderSyncRuns => Set<ProviderSyncRun>();
 
     public DbSet<Tenant> Tenants => Set<Tenant>();
 
@@ -330,6 +337,116 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
             x.HasIndex(y => y.StripeEventId)
                 .IsUnique();
             x.HasIndex(y => y.Type);
+        });
+
+        modelBuilder.Entity<ProviderConnection>(x =>
+        {
+            x.ToTable("provider_connections");
+
+            x.HasKey(y => y.Id);
+
+            x.Property(y => y.TenantId)
+                .IsRequired();
+
+            x.Property(y => y.Provider)
+                .HasMaxLength(64)
+                .IsRequired();
+
+            x.Property(y => y.EndUserId)
+                .HasMaxLength(128)
+                .IsRequired();
+
+            x.Property(y => y.ConsentId)
+                .HasMaxLength(128);
+
+            x.Property(y => y.InstitutionId)
+                .HasMaxLength(128);
+
+            x.Property(y => y.CreatedAt)
+                .IsRequired();
+
+            x.Property(y => y.UpdatedAt)
+                .IsRequired();
+
+            x.HasIndex(y => y.TenantId);
+            x.HasIndex(y => new { y.Provider, y.EndUserId })
+                .IsUnique();
+        });
+
+        modelBuilder.Entity<ProviderWebhookEvent>(x =>
+        {
+            x.ToTable("provider_webhook_events");
+
+            x.HasKey(y => y.Id);
+
+            x.Property(y => y.Provider)
+                .HasMaxLength(64)
+                .IsRequired();
+
+            x.Property(y => y.MessageId)
+                .HasMaxLength(128)
+                .IsRequired();
+
+            x.Property(y => y.EventType)
+                .HasMaxLength(160)
+                .IsRequired();
+
+            x.Property(y => y.PayloadJson)
+                .HasColumnType("jsonb")
+                .IsRequired();
+
+            x.Property(y => y.ReceivedAt)
+                .IsRequired();
+
+            x.HasIndex(y => new { y.Provider, y.MessageId })
+                .IsUnique();
+            x.HasIndex(y => y.TenantId);
+            x.HasIndex(y => y.SyncRunId);
+            x.HasIndex(y => y.EventType);
+        });
+
+        modelBuilder.Entity<ProviderSyncRun>(x =>
+        {
+            x.ToTable("provider_sync_runs");
+
+            x.HasKey(y => y.Id);
+
+            x.Property(y => y.TenantId)
+                .IsRequired();
+
+            x.Property(y => y.Provider)
+                .HasMaxLength(64)
+                .IsRequired();
+
+            x.Property(y => y.Dataset)
+                .HasMaxLength(64)
+                .IsRequired();
+
+            x.Property(y => y.Status)
+                .HasMaxLength(32)
+                .IsRequired();
+
+            x.Property(y => y.ConsentId)
+                .HasMaxLength(128);
+
+            x.Property(y => y.EndUserId)
+                .HasMaxLength(128);
+
+            x.Property(y => y.ExternalMessageId)
+                .HasMaxLength(128);
+
+            x.Property(y => y.ChangeSummaryJson)
+                .HasColumnType("jsonb");
+
+            x.Property(y => y.Error)
+                .HasMaxLength(2048);
+
+            x.Property(y => y.CreatedAt)
+                .IsRequired();
+
+            x.HasIndex(y => y.TenantId);
+            x.HasIndex(y => new { y.TenantId, y.Status });
+            x.HasIndex(y => y.ExternalMessageId);
         });
 
         modelBuilder.Entity<Tenant>(x =>

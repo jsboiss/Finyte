@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Finyte.Data.Analytics;
 using Finyte.Data.Billing;
+using Finyte.Data.ProviderSync;
 
 namespace Finyte.Data;
 
@@ -18,6 +19,7 @@ public static class DependencyInjection
         services.AddScoped<IProjectionDispatcher, ProjectionDispatcher>();
         services.AddScoped<IProjectionInvalidator, ProjectionInvalidator>();
         services.AddScoped<IBillingAccess, BillingAccess>();
+        services.AddScoped<ISyncProjectionRefresher, SyncProjectionRefresher>();
 
         return services;
     }

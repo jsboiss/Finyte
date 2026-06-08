@@ -8,6 +8,7 @@ public static class RouteBuilder
         app.MapAppEndpoints();
         app.MapAuthEndpoints();
         app.MapBillingEndpoints();
+        app.MapFiskilWebhookEndpoints();
         app.MapBankingAccountEndpoints();
         app.MapOverviewEndpoints();
 

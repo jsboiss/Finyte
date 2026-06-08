@@ -4,6 +4,7 @@ using Microsoft.IdentityModel.Tokens;
 using Finyte.Api.Auth;
 using Finyte.Api.Billing;
 using Finyte.Api.Endpoints;
+using Finyte.Api.ProviderSync;
 using Finyte.Api.Tenancy;
 using Finyte.Data;
 using Quartz;
@@ -25,6 +26,7 @@ builder.Services
 builder.Services.AddScoped<IStripeCheckoutService, StripeCheckoutService>();
 builder.Services.AddScoped<IStripePortalService, StripePortalService>();
 builder.Services.AddScoped<IStripeWebhookService, StripeWebhookService>();
+builder.Services.AddScoped<IFiskilWebhookIngestor, FiskilWebhookIngestor>();
 builder.Services.AddScoped<TenantResolver>();
 builder.Services.AddQuartz();
 builder.Services.AddQuartzHostedService(x => x.WaitForJobsToComplete = true);
