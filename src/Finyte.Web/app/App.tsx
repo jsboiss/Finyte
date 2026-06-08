@@ -1,7 +1,7 @@
 import { SignIn, UserButton, useAuth } from '@clerk/react'
 import { keepPreviousData, QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createRootRoute, createRoute, createRouter, Link, Outlet, RouterProvider } from '@tanstack/react-router'
-import { Activity, Banknote, CalendarClock, Home, RefreshCcw, Settings, WalletCards } from 'lucide-react'
+import { Activity, Banknote, CalendarClock, CreditCard, Home, RefreshCcw, Settings, WalletCards } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { getAccounts, getAppStatus, type AccountResponse } from './api/generated/finyteApi'
 import { httpClient } from './api/httpClient'
@@ -48,9 +48,36 @@ type OverviewAccountOption = {
   label: string
 }
 
+type CheckoutSessionResponse = {
+  url: string
+}
+
+type PortalSessionResponse = {
+  url: string
+}
+
+type BillingAccessResponse = {
+  hasAccess: boolean
+  status: string | null
+  stripePriceId: string | null
+  currentPeriodEnd: string | null
+  cancelAtPeriodEnd: boolean
+}
+
+type BillingPlan = {
+  key: string
+  name: string
+  cadence: string
+  detail: string
+}
+
 const allAccountsValue = 'all'
 const queryClient = new QueryClient()
 const devAuthEnabled = import.meta.env.VITE_DEV_AUTH === 'true'
+const billingPlans: BillingPlan[] = [
+  { key: 'Monthly', name: 'Monthly', cadence: 'Month to month', detail: 'Flexible access for early households.' },
+  { key: 'Yearly', name: 'Yearly', cadence: 'Annual', detail: 'One yearly subscription for ongoing access.' },
+]
 
 function DashboardShell() {
   if (devAuthEnabled) {
@@ -94,6 +121,10 @@ function SignedInShell() {
           <Link to="/connections" activeProps={{ className: 'active' }}>
             <Activity aria-hidden="true" />
             Connections
+          </Link>
+          <Link to="/billing" activeProps={{ className: 'active' }}>
+            <CreditCard aria-hidden="true" />
+            Billing
           </Link>
           <Link to="/settings" activeProps={{ className: 'active' }}>
             <Settings aria-hidden="true" />
@@ -141,15 +172,23 @@ function DashboardPage() {
     queryFn: () => getAppStatus(),
     staleTime: 60_000,
   })
+  const billingAccessQuery = useQuery({
+    queryKey: ['billing-access'],
+    queryFn: () => getBillingAccess(),
+    staleTime: 30_000,
+  })
+  const hasBillingAccess = billingAccessQuery.data?.hasAccess === true
   const accountsQuery = useQuery({
     queryKey: ['accounts'],
     queryFn: () => getAccounts(),
+    enabled: hasBillingAccess,
     staleTime: 60_000,
   })
   const accountId = selectedAccountId === allAccountsValue ? null : selectedAccountId
   const overviewQuery = useQuery({
     queryKey: getOverviewQueryKey(accountId),
     queryFn: () => getOverview(accountId),
+    enabled: hasBillingAccess,
     placeholderData: keepPreviousData,
     staleTime: 60_000,
   })
@@ -165,7 +204,7 @@ function DashboardPage() {
   ], [accountsQuery.data])
 
   useEffect(() => {
-    if (!accountsQuery.data) {
+    if (!hasBillingAccess || !accountsQuery.data) {
       return
     }
 
@@ -177,10 +216,14 @@ function DashboardPage() {
         staleTime: 60_000,
       })
     }
-  }, [accountsQuery.data, queryClient])
+  }, [accountsQuery.data, hasBillingAccess, queryClient])
 
   const overview = overviewQuery.data ?? createEmptyOverview(accountId, selectedAccountId, accountsQuery.data)
-  const isLoading = overviewQuery.isLoading || accountsQuery.isLoading
+  const isLoading = billingAccessQuery.isLoading || overviewQuery.isLoading || accountsQuery.isLoading
+
+  if (!billingAccessQuery.isLoading && !hasBillingAccess) {
+    return <LockedDashboard statusQuery={statusQuery.data?.databaseAvailable} />
+  }
 
   return (
     <section className="page">
@@ -257,6 +300,25 @@ function DashboardPage() {
           <SpendByTagChart tags={overview.monthlySpendByTag} currencyCode={overview.currency} />
         </section>
       </div>
+    </section>
+  )
+}
+
+function LockedDashboard({ statusQuery }: { statusQuery?: boolean }) {
+  return (
+    <section className="page">
+      <header className="page-header">
+        <div>
+          <p>Household dashboard</p>
+          <h1>Financial overview</h1>
+        </div>
+        <div className="status-pill">
+          <CalendarClock aria-hidden="true" />
+          {statusQuery ? 'API connected' : 'Waiting for API'}
+        </div>
+      </header>
+
+      <BillingAccessPanel compact />
     </section>
   )
 }
@@ -376,6 +438,98 @@ function ConnectionsPage() {
   )
 }
 
+function BillingPage() {
+  return (
+    <section className="page billing-page">
+      <header className="page-header">
+        <div>
+          <p>Subscription</p>
+          <h1>Billing</h1>
+        </div>
+      </header>
+
+      <BillingAccessPanel />
+    </section>
+  )
+}
+
+function BillingAccessPanel({ compact = false }: { compact?: boolean }) {
+  const [selectedPlan, setSelectedPlan] = useState(billingPlans[0]?.key ?? 'Monthly')
+  const [message, setMessage] = useState<string | null>(null)
+  const billingAccessQuery = useQuery({
+    queryKey: ['billing-access'],
+    queryFn: () => getBillingAccess(),
+    staleTime: 30_000,
+  })
+  const checkoutMutation = useMutation({
+    mutationFn: (plan: string) => createCheckoutSession(plan),
+    onError: () => setMessage('Checkout is not available right now.'),
+    onSuccess: x => {
+      window.location.assign(x.url)
+    },
+  })
+  const portalMutation = useMutation({
+    mutationFn: () => createPortalSession(),
+    onError: () => setMessage('Billing portal is not available yet.'),
+    onSuccess: x => {
+      window.location.assign(x.url)
+    },
+  })
+  const access = billingAccessQuery.data
+  const accessLabel = access?.hasAccess
+    ? access.cancelAtPeriodEnd && access.currentPeriodEnd
+      ? `Access active until ${formatDate(access.currentPeriodEnd)}`
+      : 'Access active'
+    : 'Subscription required'
+
+  return (
+    <section className={compact ? 'panel billing-panel billing-panel-locked' : 'panel billing-panel'}>
+      <div className="panel-header">
+        <div>
+          <p>{accessLabel}</p>
+          <h2>{access?.hasAccess ? 'Manage subscription' : 'Choose access'}</h2>
+        </div>
+        <CreditCard aria-hidden="true" />
+      </div>
+
+      <div className="billing-plan-grid">
+        {billingPlans.map(x => (
+          <button
+            aria-pressed={selectedPlan === x.key}
+            className={selectedPlan === x.key ? 'billing-plan is-selected' : 'billing-plan'}
+            key={x.key}
+            onClick={() => setSelectedPlan(x.key)}
+            type="button"
+          >
+            <span>{x.name}</span>
+            <strong>{x.cadence}</strong>
+            <small>{x.detail}</small>
+          </button>
+        ))}
+      </div>
+
+      <div className="billing-actions">
+        <button
+          disabled={checkoutMutation.isPending}
+          onClick={() => checkoutMutation.mutate(selectedPlan)}
+          type="button"
+        >
+          {access?.hasAccess ? 'Change plan' : 'Start checkout'}
+        </button>
+        <button
+          className="secondary-button"
+          disabled={portalMutation.isPending}
+          onClick={() => portalMutation.mutate()}
+          type="button"
+        >
+          Manage billing
+        </button>
+        {message && <p>{message}</p>}
+      </div>
+    </section>
+  )
+}
+
 function SettingsPage() {
   return (
     <section className="page">
@@ -411,6 +565,29 @@ async function refreshOverview(accountId: string | null) {
   return httpClient<OverviewResponse>({
     method: 'POST',
     url: `/api/overview/refresh${params.size > 0 ? `?${params}` : ''}`,
+  })
+}
+
+async function createCheckoutSession(plan: string) {
+  return httpClient<CheckoutSessionResponse>({
+    data: { plan },
+    headers: { 'Content-Type': 'application/json' },
+    method: 'POST',
+    url: '/api/billing/checkout-session',
+  })
+}
+
+async function createPortalSession() {
+  return httpClient<PortalSessionResponse>({
+    method: 'POST',
+    url: '/api/billing/portal-session',
+  })
+}
+
+async function getBillingAccess() {
+  return httpClient<BillingAccessResponse>({
+    method: 'GET',
+    url: '/api/billing/access',
   })
 }
 
@@ -465,6 +642,10 @@ function formatDateTime(value: string) {
   return new Date(value).toLocaleString(undefined, { day: 'numeric', hour: 'numeric', minute: '2-digit', month: 'short' })
 }
 
+function formatDate(value: string) {
+  return new Date(value).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
 function formatChartDate(value: string) {
   return new Date(`${value}T00:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
 }
@@ -476,8 +657,9 @@ function formatMonth(value: string) {
 const rootRoute = createRootRoute({ component: DashboardShell })
 const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', component: DashboardPage })
 const connectionsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/connections', component: ConnectionsPage })
+const billingRoute = createRoute({ getParentRoute: () => rootRoute, path: '/billing', component: BillingPage })
 const settingsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings', component: SettingsPage })
-const routeTree = rootRoute.addChildren([indexRoute, connectionsRoute, settingsRoute])
+const routeTree = rootRoute.addChildren([indexRoute, connectionsRoute, billingRoute, settingsRoute])
 const router = createRouter({ routeTree })
 
 declare module '@tanstack/react-router' {

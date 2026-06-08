@@ -1,5 +1,6 @@
 using Finyte.Core.Accounts;
 using Finyte.Core.Analytics;
+using Finyte.Core.Billing;
 using Finyte.Core.Tenancy;
 using Microsoft.EntityFrameworkCore;
 
@@ -14,6 +15,12 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
     public DbSet<OverviewProjection> OverviewProjections => Set<OverviewProjection>();
 
     public DbSet<ProjectionState> ProjectionStates => Set<ProjectionState>();
+
+    public DbSet<BillingCustomer> BillingCustomers => Set<BillingCustomer>();
+
+    public DbSet<BillingSubscription> BillingSubscriptions => Set<BillingSubscription>();
+
+    public DbSet<BillingEvent> BillingEvents => Set<BillingEvent>();
 
     public DbSet<Tenant> Tenants => Set<Tenant>();
 
@@ -216,6 +223,113 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
 
             x.HasIndex(y => new { y.TenantId, y.ProjectionKey, y.ScopeKey })
                 .IsUnique();
+        });
+
+        modelBuilder.Entity<BillingCustomer>(x =>
+        {
+            x.ToTable("billing_customers");
+
+            x.HasKey(y => y.Id);
+
+            x.Property(y => y.TenantId)
+                .IsRequired();
+
+            x.Property(y => y.StripeCustomerId)
+                .HasMaxLength(128)
+                .IsRequired();
+
+            x.Property(y => y.CreatedAt)
+                .IsRequired();
+
+            x.HasOne(y => y.Tenant)
+                .WithOne(y => y.BillingCustomer)
+                .HasForeignKey<BillingCustomer>(y => y.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            x.HasIndex(y => y.TenantId)
+                .IsUnique();
+            x.HasIndex(y => y.StripeCustomerId)
+                .IsUnique();
+        });
+
+        modelBuilder.Entity<BillingSubscription>(x =>
+        {
+            x.ToTable("billing_subscriptions");
+
+            x.HasKey(y => y.Id);
+
+            x.Property(y => y.TenantId)
+                .IsRequired();
+
+            x.Property(y => y.BillingCustomerId)
+                .IsRequired();
+
+            x.Property(y => y.StripeSubscriptionId)
+                .HasMaxLength(128)
+                .IsRequired();
+
+            x.Property(y => y.StripeCustomerId)
+                .HasMaxLength(128)
+                .IsRequired();
+
+            x.Property(y => y.StripePriceId)
+                .HasMaxLength(128)
+                .IsRequired();
+
+            x.Property(y => y.Status)
+                .HasMaxLength(32)
+                .IsRequired();
+
+            x.Property(y => y.CancelAtPeriodEnd)
+                .IsRequired();
+
+            x.Property(y => y.CreatedAt)
+                .IsRequired();
+
+            x.Property(y => y.UpdatedAt)
+                .IsRequired();
+
+            x.HasOne(y => y.Tenant)
+                .WithMany(y => y.BillingSubscriptions)
+                .HasForeignKey(y => y.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            x.HasOne(y => y.BillingCustomer)
+                .WithMany(y => y.Subscriptions)
+                .HasForeignKey(y => y.BillingCustomerId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            x.HasIndex(y => y.TenantId);
+            x.HasIndex(y => y.BillingCustomerId);
+            x.HasIndex(y => y.StripeCustomerId);
+            x.HasIndex(y => y.StripeSubscriptionId)
+                .IsUnique();
+        });
+
+        modelBuilder.Entity<BillingEvent>(x =>
+        {
+            x.ToTable("billing_events");
+
+            x.HasKey(y => y.Id);
+
+            x.Property(y => y.StripeEventId)
+                .HasMaxLength(128)
+                .IsRequired();
+
+            x.Property(y => y.Type)
+                .HasMaxLength(128)
+                .IsRequired();
+
+            x.Property(y => y.PayloadJson)
+                .HasColumnType("jsonb")
+                .IsRequired();
+
+            x.Property(y => y.ProcessedAt)
+                .IsRequired();
+
+            x.HasIndex(y => y.StripeEventId)
+                .IsUnique();
+            x.HasIndex(y => y.Type);
         });
 
         modelBuilder.Entity<Tenant>(x =>

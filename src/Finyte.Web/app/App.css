@@ -187,6 +187,18 @@ main {
   width: 17px;
 }
 
+.secondary-button {
+  background: #222426;
+  border: 1px solid #36393d;
+  color: #eeeeec;
+}
+
+.secondary-button:disabled,
+.billing-actions button:disabled {
+  cursor: wait;
+  opacity: 0.58;
+}
+
 .overview-status-row {
   align-items: center;
   display: flex;
@@ -509,6 +521,78 @@ main {
   margin: 4px 0 0;
 }
 
+.billing-page {
+  max-width: 920px;
+}
+
+.billing-panel {
+  gap: 22px;
+}
+
+.billing-panel-locked {
+  margin-top: 8px;
+}
+
+.billing-plan-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.billing-plan {
+  align-items: flex-start;
+  background: #222426;
+  border: 1px solid #36393d;
+  color: #eeeeec;
+  display: grid;
+  gap: 8px;
+  min-height: 150px;
+  padding: 18px;
+  text-align: left;
+}
+
+.billing-plan:hover,
+.billing-plan.is-selected {
+  border-color: #7ccf9f;
+}
+
+.billing-plan.is-selected {
+  background: #24302b;
+  box-shadow: 0 0 0 3px rgb(124 207 159 / 14%);
+}
+
+.billing-plan span {
+  color: #a7aaa8;
+  font-size: 13px;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.billing-plan strong {
+  color: #eeeeec;
+  font-size: 24px;
+}
+
+.billing-plan small {
+  color: #c5c7c2;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.billing-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.billing-actions p {
+  color: #d36b5d;
+  font-size: 14px;
+  margin: 0;
+}
+
 .table-section {
   overflow: hidden;
 }
@@ -565,6 +649,7 @@ td {
 
   .page-header,
   .metric-grid,
+  .billing-plan-grid,
   .overview-grid,
   .cash-flow-values {
     grid-template-columns: 1fr;

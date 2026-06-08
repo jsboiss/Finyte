@@ -1,6 +1,7 @@
 using Finyte.Api.Tenancy;
 using Finyte.Core.Analytics;
 using Finyte.Data.Analytics;
+using Finyte.Data.Billing;
 
 namespace Finyte.Api.Endpoints;
 
@@ -17,30 +18,48 @@ public static class OverviewEndpoints
         return app;
     }
 
-    private static async Task<OverviewResponse> GetOverview(
+    private static async Task<IResult> GetOverview(
         Guid? accountId,
         TenantResolver tenantResolver,
         HttpContext httpContext,
+        IBillingAccess billingAccess,
         IProjectionDispatcher projectionDispatcher,
         CancellationToken cancellationToken)
     {
         var currentTenant = await tenantResolver.Resolve(httpContext.User, cancellationToken);
-        return await projectionDispatcher.GetOrRebuildOverview(
+
+        if (!await billingAccess.HasAccess(currentTenant.TenantId, cancellationToken))
+        {
+            return Results.Problem("An active subscription is required to view the financial overview.", statusCode: StatusCodes.Status402PaymentRequired);
+        }
+
+        var response = await projectionDispatcher.GetOrRebuildOverview(
             new OverviewProjectionScope(currentTenant.TenantId, accountId, GetCurrentMonthKey()),
             cancellationToken);
+
+        return Results.Ok(response);
     }
 
-    private static async Task<OverviewResponse> RefreshOverview(
+    private static async Task<IResult> RefreshOverview(
         Guid? accountId,
         TenantResolver tenantResolver,
         HttpContext httpContext,
+        IBillingAccess billingAccess,
         IProjectionDispatcher projectionDispatcher,
         CancellationToken cancellationToken)
     {
         var currentTenant = await tenantResolver.Resolve(httpContext.User, cancellationToken);
-        return await projectionDispatcher.RebuildOverview(
+
+        if (!await billingAccess.HasAccess(currentTenant.TenantId, cancellationToken))
+        {
+            return Results.Problem("An active subscription is required to refresh the financial overview.", statusCode: StatusCodes.Status402PaymentRequired);
+        }
+
+        var response = await projectionDispatcher.RebuildOverview(
             new OverviewProjectionScope(currentTenant.TenantId, accountId, GetCurrentMonthKey()),
             cancellationToken);
+
+        return Results.Ok(response);
     }
 
     private static async Task<IResult> RepairOverview(
@@ -48,6 +67,7 @@ public static class OverviewEndpoints
         TenantResolver tenantResolver,
         HttpContext httpContext,
         IWebHostEnvironment environment,
+        IBillingAccess billingAccess,
         IProjectionDispatcher projectionDispatcher,
         CancellationToken cancellationToken)
     {
@@ -57,6 +77,12 @@ public static class OverviewEndpoints
         }
 
         var currentTenant = await tenantResolver.Resolve(httpContext.User, cancellationToken);
+
+        if (!await billingAccess.HasAccess(currentTenant.TenantId, cancellationToken))
+        {
+            return Results.Problem("An active subscription is required to repair the financial overview.", statusCode: StatusCodes.Status402PaymentRequired);
+        }
+
         var response = await projectionDispatcher.RebuildOverview(
             new OverviewProjectionScope(currentTenant.TenantId, accountId, GetCurrentMonthKey()),
             cancellationToken);

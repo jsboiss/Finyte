@@ -1,6 +1,7 @@
 using Finyte.Api.Tenancy;
 using Finyte.Core.Accounts;
 using Finyte.Data;
+using Finyte.Data.Billing;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
 
@@ -35,10 +36,11 @@ public static class BankingAccountEndpoints
         return TypedResults.Ok<IReadOnlyList<AccountResponse>>(accounts);
     }
 
-    private static async Task<Results<Created<AccountResponse>, BadRequest<string>>> CreateAccount(
+    private static async Task<Results<Created<AccountResponse>, BadRequest<string>, ProblemHttpResult>> CreateAccount(
         CreateAccountRequest request,
         TenantResolver tenantResolver,
         HttpContext httpContext,
+        IBillingAccess billingAccess,
         FinyteDbContext dbContext,
         CancellationToken cancellationToken)
     {
@@ -49,6 +51,12 @@ public static class BankingAccountEndpoints
 
         var name = request.Name.Trim();
         var currentTenant = await tenantResolver.Resolve(httpContext.User, cancellationToken);
+
+        if (!await billingAccess.HasAccess(currentTenant.TenantId, cancellationToken))
+        {
+            return TypedResults.Problem("An active subscription is required before connecting providers.", statusCode: StatusCodes.Status402PaymentRequired);
+        }
+
         var account = new Account
         {
             TenantId = currentTenant.TenantId,

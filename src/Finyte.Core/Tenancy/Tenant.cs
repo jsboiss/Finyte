@@ -1,3 +1,5 @@
+using Finyte.Core.Billing;
+
 namespace Finyte.Core.Tenancy;
 
 public sealed class Tenant
@@ -6,4 +8,6 @@ public sealed class Tenant
     public required string Name { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public ICollection<TenantMember> Members { get; set; } = [];
+    public BillingCustomer? BillingCustomer { get; set; }
+    public ICollection<BillingSubscription> BillingSubscriptions { get; set; } = [];
 }

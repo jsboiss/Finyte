@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Finyte.Api.Auth;
+using Finyte.Api.Billing;
 using Finyte.Api.Endpoints;
 using Finyte.Api.Tenancy;
 using Finyte.Data;
@@ -17,6 +18,13 @@ builder.Host.UseSerilog((context, configuration) =>
 
 builder.Services.AddOpenApi();
 builder.Services.AddFinyteData(builder.Configuration);
+builder.Services
+    .AddOptions<StripeOptions>()
+    .Bind(builder.Configuration.GetSection(StripeOptions.SectionName))
+    .Validate(StripeOptionsValidation.IsValid, "Stripe configuration contains an invalid key, price id, webhook secret, or URL.");
+builder.Services.AddScoped<IStripeCheckoutService, StripeCheckoutService>();
+builder.Services.AddScoped<IStripePortalService, StripePortalService>();
+builder.Services.AddScoped<IStripeWebhookService, StripeWebhookService>();
 builder.Services.AddScoped<TenantResolver>();
 builder.Services.AddQuartz();
 builder.Services.AddQuartzHostedService(x => x.WaitForJobsToComplete = true);
