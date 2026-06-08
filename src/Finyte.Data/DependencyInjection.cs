@@ -19,6 +19,8 @@ public static class DependencyInjection
         services.AddScoped<IProjectionDispatcher, ProjectionDispatcher>();
         services.AddScoped<IProjectionInvalidator, ProjectionInvalidator>();
         services.AddScoped<IBillingAccess, BillingAccess>();
+        services.AddScoped<IFiskilBankingSyncService, FiskilBankingSyncService>();
+        services.AddScoped<IProviderSyncRunner, ProviderSyncRunner>();
         services.AddScoped<ISyncProjectionRefresher, SyncProjectionRefresher>();
 
         return services;

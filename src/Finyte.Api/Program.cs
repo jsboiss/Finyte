@@ -7,6 +7,7 @@ using Finyte.Api.Endpoints;
 using Finyte.Api.ProviderSync;
 using Finyte.Api.Tenancy;
 using Finyte.Data;
+using Finyte.Data.ProviderSync;
 using Quartz;
 using Serilog;
 
@@ -19,6 +20,10 @@ builder.Host.UseSerilog((context, configuration) =>
 
 builder.Services.AddOpenApi();
 builder.Services.AddFinyteData(builder.Configuration);
+builder.Services
+    .AddOptions<FiskilOptions>()
+    .Bind(builder.Configuration.GetSection(FiskilOptions.SectionName));
+builder.Services.AddHttpClient<IFiskilBankingClient, FiskilBankingClient>();
 builder.Services
     .AddOptions<StripeOptions>()
     .Bind(builder.Configuration.GetSection(StripeOptions.SectionName))
