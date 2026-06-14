@@ -17,6 +17,7 @@ public sealed class FinyteApiFactory : WebApplicationFactory<Program>
         builder.UseEnvironment("Development");
         builder.UseSetting("ConnectionStrings:Finyte", "Host=localhost;Port=5433;Database=finyte_test;Username=finyte;Password=finyte_dev_password");
         builder.UseSetting("DevAuth:Enabled", "true");
+        builder.UseSetting("DevData:SeedOnStartup", "false");
 
         builder.ConfigureServices(services =>
         {

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Finyte.Api.Auth;
 using Finyte.Api.Billing;
+using Finyte.Api.Development;
 using Finyte.Api.Endpoints;
 using Finyte.Api.ProviderSync;
 using Finyte.Api.Tenancy;
@@ -20,6 +21,7 @@ builder.Host.UseSerilog((context, configuration) =>
 
 builder.Services.AddOpenApi();
 builder.Services.AddFinyteData(builder.Configuration);
+builder.Services.AddDevelopmentDataSeeder();
 builder.Services
     .AddOptions<FiskilOptions>()
     .Bind(builder.Configuration.GetSection(FiskilOptions.SectionName));
@@ -65,6 +67,8 @@ else if (hasClerkAuthority)
 }
 
 var app = builder.Build();
+
+await app.SeedDevelopmentData();
 
 if (app.Environment.IsDevelopment())
 {
