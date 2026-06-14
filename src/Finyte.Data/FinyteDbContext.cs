@@ -13,6 +13,12 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
 
     public DbSet<Transaction> Transactions => Set<Transaction>();
 
+    public DbSet<TransactionTag> TransactionTags => Set<TransactionTag>();
+
+    public DbSet<TransactionTagAssignment> TransactionTagAssignments => Set<TransactionTagAssignment>();
+
+    public DbSet<MerchantTagRule> MerchantTagRules => Set<MerchantTagRule>();
+
     public DbSet<OverviewProjection> OverviewProjections => Set<OverviewProjection>();
 
     public DbSet<ProjectionState> ProjectionStates => Set<ProjectionState>();
@@ -148,6 +154,84 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
             x.HasIndex(y => new { y.TenantId, y.FiskilTransactionId })
                 .IsUnique();
             x.HasIndex(y => y.PostedAt);
+        });
+
+        modelBuilder.Entity<TransactionTag>(x =>
+        {
+            x.ToTable("transaction_tags");
+
+            x.HasKey(y => y.Id);
+
+            x.Property(y => y.TenantId)
+                .IsRequired();
+
+            x.Property(y => y.Name)
+                .HasMaxLength(80)
+                .IsRequired();
+
+            x.Property(y => y.Color)
+                .HasMaxLength(16)
+                .IsRequired();
+
+            x.Property(y => y.CreatedAt)
+                .IsRequired();
+
+            x.HasIndex(y => y.TenantId);
+            x.HasIndex(y => new { y.TenantId, y.Name })
+                .IsUnique();
+        });
+
+        modelBuilder.Entity<TransactionTagAssignment>(x =>
+        {
+            x.ToTable("transaction_tag_assignments");
+
+            x.HasKey(y => new { y.TransactionId, y.TagId });
+
+            x.Property(y => y.CreatedAt)
+                .IsRequired();
+
+            x.HasOne(y => y.Transaction)
+                .WithMany(y => y.TagAssignments)
+                .HasForeignKey(y => y.TransactionId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            x.HasOne(y => y.Tag)
+                .WithMany(y => y.TransactionAssignments)
+                .HasForeignKey(y => y.TagId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            x.HasIndex(y => y.TagId);
+        });
+
+        modelBuilder.Entity<MerchantTagRule>(x =>
+        {
+            x.ToTable("merchant_tag_rules");
+
+            x.HasKey(y => y.Id);
+
+            x.Property(y => y.TenantId)
+                .IsRequired();
+
+            x.Property(y => y.MerchantName)
+                .HasMaxLength(256)
+                .IsRequired();
+
+            x.Property(y => y.MerchantKey)
+                .HasMaxLength(256)
+                .IsRequired();
+
+            x.Property(y => y.CreatedAt)
+                .IsRequired();
+
+            x.HasOne(y => y.Tag)
+                .WithMany(y => y.MerchantRules)
+                .HasForeignKey(y => y.TagId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            x.HasIndex(y => y.TenantId);
+            x.HasIndex(y => y.TagId);
+            x.HasIndex(y => new { y.TenantId, y.MerchantKey, y.TagId })
+                .IsUnique();
         });
 
         modelBuilder.Entity<OverviewProjection>(x =>

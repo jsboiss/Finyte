@@ -41,6 +41,9 @@ public sealed class DevelopmentDataSeedRunner(FinyteDbContext dbContext, IOvervi
         await SeedBilling(tenant.Id, now, cancellationToken);
         var accounts = await SeedAccounts(tenant.Id, now, cancellationToken);
         await SeedTransactions(tenant.Id, accounts, now, cancellationToken);
+        var tags = await SeedTags(tenant.Id, now, cancellationToken);
+        await SeedTransactionTags(tenant.Id, tags, now, cancellationToken);
+        await SeedMerchantRules(tenant.Id, tags, now, cancellationToken);
         await SeedProviderSync(tenant.Id, now, cancellationToken);
 
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -253,6 +256,143 @@ public sealed class DevelopmentDataSeedRunner(FinyteDbContext dbContext, IOvervi
         }
     }
 
+    private async Task<IReadOnlyDictionary<string, TransactionTag>> SeedTags(Guid tenantId, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var existingTags = await dbContext.TransactionTags
+            .Where(x => x.TenantId == tenantId)
+            .ToDictionaryAsync(x => x.Name, cancellationToken);
+        var seeds = new[]
+        {
+            new TagSeed(Guid.Parse("44444444-4444-4444-4444-444444444441"), "Essentials", "#bbf7d0"),
+            new TagSeed(Guid.Parse("44444444-4444-4444-4444-444444444442"), "Home", "#bae6fd"),
+            new TagSeed(Guid.Parse("44444444-4444-4444-4444-444444444443"), "Lifestyle", "#ddd6fe"),
+            new TagSeed(Guid.Parse("44444444-4444-4444-4444-444444444444"), "Transfers", "#fed7aa")
+        };
+        var tags = new Dictionary<string, TransactionTag>();
+
+        foreach (var seed in seeds)
+        {
+            if (!existingTags.TryGetValue(seed.Name, out var tag))
+            {
+                tag = new TransactionTag
+                {
+                    Id = seed.Id,
+                    TenantId = tenantId,
+                    Name = seed.Name,
+                    Color = seed.Color,
+                    CreatedAt = now.AddMonths(-1)
+                };
+
+                dbContext.TransactionTags.Add(tag);
+            }
+
+            tag.Color = seed.Color;
+            tags[seed.Name] = tag;
+        }
+
+        return tags;
+    }
+
+    private async Task SeedTransactionTags(
+        Guid tenantId,
+        IReadOnlyDictionary<string, TransactionTag> tags,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var transactionTagNames = new Dictionary<string, string[]>
+        {
+            ["dev_rent"] = ["Home"],
+            ["dev_groceries_1"] = ["Essentials"],
+            ["dev_groceries_2"] = ["Essentials"],
+            ["dev_train"] = ["Essentials"],
+            ["dev_fuel"] = ["Essentials"],
+            ["dev_utilities"] = ["Home"],
+            ["dev_phone"] = ["Essentials"],
+            ["dev_dining"] = ["Lifestyle"],
+            ["dev_streaming"] = ["Lifestyle"],
+            ["dev_pharmacy"] = ["Essentials"],
+            ["dev_hardware"] = ["Home"],
+            ["dev_transfer_savings"] = ["Transfers"],
+            ["dev_savings_transfer"] = ["Transfers"],
+            ["dev_card_payment"] = ["Transfers"],
+            ["dev_credit_payment"] = ["Transfers"]
+        };
+        var transactions = await dbContext.Transactions
+            .Where(x => x.TenantId == tenantId && transactionTagNames.Keys.Contains(x.FiskilTransactionId))
+            .ToDictionaryAsync(x => x.FiskilTransactionId, cancellationToken);
+        var transactionIds = transactions.Values.Select(x => x.Id).ToList();
+        var existingAssignments = await dbContext.TransactionTagAssignments
+            .Where(x => transactionIds.Contains(x.TransactionId))
+            .Select(x => new { x.TransactionId, x.TagId })
+            .ToListAsync(cancellationToken);
+        var existingKeys = existingAssignments
+            .Select(x => $"{x.TransactionId:N}:{x.TagId:N}")
+            .ToHashSet();
+
+        foreach (var pair in transactionTagNames)
+        {
+            if (!transactions.TryGetValue(pair.Key, out var transaction))
+            {
+                continue;
+            }
+
+            foreach (var tagName in pair.Value)
+            {
+                var tag = tags[tagName];
+                var key = $"{transaction.Id:N}:{tag.Id:N}";
+                if (existingKeys.Contains(key))
+                {
+                    continue;
+                }
+
+                dbContext.TransactionTagAssignments.Add(new TransactionTagAssignment
+                {
+                    TransactionId = transaction.Id,
+                    TagId = tag.Id,
+                    CreatedAt = now
+                });
+            }
+        }
+    }
+
+    private async Task SeedMerchantRules(
+        Guid tenantId,
+        IReadOnlyDictionary<string, TransactionTag> tags,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var seeds = new[]
+        {
+            new MerchantRuleSeed(Guid.Parse("44444444-4444-4444-4444-444444444451"), "Woolworths", "woolworths", "Essentials"),
+            new MerchantRuleSeed(Guid.Parse("44444444-4444-4444-4444-444444444452"), "Coles", "coles", "Essentials"),
+            new MerchantRuleSeed(Guid.Parse("44444444-4444-4444-4444-444444444453"), "Bunnings", "bunnings", "Home"),
+            new MerchantRuleSeed(Guid.Parse("44444444-4444-4444-4444-444444444454"), "Netflix", "netflix", "Lifestyle")
+        };
+        var existingRules = await dbContext.MerchantTagRules
+            .Where(x => x.TenantId == tenantId)
+            .ToDictionaryAsync(x => $"{x.MerchantKey}:{x.TagId:N}", cancellationToken);
+
+        foreach (var seed in seeds)
+        {
+            var tag = tags[seed.TagName];
+            var key = $"{seed.MerchantKey}:{tag.Id:N}";
+            if (existingRules.ContainsKey(key))
+            {
+                continue;
+            }
+
+            dbContext.MerchantTagRules.Add(new MerchantTagRule
+            {
+                Id = seed.Id,
+                TenantId = tenantId,
+                MerchantName = seed.MerchantName,
+                MerchantKey = seed.MerchantKey,
+                TagId = tag.Id,
+                CreatedAt = now
+            });
+        }
+    }
+
     private async Task SeedProviderSync(Guid tenantId, DateTimeOffset now, CancellationToken cancellationToken)
     {
         var connection = await dbContext.ProviderConnections
@@ -384,4 +524,8 @@ public sealed class DevelopmentDataSeedRunner(FinyteDbContext dbContext, IOvervi
         string MerchantName,
         string Reference,
         DateTimeOffset PostedAt);
+
+    private sealed record TagSeed(Guid Id, string Name, string Color);
+
+    private sealed record MerchantRuleSeed(Guid Id, string MerchantName, string MerchantKey, string TagName);
 }
