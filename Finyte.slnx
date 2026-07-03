@@ -4,4 +4,7 @@
     <Project Path="src/Finyte.Core/Finyte.Core.csproj" />
     <Project Path="src/Finyte.Data/Finyte.Data.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Finyte.IntegrationTests/Finyte.IntegrationTests.csproj" />
+  </Folder>
 </Solution>

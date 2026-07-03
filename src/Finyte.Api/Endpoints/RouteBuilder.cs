@@ -2,16 +2,15 @@ namespace Finyte.Api.Endpoints;
 
 public static class RouteBuilder
 {
-    public static IEndpointRouteBuilder MapEndpoints(this IEndpointRouteBuilder app, bool authEnabled)
+    public static IEndpointRouteBuilder MapEndpoints(this IEndpointRouteBuilder app)
     {
         app.MapHealthChecks("/health").WithName("GetHealth");
         app.MapAppEndpoints();
-
-        if (authEnabled)
-        {
-            app.MapAuthEndpoints();
-            app.MapBankingAccountEndpoints();
-        }
+        app.MapAuthEndpoints();
+        app.MapBillingEndpoints();
+        app.MapFiskilWebhookEndpoints();
+        app.MapBankingAccountEndpoints();
+        app.MapOverviewEndpoints();
 
         return app;
     }

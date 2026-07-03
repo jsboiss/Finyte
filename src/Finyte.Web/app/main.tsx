@@ -5,8 +5,9 @@ import App from './App.tsx'
 import './index.css'
 
 const publishableKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
+const devAuthEnabled = import.meta.env.VITE_DEV_AUTH === 'true'
 
-if (!publishableKey) {
+if (!devAuthEnabled && !publishableKey) {
   throw new Error('Missing VITE_CLERK_PUBLISHABLE_KEY')
 }
 
@@ -82,10 +83,16 @@ const clerkAppearance = {
   },
 }
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
+const app = devAuthEnabled
+  ? <App />
+  : (
     <ClerkProvider publishableKey={publishableKey} afterSignOutUrl="/" appearance={clerkAppearance}>
       <App />
     </ClerkProvider>
+  )
+
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    {app}
   </StrictMode>,
 )

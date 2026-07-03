@@ -3,7 +3,7 @@ namespace Finyte.Core.Accounts;
 public sealed class Transaction
 {
     public Guid Id { get; set; } = Guid.NewGuid();
-    public required string UserId { get; set; }
+    public Guid TenantId { get; set; }
     public Guid AccountId { get; set; }
     public Account? Account { get; set; }
     public required string FiskilTransactionId { get; set; }

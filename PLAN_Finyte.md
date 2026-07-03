@@ -98,6 +98,8 @@ Engineering outputs:
 
 Do not build production banking or energy ingestion until Fiskil confirms the exact integration, consent, permission, and retention model.
 
+For derived UI data such as dashboard metrics, chart payloads, budget summaries, and subscription suggestions, follow the projection/read-model guidance in `docs/projection-architecture.md`. Raw/domain tables remain the source of truth; projections are disposable fast answers with explicit scope, rebuild, invalidation, and stale handling.
+
 ## Phase 1: Greenfield Application Skeleton
 
 Goal: create the new app with the same stack and clean boundaries.
