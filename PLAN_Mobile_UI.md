@@ -13,20 +13,24 @@ This plan turns those into a concrete mobile UI architecture and build order.
 
 ## Current State (audit)
 
-What exists today in `src/Finyte.Web`:
+**Updated after `main@11cbc58` ("0000 working branch #4").** The original audit below was written against `main@00acb4b`; a large feature commit landed since then (tenancy, Stripe billing, dashboard projections, Fiskil sync) and changed the frontend substantially. Re-check this table again before starting M1, since the app is moving fast.
+
+What exists today in `src/Finyte.Web` (as of `main@11cbc58`):
 
 | Area | State |
 | --- | --- |
-| Stack | React 19, TypeScript, Vite 8, TanStack Router/Query/Table, Clerk, Orval, Axios |
-| Styling | Tailwind v4 is installed and imported (`app/index.css`) but the UI is styled with ~220 lines of bespoke CSS in `app/App.css`. shadcn/ui is planned in `PLAN_Finyte.md` but not installed. |
-| Layout | Fixed two-column grid: `248px` sidebar + content (`app/App.css` `.app-shell`). Unusable on a phone — the sidebar alone eats most of a 390px viewport. |
-| Routing | All three routes (`/`, `/connections`, `/settings`) and every page component live in one file, `app/App.tsx`, using code-based route definitions. |
-| Theme | Dark-only (`color-scheme: dark`, hardcoded hex palette). |
-| Data | Generated client (`app/api/generated/finyteApi.ts`) exposes app status, current user, and account list/create. Transactions exist in the backend (`Finyte.Core/Accounts/Transaction.cs`) but have no endpoint yet. |
-| PWA | Nothing: no manifest, no service worker, no app icons, no theme-color meta. |
-| Mobile hygiene | Viewport meta exists; no safe-area handling, no touch-target sizing, tables are raw `<table>` elements that will overflow small screens. |
+| Stack | React 19, TypeScript, Vite 8, TanStack Router/Query/Table, Clerk, Orval, Axios — unchanged. |
+| Styling | Tailwind v4 is still installed but effectively unused; `app/App.css` has grown from ~220 to **~680 lines** of bespoke CSS (billing panels, overview cards, chart styling). shadcn/ui is still not installed. |
+| Layout | Still a fixed grid shell (`.app-shell`, `248px` sidebar + content), but a **first-pass responsive breakpoint has already been added ad hoc**: `@media (max-width: 800px)` in `app/App.css` collapses `.app-shell` to one column, shrinks the sidebar nav to an icon-only 3-column grid, and stacks the metric/billing/overview grids to 1 column. This is a stopgap, not the mobile-first shell this plan calls for (no bottom tab bar, no safe-area handling, no shadcn/ui, breakpoint is `max-width` px-based rather than Tailwind's `md` token) — **M1 should replace it, not build alongside it.** |
+| Routing | Four routes now, still all in one file, `app/App.tsx` (grown from 217 to **~660 lines**): `/`, `/connections`, `/billing` (new), `/settings`. The M1 file-split is more overdue than before. |
+| Theme | Dark-only — unchanged. |
+| Data | The dashboard (`DashboardPage`) now renders a real overview projection (`OverviewResponse`): account balance, current-month spend, average daily spend, an income-vs-expense "cash flow race" bar, a daily cash-flow bar chart (`DailyCashFlowChart`), and a spend-by-tag pie chart (`SpendByTagChart`, CSS `conic-gradient` — **no charting library was added**, these are hand-rolled with divs). A `LockedDashboard` state gates the overview behind billing access. Backend now also has real tenancy (`Finyte.Core.Tenancy`), Stripe billing (`Finyte.Api.Billing`), and Fiskil sync (`Finyte.Data.ProviderSync`) — see `neko_fable.md` for provider-integration rules and known gaps. |
+| Billing | New: a `/billing` route with a plan picker (Monthly/Yearly) and a `BillingAccessPanel` that calls Stripe checkout/portal session endpoints. Entirely unstyled for mobile — same fixed-grid treatment as everything else. |
+| Auth mode | New: a `VITE_DEV_AUTH` toggle switches between the real `ClerkDashboardShell` and a `SignedInShell` that skips Clerk entirely (backed by a server-side `DevAuthenticationHandler` + `DevData` seeding, dev-only). Relevant to how M1–M3 get tested locally without needing live Clerk sign-in. |
+| PWA | Still nothing: no manifest, no service worker, no app icons, no theme-color meta. |
+| Mobile hygiene | Still just the viewport meta plus the new ad hoc `max-width: 800px` breakpoint above; no safe-area handling, no touch-target sizing audit, tables are still raw `<table>` elements. |
 
-Conclusion: this is early enough that we should restructure toward mobile-first now, before Phase 6 screens multiply, rather than retrofit later.
+Conclusion: the mobile-first shell, design tokens, and PWA work this plan describes are **still entirely unstarted** — nothing here supersedes M1–M6. But the surface area to rebuild has grown (billing screen, real overview charts, tenancy-aware dashboard), and someone has already started patching in responsiveness ad hoc at the CSS level. Start M1 by replacing that breakpoint with the real mobile-first shell rather than extending it, and fold Billing into M3 (see below) since it didn't exist when this plan was first written.
 
 ## Guiding Decisions
 
@@ -36,16 +40,18 @@ Conclusion: this is early enough that we should restructure toward mobile-first 
 4. **Cards and lists on mobile, tables on desktop.** TanStack Table stays for wide viewports; the same column/model definitions feed a card-list renderer under `md`. Never ship a horizontally-scrolling data table as the primary mobile experience.
 5. **Keep dark mode as default, add proper theme tokens.** Move the hardcoded hex palette into Tailwind theme variables (`@theme` in Tailwind v4) so light mode can be added later without a rewrite.
 6. **File-based route organization.** Split `App.tsx` into route files under `app/routes/` before adding more screens. Every new Phase 6 screen gets its own file, loading/empty/error states included.
+7. **Rebuild the hand-rolled overview charts as responsive components, not a charting library, for now.** `CashFlowRace`, `DailyCashFlowChart`, and `SpendByTagChart` (`app/App.tsx`) are already CSS/div-based (bar heights, `conic-gradient` pie) with no dependency — keep that approach and make it responsive in M2/M3 rather than introducing a charting library mid-build. Revisit a real charting library only if hand-rolled charts can't cover future Phase 9 analytics needs.
 
 ## Phase M1: Responsive App Shell
 
-Goal: the existing three pages work well on a phone.
+Goal: the existing four pages (Dashboard, Connections, Billing, Settings) work well on a phone.
 
 Deliverables:
 
 - Split `App.tsx`: shell layout, auth gate, and each page into separate files (`app/routes/`, `app/components/layout/`).
+- Remove the ad hoc `@media (max-width: 800px)` breakpoint in `app/App.css` as part of the split — it's superseded by the shell below, not layered under it.
 - New shell layout:
-  - `< md`: sticky top header (brand, page title, `UserButton`) + fixed bottom tab bar with 4 tabs: **Home, Accounts, Bills, Settings** (Connections moves under Settings on mobile; keep it as a top-level sidebar item on desktop).
+  - `< md`: sticky top header (brand, page title, `UserButton`) + fixed bottom tab bar with 4 tabs: **Home, Accounts, Bills, Settings** (Connections and Billing move under Settings on mobile; keep them as top-level sidebar items on desktop).
   - `>= md`: current sidebar pattern, rebuilt with Tailwind utilities.
 - Install and configure shadcn/ui; adopt its Button, Card, Skeleton, Sheet components in the shell.
 - Mobile hygiene baseline:
@@ -79,7 +85,7 @@ Deliverables:
 
 Acceptance:
 
-- Dashboard, Connections, Settings rebuilt on the kit with zero bespoke-CSS classes.
+- Dashboard, Connections, Billing, Settings rebuilt on the kit with zero bespoke-CSS classes.
 - A visual pass at 360/390/768/1280px shows consistent spacing, type scale, and touch targets.
 
 ## Phase M3: Money Screens (aligns with PLAN_Finyte Phase 6)
@@ -88,15 +94,16 @@ Goal: the core mobile finance experience against real API data.
 
 Screens, in build order:
 
-1. **Home (dashboard)** — total balance headline, per-account balance summary, upcoming payments preview, recent transactions preview, sync status line. Everything links through to its full screen.
+1. **Home (dashboard)** — rebuild the existing overview projection (`OverviewResponse`: account balance, current-month spend, average daily spend, cash-flow race, daily cash-flow bars, spend-by-tag pie) as mobile-first components on the M2 kit, plus upcoming payments preview, recent transactions preview, and sync status line. Preserve the existing `LockedDashboard` gate behavior for users without billing access. Everything links through to its full screen.
 2. **Accounts list** — `ListRow` per account (name, product, masked number, balance) from the existing `GET /api/accounts`. Pull-to-refresh via TanStack Query refetch.
 3. **Account detail** — balance header (current/available/limit), transaction list for the account, metadata section.
 4. **Transactions** — infinite-scrolling list grouped by date (virtualized once counts grow), search box, filter bottom-sheet (account, date range, category). Desktop `>= md` renders the same data as a TanStack Table with sorting/pagination.
 5. **Bills / Upcoming** — timeline of upcoming payments, direct debits, and bill due dates. Blocked on backend Phase 4/6 endpoints; build with the empty state first so the tab exists from M1.
+6. **Billing** — rebuild the existing plan picker and `BillingAccessPanel` (checkout/portal session buttons, subscription status) as a mobile settings-style screen; single-column card layout, no grid.
 
 Backend dependencies (coordinate with `PLAN_Finyte.md` phases — build UI behind empty states until ready):
 
-- Transactions list endpoint (entity exists; endpoint does not).
+- Transactions list endpoint (entity exists; endpoint does not) — dashboard/overview and billing already have working endpoints, so screens 1 and 6 are **not** blocked.
 - Upcoming payments / direct debits endpoints (Phase 4 Fiskil spike).
 - Connections list/status endpoints (Phase 5).
 
@@ -146,7 +153,7 @@ Acceptance:
 - Route-level code splitting so first paint on mobile networks is fast; set a bundle budget (< 250KB gzipped initial JS as a starting target).
 - Virtualize the transaction list once real data volumes arrive.
 - Reduced-motion support; focus-visible styles; screen-reader labels on tab bar and amount signs (a11y pass).
-- Playwright viewport suite (360px and 1280px) covering: sign-in, dashboard, accounts, transactions, connections — this satisfies the "minimal Playwright coverage" testing requirement in `PLAN_Finyte.md`.
+- Playwright viewport suite (360px and 1280px) covering: sign-in, dashboard, accounts, transactions, connections, billing — this satisfies the "minimal Playwright coverage" testing requirement in `PLAN_Finyte.md`.
 - Optional: light theme via the tokens laid down in M2.
 
 ## Screen ↔ Navigation Map
@@ -158,21 +165,24 @@ Bottom tabs (mobile)          Sidebar (desktop)
 │   └── /accounts/$accountId  │   └── Account detail
 ├── Bills       /bills        ├── Transactions /transactions
 └── Settings    /settings     ├── Bills        /bills
-    └── Connections           ├── Connections  /connections
-        /connections          └── Settings     /settings
+    ├── Connections           ├── Connections  /connections
+    │   /connections          ├── Billing      /billing
+    └── Billing /billing      └── Settings     /settings
 
 Transactions on mobile is reached from Home ("see all") and
-Account detail; it does not need its own tab.
+Account detail; it does not need its own tab. Connections and
+Billing are both settings-adjacent on mobile — surface them as
+rows within Settings rather than adding more tabs.
 ```
 
 ## What Not To Do Yet
 
 - No React Native / Capacitor / App Store builds — PWA first, per `PLAN_Finyte.md`.
 - No offline caching of financial data.
-- No charts library yet — Phase 6 is deliberately tables/lists/summaries; charts arrive with Phase 9 analytics migration.
+- No charting library — the existing overview charts (`CashFlowRace`, `DailyCashFlowChart`, `SpendByTagChart`) are hand-rolled CSS/div components; keep that approach through M3 and only reconsider a library if Phase 9 analytics outgrows it.
 - No push notifications (needs backend + product decisions; revisit with Phase 9 "alerts and notifications").
 - No gesture-heavy interactions (swipe-to-categorize etc.) before the basics are solid.
-- Don't keep growing `App.tsx` — M1's split is a prerequisite for everything else.
+- Don't keep growing `App.tsx` — M1's split is a prerequisite for everything else, and it's more overdue now than when this plan was written (~660 lines and counting).
 
 ## Build Order Summary
 

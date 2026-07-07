@@ -11,6 +11,8 @@ A distilled rulebook built from **all** the local skill documentation in `.codex
 
 **Project context:** Finyte is a household finance app — .NET 10 ASP.NET Core API + Postgres backend, React 19 / TypeScript / Vite / TanStack mobile-first PWA frontend, Clerk for auth, Fiskil for consented CDR banking/energy/identity/income data. See `PLAN_Finyte.md` (foundation) and `PLAN_Mobile_UI.md` (frontend).
 
+**Checked against real code as of `main@11cbc58`** ("0000 working branch #4" — tenancy, Stripe billing, dashboard projections, and a first Fiskil sync implementation landed after this document was first written). **Part 4** below records where that implementation already diverges from the rules in Parts 2–3, including one live security gap. Re-check Part 4 whenever `Finyte.Data.ProviderSync` or `Finyte.Api.Endpoints.FiskilWebhookEndpoints` changes.
+
 ---
 
 ## Golden Rules (the ten that matter most)
@@ -544,6 +546,42 @@ Response type names in the reference reflect this: `AccountV1`/`AccountV2`, `Tra
 
 ---
 
+# Part 4 — Implementation Status: Rules vs. Current Code
+
+Checked against `main@11cbc58`. This section exists so the rules above don't stay theoretical — it names the exact files that already need to change to comply with them.
+
+## 4.1 Fiskil client (`src/Finyte.Data/ProviderSync/FiskilBankingClient.cs`, `FiskilOptions`)
+
+| Rule | Current code | Verdict |
+| --- | --- | --- |
+| Golden Rule 6 / Part 2 rule 6-7 / Part 3 versioning rules: send `X-Fiskil-Version: v2` on every request | `BuildUri()` sets only `Authorization: Bearer`; no `X-Fiskil-Version` header anywhere in the client | **Gap.** Every call currently falls back to whatever version is pinned in the Fiskil Console — silently breaks the moment that pin changes, and there's no way to tell which schema (`AccountV1` vs `AccountV2`, string vs numeric rates) a response is actually in. |
+| Part 2 rule 3 / Part 3 auth: exchange `client_id`/`client_secret` at `POST /v1/token`, cache the 15-minute token, refresh proactively, no refresh-token grant exists | `FiskilOptions` only has `BaseUrl` and a static `AccessToken` read straight from config (`appsettings.json`: `Fiskil:AccessToken: ""`); no token endpoint call, no expiry handling, no refresh | **Gap.** This works as a stopgap with a manually-pasted long-lived sandbox token, but it is not the documented auth model — there's no code path that would survive a production token actually expiring after 900 seconds. |
+| Part 3 pagination rules: cursor-based `page[after]`/`page[size]`, follow `links.next`, resource-named array root | `GetPaged<T>()` correctly loops on `page[after]`, reads the named root (`accounts`/`balances`/`transactions`), and terminates when the next cursor is empty | **Compliant.** Good reference implementation of the pagination rules for future endpoints (payees, direct debits, energy). |
+| Part 3 gotchas: typo'd paths (`acccounts/direct-debits`, `instituition_id`), string-vs-numeric monetary fields in v2 | Only `accounts`, `balances`, `transactions` are implemented so far — the typo'd endpoints (direct debits, products) and the v1/v2 rate-field schema differences haven't been exercised yet | **Watch item**, not yet a bug — flag these gotchas again when direct debits, scheduled payments, or products endpoints are added. |
+
+**Recommended fix, in priority order:** (1) add the `X-Fiskil-Version: v2` header to every request — cheapest fix, prevents silent breakage; (2) replace the static `AccessToken` with the documented `client_id`/`client_secret` → `POST /v1/token` exchange plus an in-memory, semaphore-guarded, proactively-refreshed cache, per the `ITokenProvider` pattern in Part 2.3.
+
+## 4.2 Fiskil webhook endpoint (`src/Finyte.Api/Endpoints/FiskilWebhookEndpoints.cs`, `FiskilWebhookIngestor`)
+
+| Rule | Current code | Verdict |
+| --- | --- | --- |
+| Golden Rule 3 / Part 2 rule 15 / Part 3 webhook verification: verify `X-Fiskil-Signature` HMAC-SHA256 on the raw body before processing | `HandleWebhook` reads the raw body, deserializes it, and calls the ingestor — **no signature check exists anywhere in the endpoint or the ingestor**. There is no `Fiskil:WebhookSigningSecret` entry in `appsettings.json` at all (only `BaseUrl` and `AccessToken` under `Fiskil:`) | **Live security gap.** `POST /api/provider-sync/fiskil/webhook` is `.AllowAnonymous()` (correct — Fiskil can't send a user JWT) but currently has **no authentication of any kind**. Anyone who finds the URL can POST a fabricated event; if `data.end_user_id` matches an existing `ProviderConnection`, it queues a real `ProviderSyncRun` against that tenant. This should be fixed before any real (non-sandbox) Fiskil credentials are wired up. |
+| Part 2 rule 17 / Part 3: dedupe on `message_id` | `Ingest()` checks `(Provider, MessageId)` before inserting and returns `IsDuplicate: true` on a repeat | **Compliant.** |
+| Part 2 rule 16: ack fast, process async | Handler inserts a `ProviderWebhookEvent` + a `Queued` `ProviderSyncRun` and returns — it does not fetch data inline | **Compliant on the "fast ack" half.** But the actual data-fetch never happens automatically: `POST /api/provider-sync/runs/{id}/run` is the only thing that executes a queued run, and it's gated `environment.IsDevelopment()`-only (returns 404 outside Development). **There is currently no background worker or Quartz job that drains `Queued` sync runs in a deployed environment** — every webhook event correctly gets recorded, but nothing production-side acts on it yet. This is an incompleteness (Phase 4/5 in `PLAN_Finyte.md` are still open), not a contradiction of a rule. |
+
+**Recommended fix, in priority order:** (1) add `Fiskil:WebhookSigningSecret` to configuration and verify `X-Fiskil-Signature` (base64-decoded secret, HMAC-SHA256 over the raw body, base64-encoded compare, constant-time) before touching the deserialized payload — reject with 400 on mismatch; (2) add a background job (Quartz, per `PLAN_Finyte.md`) that picks up `Queued` `ProviderSyncRun` rows outside of Development, replacing the dev-only manual trigger endpoint.
+
+## 4.3 Tenancy model vs. the Clerk Organizations recommendation (§1.4)
+
+Part 1.4 recommended Clerk **Organizations** as the household model (`org:admin`/`org:member`, `<OrganizationSwitcher>`, org-claim-derived tenant scoping). The actual implementation (`src/Finyte.Api/Tenancy/TenantResolver.cs`) took a different, simpler path: on first authenticated request, Finyte auto-creates its **own** `Tenant`/`TenantMember` row per individual Clerk user (`Role = Owner`, tenant name `"My household"`), keyed off the Clerk `sub` claim — not off any Clerk org ID. `TenantRole` already models an `Owner` vs. other-role distinction, but nothing yet invites a second Clerk user into an existing tenant.
+
+This isn't wrong for a single-user-per-household v1, and the core security invariant from §1.4 still holds either way (every endpoint derives tenant/household ID from server-side state tied to the authenticated user, never from client input). But it means:
+
+- The Clerk-orgs rules in §1.4 (permission strings, `orgSlug` checks, `<OrganizationSwitcher>`) are **not currently applicable** — there's no Clerk Organization in play, only Finyte's own tenant table.
+- If/when Finyte adds multi-member households, decide explicitly whether to (a) build invite/membership on top of the existing `TenantMember` table, or (b) switch to Clerk Organizations as originally recommended and migrate `TenantResolver` to read the org claim instead of auto-creating a tenant per user. Don't let both models exist in parallel.
+
+---
+
 ## Open items to resolve before production
 
 Collected from all three parts — each needs confirmation against the live APIs or the vendor before Finyte onboards real users:
@@ -558,3 +596,7 @@ Collected from all three parts — each needs confirmation against the live APIs
 8. Pin which Clerk Core generation (`@clerk/react` v7+/Core 3 vs Core 2) the project is on and record it in §1.3.
 9. Check the current `@fiskil/link` release (docs pin `0.1.6-beta`).
 10. Re-run the Fiskil docs refresh script (snapshot is from 2026-05-21) before implementing the typed client.
+11. **(Highest priority — live gap, see §4.2)** Add `X-Fiskil-Signature` verification to `FiskilWebhookEndpoints.HandleWebhook` before any non-sandbox Fiskil credentials are configured — the endpoint currently accepts unsigned, unauthenticated POSTs.
+12. **(See §4.1)** Add the `X-Fiskil-Version: v2` header to `FiskilBankingClient` and replace the static `Fiskil:AccessToken` config value with the documented `client_id`/`client_secret` → `POST /v1/token` exchange and refresh cycle.
+13. **(See §4.2)** Add a background job to drain `Queued` `ProviderSyncRun` rows outside Development — today only a dev-only manual-trigger endpoint runs them.
+14. **(See §4.3)** Decide whether household multi-membership will be built on Finyte's own `Tenant`/`TenantMember` model or migrated to Clerk Organizations, and update §1.4 once decided — right now the code and the original recommendation disagree.
