@@ -364,11 +364,11 @@ The **Fiskil Sandbox** mirrors production with unlimited End Users and consents 
 
 ### React PWA (consent flow)
 
-- Since Finyte is a **web PWA**, use `@fiskil/link` directly — the WebView-bridge pattern in the Mobile Integration guide is only needed for native iOS/Android shells. If Finyte later ships a native wrapper (e.g., Capacitor), reuse the documented bridge-HTML pattern with `startLink()`/`sendToNative` verbatim.
+- Finyte is a **web PWA with no native shell**, so integrate `@fiskil/link` directly in the browser. Ignore the Mobile Integration guide's WebView-bridge pattern (`startLink()`/`sendToNative`) entirely — that's only relevant to a native iOS/Android wrapper, which is out of scope.
 - Flow: user taps "Link account" → PWA calls Finyte backend → backend creates End User (if needed) + `POST /v1/auth/session` → backend returns `session_id` → PWA calls `link(sessionId, { allowedOrigin, timeoutMs })` — set `allowedOrigin` in production (docs recommend it but don't state the exact origin value; verify against the `auth_url` host).
 - Wrap in a `useLinkAccount` hook (pattern given in docs): statuses `idle | linking | success | error`; treat `LINK_USER_CANCELLED` as a silent return to idle; map each `LinkError.code` to the documented user-facing messages; call `.close()` on `LINK_INVALID_SESSION` and mint a fresh Auth Session.
 - On resolve, send `consentID` to the backend as a UX hint only; unlock data screens off the backend's `consent.received` webhook state, showing a "syncing your accounts" state until the relevant `*.sync.completed` events land.
-- Optionally build a native-feel institution picker from `GET /v1/institutions` (icons, search, health status) and pass `institution_id` into the Auth Session to skip Fiskil's picker.
+- Optionally build a custom-branded institution picker from `GET /v1/institutions` (icons, search, health status) and pass `institution_id` into the Auth Session to skip Fiskil's picker.
 - Prepare users before launching Link (explain data + purpose), show loading states, and expose consent management (view/revoke) in settings — documented UX best practices and a CDR expectation.
 
 ## 2.4 Ambiguities / gaps in the local snapshot (verify before relying on them)

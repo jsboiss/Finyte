@@ -177,7 +177,6 @@ rows within Settings rather than adding more tabs.
 
 ## What Not To Do Yet
 
-- No React Native / Capacitor / App Store builds — PWA first, per `PLAN_Finyte.md`.
 - No offline caching of financial data.
 - No charting library — the existing overview charts (`CashFlowRace`, `DailyCashFlowChart`, `SpendByTagChart`) are hand-rolled CSS/div components; keep that approach through M3 and only reconsider a library if Phase 9 analytics outgrows it.
 - No push notifications (needs backend + product decisions; revisit with Phase 9 "alerts and notifications").
