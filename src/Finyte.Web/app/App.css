@@ -612,7 +612,8 @@ main {
 }
 
 .transactions-actions,
-.transactions-toolbar > div {
+.transactions-toolbar > div,
+.transaction-pagination {
   align-items: center;
   display: flex;
   gap: 8px;
@@ -640,6 +641,7 @@ main {
   align-items: center;
   color: #a7aaa8;
   display: flex;
+  gap: 12px;
   font-size: 14px;
   justify-content: space-between;
 }
@@ -653,6 +655,16 @@ main {
 .transactions-toolbar svg.spin-visible {
   animation: spin 800ms linear infinite;
   opacity: 1;
+}
+
+.transaction-pagination {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.transaction-pagination button {
+  min-height: 34px;
+  padding: 0 12px;
 }
 
 .tag-management-panel {
@@ -922,6 +934,7 @@ main {
   display: grid;
   gap: 4px;
   min-width: 190px;
+  overflow-y: auto;
   padding: 8px;
   position: fixed;
   z-index: 20;
@@ -1064,6 +1077,15 @@ td {
 
   .transactions-actions {
     flex-wrap: wrap;
+  }
+
+  .transactions-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .transaction-pagination {
+    justify-content: flex-start;
   }
 
   .tag-management-panel,

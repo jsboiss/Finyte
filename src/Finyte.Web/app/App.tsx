@@ -85,6 +85,13 @@ type Transaction = {
   tags: TransactionTag[]
 }
 
+type TransactionPage = {
+  items: Transaction[]
+  page: number
+  pageSize: number
+  totalCount: number
+}
+
 type TransactionTag = {
   id: string
   name: string
@@ -126,6 +133,7 @@ const allAccountsValue = 'all'
 const queryClient = new QueryClient()
 const devAuthEnabled = import.meta.env.VITE_DEV_AUTH === 'true'
 const tagColorOptions = ['#bae6fd', '#bbf7d0', '#fde68a', '#fecdd3', '#ddd6fe', '#fed7aa', '#ccfbf1', '#e9d5ff']
+const transactionsPageSize = 25
 const transactionColumnHelper = createColumnHelper<Transaction>()
 const billingPlans: BillingPlan[] = [
   { key: 'Monthly', name: 'Monthly', cadence: 'Month to month', detail: 'Flexible access for early households.' },
@@ -489,10 +497,11 @@ function TransactionsPage() {
   const [tagColor, setTagColor] = useState('#64748b')
   const [merchantName, setMerchantName] = useState('')
   const [merchantTagId, setMerchantTagId] = useState('')
+  const [transactionPage, setTransactionPage] = useState(1)
   const queryClient = useQueryClient()
   const transactionsQuery = useQuery({
-    queryKey: ['transactions'],
-    queryFn: () => getTransactions(200),
+    queryKey: ['transactions', transactionPage],
+    queryFn: () => getTransactions(transactionPage, transactionsPageSize),
     placeholderData: keepPreviousData,
   })
   const accountsQuery = useQuery({
@@ -533,16 +542,16 @@ function TransactionsPage() {
       await queryClient.cancelQueries({ queryKey: ['transactions'] })
       await queryClient.cancelQueries({ queryKey: ['merchant-tags'] })
       const previousTags = queryClient.getQueryData<TransactionTag[]>(['tags'])
-      const previousTransactions = queryClient.getQueryData<Transaction[]>(['transactions'])
+      const previousTransactions = queryClient.getQueryData<TransactionPage>(['transactions', transactionPage])
       const previousMerchantRules = queryClient.getQueryData<MerchantTagRule[]>(['merchant-tags'])
       queryClient.setQueryData<TransactionTag[]>(['tags'], x => (x ?? []).filter(y => y.id !== tagId))
-      queryClient.setQueryData<Transaction[]>(['transactions'], x => (x ?? []).map(y => ({ ...y, tags: y.tags.filter(z => z.id !== tagId) })))
+      queryClient.setQueryData<TransactionPage>(['transactions', transactionPage], x => x ? { ...x, items: x.items.map(y => ({ ...y, tags: y.tags.filter(z => z.id !== tagId) })) } : x)
       queryClient.setQueryData<MerchantTagRule[]>(['merchant-tags'], x => (x ?? []).filter(y => y.tag.id !== tagId))
       return { previousTags, previousTransactions, previousMerchantRules }
     },
     onError: (_error, _tagId, context) => {
       queryClient.setQueryData(['tags'], context?.previousTags)
-      queryClient.setQueryData(['transactions'], context?.previousTransactions)
+      queryClient.setQueryData(['transactions', transactionPage], context?.previousTransactions)
       queryClient.setQueryData(['merchant-tags'], context?.previousMerchantRules)
     },
   })
@@ -550,17 +559,17 @@ function TransactionsPage() {
     mutationFn: (input: SetTransactionTagsInput) => setTransactionTags(input),
     onMutate: async input => {
       await queryClient.cancelQueries({ queryKey: ['transactions'] })
-      const previousTransactions = queryClient.getQueryData<Transaction[]>(['transactions'])
+      const previousTransactions = queryClient.getQueryData<TransactionPage>(['transactions', transactionPage])
       const allTags = queryClient.getQueryData<TransactionTag[]>(['tags']) ?? []
       const nextTags = allTags.filter(x => input.tagIds.includes(x.id))
-      queryClient.setQueryData<Transaction[]>(['transactions'], x => (x ?? []).map(y => y.id === input.transactionId ? { ...y, tags: nextTags } : y))
+      queryClient.setQueryData<TransactionPage>(['transactions', transactionPage], x => x ? { ...x, items: x.items.map(y => y.id === input.transactionId ? { ...y, tags: nextTags } : y) } : x)
       return { previousTransactions }
     },
     onError: (_error, _input, context) => {
-      queryClient.setQueryData(['transactions'], context?.previousTransactions)
+      queryClient.setQueryData(['transactions', transactionPage], context?.previousTransactions)
     },
     onSuccess: (nextTags, input) => {
-      queryClient.setQueryData<Transaction[]>(['transactions'], x => (x ?? []).map(y => y.id === input.transactionId ? { ...y, tags: nextTags } : y))
+      queryClient.setQueryData<TransactionPage>(['transactions', transactionPage], x => x ? { ...x, items: x.items.map(y => y.id === input.transactionId ? { ...y, tags: nextTags } : y) } : x)
       queryClient.invalidateQueries({ queryKey: ['overview'] })
     },
   })
@@ -573,19 +582,23 @@ function TransactionsPage() {
       await queryClient.cancelQueries({ queryKey: ['merchant-tags'] })
       await queryClient.cancelQueries({ queryKey: ['transactions'] })
       const previousMerchantRules = queryClient.getQueryData<MerchantTagRule[]>(['merchant-tags'])
-      const previousTransactions = queryClient.getQueryData<Transaction[]>(['transactions'])
+      const previousTransactions = queryClient.getQueryData<TransactionPage>(['transactions', transactionPage])
       const tag = queryClient.getQueryData<TransactionTag[]>(['tags'])?.find(x => x.id === input.tagId)
       const optimisticRuleId = `pending-${crypto.randomUUID()}`
       if (tag) {
-        const merchantKey = getMerchantKey(input.merchantName)
+        const ruleMerchantKey = getMerchantKey(input.merchantName)
         queryClient.setQueryData<MerchantTagRule[]>(['merchant-tags'], x => [...(x ?? []), { id: optimisticRuleId, merchantName: input.merchantName, tag }])
-        queryClient.setQueryData<Transaction[]>(['transactions'], x => (x ?? []).map(y => {
-          if (!y.merchantName || getMerchantKey(y.merchantName) !== merchantKey || y.tags.some(z => z.id === tag.id)) {
+        queryClient.setQueryData<TransactionPage>(['transactions', transactionPage], x => x ? {
+          ...x,
+          items: x.items.map(y => {
+          const transactionMerchantName = y.merchantName?.trim() ? y.merchantName : y.description
+          if (!transactionMerchantName || !matchesMerchantRule(getMerchantKey(transactionMerchantName), ruleMerchantKey) || y.tags.some(z => z.id === tag.id)) {
             return y
           }
 
           return { ...y, tags: [...y.tags, tag] }
-        }))
+          }),
+        } : x)
       }
 
       setMerchantName('')
@@ -593,11 +606,14 @@ function TransactionsPage() {
     },
     onError: (_error, _input, context) => {
       queryClient.setQueryData(['merchant-tags'], context?.previousMerchantRules)
-      queryClient.setQueryData(['transactions'], context?.previousTransactions)
+      queryClient.setQueryData(['transactions', transactionPage], context?.previousTransactions)
     },
-    onSuccess: (rule, _input, context) => {
+    onSuccess: async (rule, _input, context) => {
       queryClient.setQueryData<MerchantTagRule[]>(['merchant-tags'], x => uniqueMerchantRulesById((x ?? []).map(y => y.id === context.optimisticRuleId ? rule : y)))
-      queryClient.invalidateQueries({ queryKey: ['overview'] })
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['transactions'] }),
+        queryClient.invalidateQueries({ queryKey: ['overview'] }),
+      ])
     },
   })
   const deleteMerchantRuleMutation = useMutation({
@@ -666,7 +682,7 @@ function TransactionsPage() {
     }),
   ], [setTransactionTagIds, tagsQuery.data])
   const table = useReactTable({
-    data: transactionsQuery.data ?? [],
+    data: transactionsQuery.data?.items ?? [],
     columns,
     state: { columnFilters, columnVisibility: { category: false } },
     onColumnFiltersChange: setColumnFilters,
@@ -675,6 +691,10 @@ function TransactionsPage() {
   })
   const hasFilters = columnFilters.length > 0
   const isLoading = transactionsQuery.isLoading || transactionsQuery.isFetching
+  const totalTransactions = transactionsQuery.data?.totalCount ?? 0
+  const totalPages = Math.max(Math.ceil(totalTransactions / transactionsPageSize), 1)
+  const canGoToPreviousPage = transactionPage > 1
+  const canGoToNextPage = transactionPage < totalPages
 
   return (
     <section className="page transactions-page">
@@ -702,7 +722,15 @@ function TransactionsPage() {
       <div className="transactions-toolbar">
         <div>
           <Loader2 className={isLoading ? 'spin-visible' : ''} aria-hidden="true" />
-          <span>Showing {table.getRowModel().rows.length} of {transactionsQuery.data?.length ?? 0} transactions</span>
+          <span>Showing {table.getRowModel().rows.length} of {transactionsQuery.data?.items.length ?? 0} on page {transactionPage} of {totalPages} ({totalTransactions} total)</span>
+        </div>
+        <div className="transaction-pagination">
+          <button className="secondary-button" disabled={!canGoToPreviousPage || isLoading} onClick={() => setTransactionPage(x => Math.max(1, x - 1))} type="button">
+            Previous
+          </button>
+          <button className="secondary-button" disabled={!canGoToNextPage || isLoading} onClick={() => setTransactionPage(x => x + 1)} type="button">
+            Next
+          </button>
         </div>
       </div>
 
@@ -906,16 +934,35 @@ function AmountRangeFilter({ value, onChange }: { value: AmountFilter; onChange:
 
 function TagEditor({ allTags, selectedTags, onChange }: { allTags: TransactionTag[]; selectedTags: TransactionTag[]; onChange: (tagIds: string[]) => void }) {
   const [isOpen, setIsOpen] = useState(false)
-  const [popupPosition, setPopupPosition] = useState({ left: 0, top: 0 })
+  const [popupPosition, setPopupPosition] = useState<{ left: number; maxHeight: number; placement: 'above' | 'below'; top: number }>({ left: 0, maxHeight: 280, placement: 'below', top: 0 })
   const [selectedTagIds, setSelectedTagIds] = useState(() => selectedTags.map(x => x.id))
   const containerRef = useRef<HTMLDivElement>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
-  const selectedIds = new Set(selectedTagIds)
+  const selectedIds = new Set(isOpen ? selectedTagIds : selectedTags.map(x => x.id))
   const visibleSelectedTags = allTags.filter(x => selectedIds.has(x.id))
 
-  useEffect(() => {
-    setSelectedTagIds(selectedTags.map(x => x.id))
-  }, [selectedTags])
+  const updatePopupPosition = useCallback(() => {
+    const rect = buttonRef.current?.getBoundingClientRect()
+    if (!rect) {
+      return
+    }
+
+    const viewportGap = 8
+    const triggerGap = 4
+    const popupMinWidth = 192
+    const preferredMaxHeight = 280
+    const viewportHeight = window.innerHeight
+    const viewportWidth = window.innerWidth
+    const availableBelow = viewportHeight - rect.bottom - viewportGap - triggerGap
+    const availableAbove = rect.top - viewportGap - triggerGap
+    const placement = availableBelow >= preferredMaxHeight || availableBelow >= availableAbove ? 'below' : 'above'
+    const availableHeight = placement === 'below' ? availableBelow : availableAbove
+    const maxHeight = Math.max(0, Math.min(preferredMaxHeight, availableHeight))
+    const left = Math.min(Math.max(viewportGap, rect.left), Math.max(viewportGap, viewportWidth - popupMinWidth - viewportGap))
+    const top = placement === 'below' ? rect.bottom + triggerGap : rect.top - triggerGap
+
+    setPopupPosition({ left, maxHeight, placement, top })
+  }, [])
 
   useEffect(() => {
     if (!isOpen) {
@@ -932,6 +979,20 @@ function TagEditor({ allTags, selectedTags, onChange }: { allTags: TransactionTa
     return () => document.removeEventListener('mousedown', closeOnOutsideClick)
   }, [isOpen])
 
+  useEffect(() => {
+    if (!isOpen) {
+      return
+    }
+
+    updatePopupPosition()
+    window.addEventListener('resize', updatePopupPosition)
+    window.addEventListener('scroll', updatePopupPosition, true)
+    return () => {
+      window.removeEventListener('resize', updatePopupPosition)
+      window.removeEventListener('scroll', updatePopupPosition, true)
+    }
+  }, [isOpen, updatePopupPosition])
+
   if (allTags.length === 0) {
     return <span className="empty-inline">No tags</span>
   }
@@ -941,11 +1002,8 @@ function TagEditor({ allTags, selectedTags, onChange }: { allTags: TransactionTa
       <button
         aria-label="Edit transaction tags"
         onClick={() => {
-          const rect = buttonRef.current?.getBoundingClientRect()
-          if (rect) {
-            setPopupPosition({ left: rect.left, top: rect.bottom + 4 })
-          }
-
+          updatePopupPosition()
+          setSelectedTagIds(selectedTags.map(x => x.id))
           setIsOpen(true)
         }}
         ref={buttonRef}
@@ -954,7 +1012,15 @@ function TagEditor({ allTags, selectedTags, onChange }: { allTags: TransactionTa
         {visibleSelectedTags.length > 0 ? visibleSelectedTags.map(x => <TagPill key={x.id} tag={x} />) : <Plus aria-hidden="true" />}
       </button>
       {isOpen && (
-        <div className="tag-menu" style={{ left: popupPosition.left, top: popupPosition.top }}>
+        <div
+          className="tag-menu"
+          style={{
+            left: popupPosition.left,
+            maxHeight: popupPosition.maxHeight,
+            top: popupPosition.top,
+            transform: popupPosition.placement === 'above' ? 'translateY(-100%)' : undefined,
+          }}
+        >
           {allTags.map(x => (
             <label key={x.id}>
               <input
@@ -1150,10 +1216,10 @@ async function getBillingAccess() {
   })
 }
 
-async function getTransactions(pageSize: number) {
-  return httpClient<Transaction[]>({
+async function getTransactions(page: number, pageSize: number) {
+  return httpClient<TransactionPage>({
     method: 'GET',
-    url: `/api/transactions?pageSize=${pageSize}`,
+    url: `/api/transactions?page=${page}&pageSize=${pageSize}`,
   })
 }
 
@@ -1321,6 +1387,10 @@ function getMerchantKey(merchantName: string) {
     .split(' ')
     .filter(x => x && !ignoredTokens.has(x))
     .join(' ')
+}
+
+function matchesMerchantRule(transactionMerchantKey: string, ruleMerchantKey: string) {
+  return transactionMerchantKey === ruleMerchantKey || transactionMerchantKey.startsWith(`${ruleMerchantKey} `)
 }
 
 const rootRoute = createRootRoute({ component: DashboardShell })

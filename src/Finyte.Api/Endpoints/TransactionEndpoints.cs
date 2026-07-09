@@ -30,6 +30,7 @@ public static partial class TransactionEndpoints
     }
 
     private static async Task<IResult> GetTransactions(
+        int? page,
         int? pageSize,
         TenantResolver tenantResolver,
         HttpContext httpContext,
@@ -44,12 +45,16 @@ public static partial class TransactionEndpoints
             return TypedResults.Problem("An active subscription is required to view transactions.", statusCode: StatusCodes.Status402PaymentRequired);
         }
 
-        var take = Math.Clamp(pageSize ?? 100, 1, 500);
-        var transactions = await dbContext.Transactions
+        var currentPage = Math.Max(page ?? 1, 1);
+        var take = Math.Clamp(pageSize ?? 25, 1, 250);
+        var query = dbContext.Transactions
             .AsNoTracking()
-            .Where(x => x.TenantId == currentTenant.TenantId)
+            .Where(x => x.TenantId == currentTenant.TenantId);
+        var totalCount = await query.CountAsync(cancellationToken);
+        var transactions = await query
             .OrderByDescending(x => x.PostedAt ?? x.CreatedAt)
             .ThenByDescending(x => x.CreatedAt)
+            .Skip((currentPage - 1) * take)
             .Take(take)
             .Select(x => new TransactionResponse(
                 x.Id,
@@ -67,7 +72,7 @@ public static partial class TransactionEndpoints
                     .ToList()))
             .ToListAsync(cancellationToken);
 
-        return TypedResults.Ok<IReadOnlyList<TransactionResponse>>(transactions);
+        return TypedResults.Ok(new TransactionPageResponse(transactions, currentPage, take, totalCount));
     }
 
     private static async Task<Ok<IReadOnlyList<TransactionTagResponse>>> GetTags(
@@ -297,11 +302,11 @@ public static partial class TransactionEndpoints
     {
         var now = DateTimeOffset.UtcNow;
         var transactionIds = await dbContext.Transactions
-            .Where(x => x.TenantId == tenantId && x.MerchantName != null)
-            .Select(x => new { x.Id, x.MerchantName })
+            .Where(x => x.TenantId == tenantId)
+            .Select(x => new { x.Id, x.MerchantName, x.Description })
             .ToListAsync(cancellationToken);
         var matchingIds = transactionIds
-            .Where(x => GetMerchantKey(x.MerchantName!) == merchantKey)
+            .Where(x => MatchesMerchantRule(GetTransactionMerchantKey(x.MerchantName, x.Description), merchantKey))
             .Select(x => x.Id)
             .ToList();
         var existingIds = await dbContext.TransactionTagAssignments
@@ -352,6 +357,18 @@ public static partial class TransactionEndpoints
                 .Where(x => !ignoredTokens.Contains(x)));
     }
 
+    private static string GetTransactionMerchantKey(string? merchantName, string? description)
+    {
+        var value = string.IsNullOrWhiteSpace(merchantName) ? description : merchantName;
+        return string.IsNullOrWhiteSpace(value) ? "" : GetMerchantKey(value);
+    }
+
+    private static bool MatchesMerchantRule(string transactionMerchantKey, string ruleMerchantKey)
+    {
+        return transactionMerchantKey == ruleMerchantKey
+            || transactionMerchantKey.StartsWith($"{ruleMerchantKey} ", StringComparison.Ordinal);
+    }
+
     private static long ToMinorUnits(decimal amount)
     {
         return (long)Math.Round(amount * 100, MidpointRounding.AwayFromZero);
@@ -374,6 +391,12 @@ public static partial class TransactionEndpoints
         long AmountMinorUnits,
         string Currency,
         IReadOnlyList<TransactionTagResponse> Tags);
+
+    private sealed record TransactionPageResponse(
+        IReadOnlyList<TransactionResponse> Items,
+        int Page,
+        int PageSize,
+        int TotalCount);
 
     private sealed record TransactionTagResponse(Guid Id, string Name, string Color);
 
