@@ -12,6 +12,7 @@ public static class RouteBuilder
         app.MapBankingAccountEndpoints();
         app.MapTransactionEndpoints();
         app.MapOverviewEndpoints();
+        app.MapCashFlowEndpoints();
 
         return app;
     }

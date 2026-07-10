@@ -1,102 +1,19 @@
 import { SignIn, UserButton, useAuth } from '@clerk/react'
 import { keepPreviousData, QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { createRootRoute, createRoute, createRouter, Link, Outlet, RouterProvider } from '@tanstack/react-router'
+import { createRootRoute, createRoute, createRouter, Link, Outlet, RouterProvider, useRouterState } from '@tanstack/react-router'
 import { createColumnHelper, flexRender, getCoreRowModel, getFilteredRowModel, type ColumnFiltersState, useReactTable } from '@tanstack/react-table'
-import { Activity, Banknote, CalendarClock, CreditCard, Home, Loader2, Plus, ReceiptText, RefreshCcw, Settings, SlidersHorizontal, Tags, Trash2, WalletCards, X } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import { getAccounts, getAppStatus, type AccountResponse } from './api/generated/finyteApi'
+import { Activity, Banknote, CreditCard, Home, Menu, Plus, ReceiptText, Settings, SlidersHorizontal, Tags, Trash2, X } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { getAccounts, getAppStatus } from './api/generated/finyteApi'
 import { httpClient } from './api/httpClient'
 import { AuthTokenProvider } from './auth/AuthTokenProvider'
+import { BillingPage } from './billing/BillingAccessPanel'
+import { DashboardPage } from './dashboard/DashboardPage'
+import { TransactionAccountChip, TransactionAmount } from './transactions/TransactionCard'
+import { TransactionCardList } from './transactions/TransactionCardList'
+import { TransactionPagination } from './transactions/TransactionPagination'
+import type { Transaction, TransactionPage, TransactionTag } from './transactions/types'
 import './App.css'
-
-type OverviewResponse = {
-  scope: {
-    accountId: string | null
-    label: string
-  }
-  monthKey: string
-  currency: string
-  accountBalanceMinorUnits: number
-  currentMonthSpendMinorUnits: number
-  averageDailySpendMinorUnits: number
-  cashFlowRace: {
-    incomeMinorUnits: number
-    expenseMinorUnits: number
-    netMinorUnits: number
-  }
-  dailyCashFlow: {
-    date: string
-    day: number
-    incomeMinorUnits: number
-    expenseMinorUnits: number
-  }[]
-  monthlySpendByTag: {
-    tagId: string | null
-    name: string
-    color: string
-    amountMinorUnits: number
-    percentage: number
-  }[]
-  freshness: {
-    calculatedAt: string
-    sourceWatermark: string | null
-    isRefreshing: boolean
-  }
-}
-
-type OverviewAccountOption = {
-  id: string
-  label: string
-}
-
-type CheckoutSessionResponse = {
-  url: string
-}
-
-type PortalSessionResponse = {
-  url: string
-}
-
-type BillingAccessResponse = {
-  hasAccess: boolean
-  status: string | null
-  stripePriceId: string | null
-  currentPeriodEnd: string | null
-  cancelAtPeriodEnd: boolean
-}
-
-type BillingPlan = {
-  key: string
-  name: string
-  cadence: string
-  detail: string
-}
-
-type Transaction = {
-  id: string
-  accountId: string
-  accountDisplayName: string
-  postedDate: string
-  description: string
-  merchantName: string | null
-  category: string
-  amountMinorUnits: number
-  currency: string
-  tags: TransactionTag[]
-}
-
-type TransactionPage = {
-  items: Transaction[]
-  page: number
-  pageSize: number
-  totalCount: number
-}
-
-type TransactionTag = {
-  id: string
-  name: string
-  color: string
-}
 
 type MerchantTagRule = {
   id: string
@@ -129,16 +46,11 @@ type CreateMerchantRuleInput = {
   tagId: string
 }
 
-const allAccountsValue = 'all'
 const queryClient = new QueryClient()
 const devAuthEnabled = import.meta.env.VITE_DEV_AUTH === 'true'
 const tagColorOptions = ['#bae6fd', '#bbf7d0', '#fde68a', '#fecdd3', '#ddd6fe', '#fed7aa', '#ccfbf1', '#e9d5ff']
 const transactionsPageSize = 25
 const transactionColumnHelper = createColumnHelper<Transaction>()
-const billingPlans: BillingPlan[] = [
-  { key: 'Monthly', name: 'Monthly', cadence: 'Month to month', detail: 'Flexible access for early households.' },
-  { key: 'Yearly', name: 'Yearly', cadence: 'Annual', detail: 'One yearly subscription for ongoing access.' },
-]
 
 function DashboardShell() {
   if (devAuthEnabled) {
@@ -167,34 +79,46 @@ function ClerkDashboardShell() {
 }
 
 function SignedInShell() {
+  const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const closeMenu = useCallback(() => setIsMenuOpen(false), [])
+  const pathname = useRouterState({ select: x => x.location.pathname })
+  const statusQuery = useQuery({
+    queryKey: ['app-status'],
+    queryFn: () => getAppStatus(),
+    staleTime: 60_000,
+  })
+  const isApiConnected = statusQuery.data?.databaseAvailable === true
+
   return (
     <div className="app-shell">
-      <aside className="sidebar">
+      <header className="mobile-header">
         <div className="brand">
-          <Banknote aria-hidden="true" />
-          <span>Finyte</span>
+          <div className={isApiConnected ? 'logo-placeholder is-connected' : 'logo-placeholder is-disconnected'} aria-hidden="true" />
+          <span>{getPageTitle(pathname)}</span>
+        </div>
+        <button
+          aria-controls="app-sidebar"
+          aria-expanded={isMenuOpen}
+          aria-label="Open navigation menu"
+          className="mobile-menu-button"
+          onClick={() => setIsMenuOpen(true)}
+          type="button"
+        >
+          <Menu aria-hidden="true" className="mobile-menu-icon" size={32} strokeWidth={2.6} />
+        </button>
+      </header>
+
+      {isMenuOpen && <button aria-label="Close navigation menu" className="nav-backdrop" onClick={closeMenu} type="button" />}
+
+      <aside className={isMenuOpen ? 'sidebar is-open' : 'sidebar'} id="app-sidebar">
+        <div className="sidebar-header">
+          <div className="brand">
+            <Banknote aria-hidden="true" />
+            <span>Finyte</span>
+          </div>
         </div>
         <nav>
-          <Link to="/" activeProps={{ className: 'active' }}>
-            <Home aria-hidden="true" />
-            Dashboard
-          </Link>
-          <Link to="/connections" activeProps={{ className: 'active' }}>
-            <Activity aria-hidden="true" />
-            Connections
-          </Link>
-          <Link to="/transactions" activeProps={{ className: 'active' }}>
-            <ReceiptText aria-hidden="true" />
-            Transactions
-          </Link>
-          <Link to="/billing" activeProps={{ className: 'active' }}>
-            <CreditCard aria-hidden="true" />
-            Billing
-          </Link>
-          <Link to="/settings" activeProps={{ className: 'active' }}>
-            <Settings aria-hidden="true" />
-            Settings
-          </Link>
+          <AppNavLinks onNavigate={closeMenu} />
         </nav>
         <AuthControls />
       </aside>
@@ -203,6 +127,53 @@ function SignedInShell() {
       </main>
     </div>
   )
+}
+
+function AppNavLinks({ onNavigate }: { onNavigate?: () => void }) {
+  return (
+    <>
+      <Link to="/" activeProps={{ className: 'active' }} onClick={onNavigate}>
+        <Home aria-hidden="true" />
+        Dashboard
+      </Link>
+      <Link to="/transactions" activeProps={{ className: 'active' }} onClick={onNavigate}>
+        <ReceiptText aria-hidden="true" />
+        Transactions
+      </Link>
+      <Link to="/connections" activeProps={{ className: 'active' }} onClick={onNavigate}>
+        <Activity aria-hidden="true" />
+        Connections
+      </Link>
+      <Link to="/billing" activeProps={{ className: 'active' }} onClick={onNavigate}>
+        <CreditCard aria-hidden="true" />
+        Billing
+      </Link>
+      <Link to="/settings" activeProps={{ className: 'active' }} onClick={onNavigate}>
+        <Settings aria-hidden="true" />
+        Settings
+      </Link>
+    </>
+  )
+}
+
+function getPageTitle(pathname: string) {
+  if (pathname.startsWith('/connections')) {
+    return 'Connections'
+  }
+
+  if (pathname.startsWith('/transactions')) {
+    return 'Transactions'
+  }
+
+  if (pathname.startsWith('/billing')) {
+    return 'Billing'
+  }
+
+  if (pathname.startsWith('/settings')) {
+    return 'Settings'
+  }
+
+  return 'Dashboard'
 }
 
 function AuthControls() {
@@ -226,266 +197,6 @@ function SignInPage() {
     <main className="auth-page">
       <SignIn />
     </main>
-  )
-}
-
-function DashboardPage() {
-  const [selectedAccountId, setSelectedAccountId] = useState(allAccountsValue)
-  const queryClient = useQueryClient()
-  const statusQuery = useQuery({
-    queryKey: ['app-status'],
-    queryFn: () => getAppStatus(),
-    staleTime: 60_000,
-  })
-  const billingAccessQuery = useQuery({
-    queryKey: ['billing-access'],
-    queryFn: () => getBillingAccess(),
-    staleTime: 30_000,
-  })
-  const hasBillingAccess = billingAccessQuery.data?.hasAccess === true
-  const accountsQuery = useQuery({
-    queryKey: ['accounts'],
-    queryFn: () => getAccounts(),
-    enabled: hasBillingAccess,
-    staleTime: 60_000,
-  })
-  const accountId = selectedAccountId === allAccountsValue ? null : selectedAccountId
-  const overviewQuery = useQuery({
-    queryKey: getOverviewQueryKey(accountId),
-    queryFn: () => getOverview(accountId),
-    enabled: hasBillingAccess,
-    placeholderData: keepPreviousData,
-    staleTime: 60_000,
-  })
-  const refreshOverviewMutation = useMutation({
-    mutationFn: () => refreshOverview(accountId),
-    onSuccess: x => {
-      queryClient.setQueryData(getOverviewQueryKey(accountId), x)
-    },
-  })
-  const accountOptions = useMemo<OverviewAccountOption[]>(() => [
-    { id: allAccountsValue, label: 'All accounts' },
-    ...(accountsQuery.data ?? []).map(x => ({ id: x.id, label: x.name })),
-  ], [accountsQuery.data])
-
-  useEffect(() => {
-    if (!hasBillingAccess || !accountsQuery.data) {
-      return
-    }
-
-    const ids = [null, ...accountsQuery.data.map(x => x.id)]
-    for (const id of ids) {
-      queryClient.prefetchQuery({
-        queryKey: getOverviewQueryKey(id),
-        queryFn: () => getOverview(id),
-        staleTime: 60_000,
-      })
-    }
-  }, [accountsQuery.data, hasBillingAccess, queryClient])
-
-  const overview = overviewQuery.data ?? createEmptyOverview(accountId, selectedAccountId, accountsQuery.data)
-  const isLoading = billingAccessQuery.isLoading || overviewQuery.isLoading || accountsQuery.isLoading
-
-  if (!billingAccessQuery.isLoading && !hasBillingAccess) {
-    return <LockedDashboard statusQuery={statusQuery.data?.databaseAvailable} />
-  }
-
-  return (
-    <section className="page">
-      <header className="page-header overview-header">
-        <div>
-          <p>Household dashboard</p>
-          <h1>Financial overview</h1>
-        </div>
-        <div className="overview-actions">
-          <label>
-            <span>Account</span>
-            <select value={selectedAccountId} onChange={x => setSelectedAccountId(x.target.value)}>
-              {accountOptions.map(x => <option key={x.id} value={x.id}>{x.label}</option>)}
-            </select>
-          </label>
-          <button
-            aria-label="Refresh overview"
-            className="icon-button"
-            disabled={overviewQuery.isFetching || refreshOverviewMutation.isPending}
-            onClick={() => refreshOverviewMutation.mutate()}
-            title="Refresh overview"
-            type="button"
-          >
-            <RefreshCcw aria-hidden="true" />
-          </button>
-        </div>
-      </header>
-
-      <div className="overview-status-row">
-        <div className="status-pill">
-          <CalendarClock aria-hidden="true" />
-          {statusQuery.data?.databaseAvailable ? 'API connected' : 'Waiting for API'}
-        </div>
-        <div className={overviewQuery.isFetching || refreshOverviewMutation.isPending ? 'freshness is-refreshing' : 'freshness'}>
-          {isLoading ? 'Loading overview' : `Updated ${formatDateTime(overview.freshness.calculatedAt)}`}
-        </div>
-      </div>
-
-      <div className="metric-grid overview-metrics">
-        <MetricCard label={overview.scope.label} value={currency(overview.accountBalanceMinorUnits, overview.currency)} />
-        <MetricCard label="This month spent" value={currency(overview.currentMonthSpendMinorUnits, overview.currency)} />
-        <MetricCard label="Avg daily spend" value={currency(overview.averageDailySpendMinorUnits, overview.currency)} />
-      </div>
-
-      <section className="panel">
-        <div className="panel-header">
-          <div>
-            <p>Monthly cash flow race</p>
-            <h2>Income vs expenses</h2>
-          </div>
-          <WalletCards aria-hidden="true" />
-        </div>
-        <CashFlowRace overview={overview} />
-      </section>
-
-      <div className="overview-grid">
-        <section className="panel">
-          <div className="panel-header">
-            <div>
-              <p>{formatMonth(overview.monthKey)}</p>
-              <h2>Daily cash flow</h2>
-            </div>
-          </div>
-          <DailyCashFlowChart days={overview.dailyCashFlow} currencyCode={overview.currency} />
-        </section>
-
-        <section className="panel">
-          <div className="panel-header">
-            <div>
-              <p>{formatMonth(overview.monthKey)}</p>
-              <h2>Spend by tag</h2>
-            </div>
-          </div>
-          <SpendByTagChart tags={overview.monthlySpendByTag} currencyCode={overview.currency} />
-        </section>
-      </div>
-    </section>
-  )
-}
-
-function LockedDashboard({ statusQuery }: { statusQuery?: boolean }) {
-  return (
-    <section className="page">
-      <header className="page-header">
-        <div>
-          <p>Household dashboard</p>
-          <h1>Financial overview</h1>
-        </div>
-        <div className="status-pill">
-          <CalendarClock aria-hidden="true" />
-          {statusQuery ? 'API connected' : 'Waiting for API'}
-        </div>
-      </header>
-
-      <BillingAccessPanel compact />
-    </section>
-  )
-}
-
-function MetricCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
-  )
-}
-
-function CashFlowRace({ overview }: { overview: OverviewResponse }) {
-  const income = overview.cashFlowRace.incomeMinorUnits
-  const expenses = overview.cashFlowRace.expenseMinorUnits
-  const total = Math.max(income + expenses, 1)
-  const incomePercent = (income / total) * 100
-  const expensePercent = (expenses / total) * 100
-
-  return (
-    <div className="cash-flow-race">
-      <div className="cash-flow-values">
-        <div>
-          <span>Income</span>
-          <strong>{currency(income, overview.currency)}</strong>
-        </div>
-        <div>
-          <span>Net</span>
-          <strong>{signedCurrency(overview.cashFlowRace.netMinorUnits, overview.currency)}</strong>
-        </div>
-        <div>
-          <span>Expenses</span>
-          <strong>{currency(expenses, overview.currency)}</strong>
-        </div>
-      </div>
-      <div className="race-track" aria-label="Income vs expenses">
-        <div className="race-income" style={{ width: `${incomePercent}%` }} />
-        <div className="race-expense" style={{ width: `${expensePercent}%` }} />
-      </div>
-    </div>
-  )
-}
-
-function DailyCashFlowChart({ days, currencyCode }: { days: OverviewResponse['dailyCashFlow']; currencyCode: string }) {
-  const max = Math.max(...days.map(x => x.incomeMinorUnits + x.expenseMinorUnits), 1)
-
-  return (
-    <div className="daily-chart">
-      <div className="daily-bars" style={{ gridTemplateColumns: `repeat(${Math.max(days.length, 1)}, minmax(0, 1fr))` }}>
-        {days.map(x => {
-          const incomeHeight = Math.max((x.incomeMinorUnits / max) * 100, x.incomeMinorUnits > 0 ? 3 : 0)
-          const expenseHeight = Math.max((x.expenseMinorUnits / max) * 100, x.expenseMinorUnits > 0 ? 3 : 0)
-          return (
-            <div className="daily-bar" key={x.date}>
-              <div className="daily-tooltip">
-                <strong>{formatChartDate(x.date)}</strong>
-                <span>Income {currency(x.incomeMinorUnits, currencyCode)}</span>
-                <span>Expense {currency(x.expenseMinorUnits, currencyCode)}</span>
-              </div>
-              <div className="daily-bar-stack">
-                {x.incomeMinorUnits > 0 && <div className="daily-income" style={{ height: `${incomeHeight}%` }} />}
-                {x.expenseMinorUnits > 0 && <div className="daily-expense" style={{ height: `${expenseHeight}%` }} />}
-              </div>
-              <span>{x.day === 1 || x.day % 7 === 0 ? x.day : ''}</span>
-            </div>
-          )
-        })}
-      </div>
-      <div className="chart-legend">
-        <span><i className="legend-income" />Income</span>
-        <span><i className="legend-expense" />Expense</span>
-      </div>
-    </div>
-  )
-}
-
-function SpendByTagChart({ tags, currencyCode }: { tags: OverviewResponse['monthlySpendByTag']; currencyCode: string }) {
-  const total = tags.reduce((x, y) => x + y.amountMinorUnits, 0)
-  const primary = tags[0]
-  const background = total > 0
-    ? `conic-gradient(${getPieStops(tags).join(', ')})`
-    : 'conic-gradient(#36393d 0 100%)'
-
-  return (
-    <div className="tag-chart">
-      <div className="pie-chart" style={{ background }}>
-        <div>
-          <span>Total</span>
-          <strong>{currency(total, currencyCode)}</strong>
-        </div>
-      </div>
-      <div className="tag-list">
-        {tags.map(x => (
-          <div key={x.tagId ?? 'untagged'}>
-            <span><i style={{ backgroundColor: x.color }} />{x.name}</span>
-            <strong>{currency(x.amountMinorUnits, currencyCode)}</strong>
-          </div>
-        ))}
-        {primary && <p>{primary.name} is currently {primary.percentage.toFixed(1)}% of tracked monthly spend.</p>}
-      </div>
-    </div>
   )
 }
 
@@ -639,9 +350,7 @@ function TransactionsPage() {
     transactionColumnHelper.accessor('accountId', {
       header: 'Account',
       cell: x => (
-        <span className="account-chip" style={{ '--account-hue': getAccountHue(x.getValue()) } as CSSProperties}>
-          {x.row.original.accountDisplayName}
-        </span>
+        <TransactionAccountChip accountId={x.getValue()}>{x.row.original.accountDisplayName}</TransactionAccountChip>
       ),
       filterFn: (x, y, z: string) => x.getValue<string>(y) === z,
     }),
@@ -672,7 +381,7 @@ function TransactionsPage() {
     }),
     transactionColumnHelper.accessor('amountMinorUnits', {
       header: 'Amount',
-      cell: x => <span className={x.getValue() < 0 ? 'amount-negative' : 'amount-positive'}>{currency(x.getValue(), x.row.original.currency)}</span>,
+      cell: x => <TransactionAmount amountMinorUnits={x.getValue()} currencyCode={x.row.original.currency} />,
       filterFn: (x, y, z: AmountFilter) => {
         const value = x.getValue<number>(y) / 100
         const min = z.min ? Number(z.min) : null
@@ -693,8 +402,7 @@ function TransactionsPage() {
   const isLoading = transactionsQuery.isLoading || transactionsQuery.isFetching
   const totalTransactions = transactionsQuery.data?.totalCount ?? 0
   const totalPages = Math.max(Math.ceil(totalTransactions / transactionsPageSize), 1)
-  const canGoToPreviousPage = transactionPage > 1
-  const canGoToNextPage = transactionPage < totalPages
+  const visibleTransactions = table.getRowModel().rows.map(x => x.original)
 
   return (
     <section className="page transactions-page">
@@ -718,21 +426,6 @@ function TransactionsPage() {
           </button>
         </div>
       </header>
-
-      <div className="transactions-toolbar">
-        <div>
-          <Loader2 className={isLoading ? 'spin-visible' : ''} aria-hidden="true" />
-          <span>Showing {table.getRowModel().rows.length} of {transactionsQuery.data?.items.length ?? 0} on page {transactionPage} of {totalPages} ({totalTransactions} total)</span>
-        </div>
-        <div className="transaction-pagination">
-          <button className="secondary-button" disabled={!canGoToPreviousPage || isLoading} onClick={() => setTransactionPage(x => Math.max(1, x - 1))} type="button">
-            Previous
-          </button>
-          <button className="secondary-button" disabled={!canGoToNextPage || isLoading} onClick={() => setTransactionPage(x => x + 1)} type="button">
-            Next
-          </button>
-        </div>
-      </div>
 
       {showTagManagement && (
         <section className="panel tag-management-panel">
@@ -857,6 +550,19 @@ function TransactionsPage() {
         </section>
       )}
 
+      <TransactionCardList
+        emptyMessage={hasFilters ? 'No transactions match the current filters.' : 'No transactions imported yet.'}
+        isLoading={isLoading}
+        renderTags={x => (
+          <TagEditor
+            allTags={tagsQuery.data ?? []}
+            selectedTags={x.tags}
+            onChange={y => setTransactionTagIds(x.id, y)}
+          />
+        )}
+        transactions={visibleTransactions}
+      />
+
       <section className="transaction-table-section">
         <div className={isLoading ? 'table-progress is-visible' : 'table-progress'} />
         <table>
@@ -877,6 +583,16 @@ function TransactionsPage() {
           </tbody>
         </table>
       </section>
+
+      <TransactionPagination
+        isLoading={isLoading}
+        onNext={() => setTransactionPage(x => x + 1)}
+        onPrevious={() => setTransactionPage(x => Math.max(1, x - 1))}
+        page={transactionPage}
+        totalCount={totalTransactions}
+        totalPages={totalPages}
+        visibleCount={visibleTransactions.length}
+      />
     </section>
   )
 }
@@ -891,7 +607,11 @@ function FilterField({ label, children, className }: { label: string; children: 
 }
 
 function DebouncedFilterInput({ value, onChange, placeholder }: { value: string; onChange: (value: string) => void; placeholder: string }) {
-  const [draftValue, setDraftValue] = useState(value)
+  return <DebouncedFilterInputDraft initialValue={value} key={value} onChange={onChange} placeholder={placeholder} />
+}
+
+function DebouncedFilterInputDraft({ initialValue, onChange, placeholder }: { initialValue: string; onChange: (value: string) => void; placeholder: string }) {
+  const [draftValue, setDraftValue] = useState(initialValue)
   const onChangeRef = useRef(onChange)
 
   useEffect(() => {
@@ -899,17 +619,13 @@ function DebouncedFilterInput({ value, onChange, placeholder }: { value: string;
   }, [onChange])
 
   useEffect(() => {
-    setDraftValue(value)
-  }, [value])
-
-  useEffect(() => {
-    if (draftValue === value) {
+    if (draftValue === initialValue) {
       return
     }
 
     const timeout = window.setTimeout(() => onChangeRef.current(draftValue), 150)
     return () => window.clearTimeout(timeout)
-  }, [draftValue, value])
+  }, [draftValue, initialValue])
 
   return <input onChange={x => setDraftValue(x.target.value)} placeholder={placeholder} value={draftValue} />
 }
@@ -1063,98 +779,6 @@ function ConnectionsPage() {
   )
 }
 
-function BillingPage() {
-  return (
-    <section className="page billing-page">
-      <header className="page-header">
-        <div>
-          <p>Subscription</p>
-          <h1>Billing</h1>
-        </div>
-      </header>
-
-      <BillingAccessPanel />
-    </section>
-  )
-}
-
-function BillingAccessPanel({ compact = false }: { compact?: boolean }) {
-  const [selectedPlan, setSelectedPlan] = useState(billingPlans[0]?.key ?? 'Monthly')
-  const [message, setMessage] = useState<string | null>(null)
-  const billingAccessQuery = useQuery({
-    queryKey: ['billing-access'],
-    queryFn: () => getBillingAccess(),
-    staleTime: 30_000,
-  })
-  const checkoutMutation = useMutation({
-    mutationFn: (plan: string) => createCheckoutSession(plan),
-    onError: () => setMessage('Checkout is not available right now.'),
-    onSuccess: x => {
-      window.location.assign(x.url)
-    },
-  })
-  const portalMutation = useMutation({
-    mutationFn: () => createPortalSession(),
-    onError: () => setMessage('Billing portal is not available yet.'),
-    onSuccess: x => {
-      window.location.assign(x.url)
-    },
-  })
-  const access = billingAccessQuery.data
-  const accessLabel = access?.hasAccess
-    ? access.cancelAtPeriodEnd && access.currentPeriodEnd
-      ? `Access active until ${formatDate(access.currentPeriodEnd)}`
-      : 'Access active'
-    : 'Subscription required'
-
-  return (
-    <section className={compact ? 'panel billing-panel billing-panel-locked' : 'panel billing-panel'}>
-      <div className="panel-header">
-        <div>
-          <p>{accessLabel}</p>
-          <h2>{access?.hasAccess ? 'Manage subscription' : 'Choose access'}</h2>
-        </div>
-        <CreditCard aria-hidden="true" />
-      </div>
-
-      <div className="billing-plan-grid">
-        {billingPlans.map(x => (
-          <button
-            aria-pressed={selectedPlan === x.key}
-            className={selectedPlan === x.key ? 'billing-plan is-selected' : 'billing-plan'}
-            key={x.key}
-            onClick={() => setSelectedPlan(x.key)}
-            type="button"
-          >
-            <span>{x.name}</span>
-            <strong>{x.cadence}</strong>
-            <small>{x.detail}</small>
-          </button>
-        ))}
-      </div>
-
-      <div className="billing-actions">
-        <button
-          disabled={checkoutMutation.isPending}
-          onClick={() => checkoutMutation.mutate(selectedPlan)}
-          type="button"
-        >
-          {access?.hasAccess ? 'Change plan' : 'Start checkout'}
-        </button>
-        <button
-          className="secondary-button"
-          disabled={portalMutation.isPending}
-          onClick={() => portalMutation.mutate()}
-          type="button"
-        >
-          Manage billing
-        </button>
-        {message && <p>{message}</p>}
-      </div>
-    </section>
-  )
-}
-
 function SettingsPage() {
   return (
     <section className="page">
@@ -1167,53 +791,6 @@ function SettingsPage() {
       <button type="button">Manage security</button>
     </section>
   )
-}
-
-async function getOverview(accountId: string | null) {
-  const params = new URLSearchParams()
-  if (accountId) {
-    params.set('accountId', accountId)
-  }
-
-  return httpClient<OverviewResponse>({
-    method: 'GET',
-    url: `/api/overview${params.size > 0 ? `?${params}` : ''}`,
-  })
-}
-
-async function refreshOverview(accountId: string | null) {
-  const params = new URLSearchParams()
-  if (accountId) {
-    params.set('accountId', accountId)
-  }
-
-  return httpClient<OverviewResponse>({
-    method: 'POST',
-    url: `/api/overview/refresh${params.size > 0 ? `?${params}` : ''}`,
-  })
-}
-
-async function createCheckoutSession(plan: string) {
-  return httpClient<CheckoutSessionResponse>({
-    data: { plan },
-    headers: { 'Content-Type': 'application/json' },
-    method: 'POST',
-    url: '/api/billing/checkout-session',
-  })
-}
-
-async function createPortalSession() {
-  return httpClient<PortalSessionResponse>({
-    method: 'POST',
-    url: '/api/billing/portal-session',
-  })
-}
-
-async function getBillingAccess() {
-  return httpClient<BillingAccessResponse>({
-    method: 'GET',
-    url: '/api/billing/access',
-  })
 }
 
 async function getTransactions(page: number, pageSize: number) {
@@ -1278,69 +855,6 @@ async function deleteMerchantRule(ruleId: string) {
   })
 }
 
-function getOverviewQueryKey(accountId: string | null) {
-  return ['overview', accountId ?? allAccountsValue] as const
-}
-
-function createEmptyOverview(accountId: string | null, selectedAccountId: string, accounts?: AccountResponse[]): OverviewResponse {
-  const monthKey = new Date().toISOString().slice(0, 7)
-  const label = accountId
-    ? accounts?.find(x => x.id === selectedAccountId)?.name ?? 'Selected account'
-    : 'All accounts'
-
-  return {
-    scope: { accountId, label },
-    monthKey,
-    currency: 'AUD',
-    accountBalanceMinorUnits: 0,
-    currentMonthSpendMinorUnits: 0,
-    averageDailySpendMinorUnits: 0,
-    cashFlowRace: { incomeMinorUnits: 0, expenseMinorUnits: 0, netMinorUnits: 0 },
-    dailyCashFlow: [],
-    monthlySpendByTag: [{ tagId: null, name: 'Untagged', color: '#94a3b8', amountMinorUnits: 0, percentage: 0 }],
-    freshness: { calculatedAt: new Date().toISOString(), sourceWatermark: null, isRefreshing: false },
-  }
-}
-
-function getPieStops(tags: OverviewResponse['monthlySpendByTag']) {
-  let start = 0
-  return tags.map(x => {
-    const end = start + x.percentage
-    const stop = `${x.color} ${start}% ${end}%`
-    start = end
-    return stop
-  })
-}
-
-function currency(value: number, currencyCode: string) {
-  return new Intl.NumberFormat(undefined, {
-    currency: currencyCode,
-    maximumFractionDigits: 0,
-    style: 'currency',
-  }).format(value / 100)
-}
-
-function signedCurrency(value: number, currencyCode: string) {
-  const formatted = currency(Math.abs(value), currencyCode)
-  return value > 0 ? `+${formatted}` : value < 0 ? `-${formatted}` : formatted
-}
-
-function formatDateTime(value: string) {
-  return new Date(value).toLocaleString(undefined, { day: 'numeric', hour: 'numeric', minute: '2-digit', month: 'short' })
-}
-
-function formatDate(value: string) {
-  return new Date(value).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
-}
-
-function formatChartDate(value: string) {
-  return new Date(`${value}T00:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
-}
-
-function formatMonth(value: string) {
-  return new Date(`${value}-01T00:00:00`).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
-}
-
 function uniqueTagsById(tags: TransactionTag[]) {
   return tags.filter((x, index) => tags.findIndex(y => y.id === x.id) === index)
 }
@@ -1360,21 +874,6 @@ function getReadableTextColor(backgroundColor: string) {
   const blue = Number.parseInt(hex.slice(4, 6), 16)
   const luminance = (red * 0.299 + green * 0.587 + blue * 0.114) / 255
   return luminance > 0.65 ? '#111827' : '#ffffff'
-}
-
-function getAccountHue(accountId: string) {
-  const hues = [172, 205, 237, 268, 322, 24, 48, 142]
-  return `${hues[getStableIndex(accountId, hues.length)]}`
-}
-
-function getStableIndex(value: string, length: number) {
-  let hash = 0
-
-  for (const character of value) {
-    hash = (hash * 31 + character.charCodeAt(0)) % length
-  }
-
-  return hash
 }
 
 function getMerchantKey(merchantName: string) {
