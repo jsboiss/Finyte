@@ -103,22 +103,27 @@ function FamilyProvisioner() {
     queryKey: ['current-user', organization?.id],
     queryFn: getCurrentUser,
   })
-  const provisionFamilyMutation = useMutation({
+  const {
+    error: provisionFamilyError,
+    isIdle: isProvisionFamilyIdle,
+    isPending: isProvisioningFamily,
+    mutate: provisionCurrentFamily,
+  } = useMutation({
     mutationFn: () => provisionFamily(organization?.name ?? 'My family'),
     onSuccess: currentUser => queryClient.setQueryData(['current-user', organization?.id], currentUser),
   })
 
   useEffect(() => {
-    if (currentUserQuery.data && !currentUserQuery.data.onboarding.hasFamily && provisionFamilyMutation.isIdle) {
-      provisionFamilyMutation.mutate()
+    if (currentUserQuery.data && !currentUserQuery.data.onboarding.hasFamily && isProvisionFamilyIdle) {
+      provisionCurrentFamily()
     }
-  }, [currentUserQuery.data, provisionFamilyMutation.isIdle, provisionFamilyMutation.mutate])
+  }, [currentUserQuery.data, isProvisionFamilyIdle, provisionCurrentFamily])
 
-  if (currentUserQuery.isLoading || provisionFamilyMutation.isPending || !currentUserQuery.data?.onboarding.hasFamily) {
+  if (currentUserQuery.isLoading || isProvisioningFamily || !currentUserQuery.data?.onboarding.hasFamily) {
     return (
       <main className="auth-page">
         <div className="auth-loading">
-          {currentUserQuery.isError || provisionFamilyMutation.isError ? 'Family setup failed. Refresh to try again.' : 'Setting up your family'}
+          {currentUserQuery.isError || provisionFamilyError ? 'Family setup failed. Refresh to try again.' : 'Setting up your family'}
         </div>
       </main>
     )
@@ -465,6 +470,8 @@ function TransactionsPage() {
       },
     }),
   ], [setTransactionTagIds, tagsQuery.data])
+  // TanStack Table intentionally returns stateful functions that React Compiler cannot memoize.
+  // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data: transactionsQuery.data?.items ?? [],
     columns,
