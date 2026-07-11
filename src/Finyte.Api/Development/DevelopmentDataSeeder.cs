@@ -85,6 +85,8 @@ public sealed class DevelopmentDataSeedRunner(FinyteDbContext dbContext, IOvervi
             Id = Guid.Parse("11111111-1111-1111-1111-111111111112"),
             TenantId = tenant.Id,
             UserId = "dev-user",
+            DisplayName = "Dev User",
+            Email = "dev@finyte.local",
             Role = TenantRole.Owner,
             CreatedAt = now.AddMonths(-3)
         });

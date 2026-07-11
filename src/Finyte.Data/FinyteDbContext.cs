@@ -43,6 +43,8 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
 
     public DbSet<ClerkWebhookEvent> ClerkWebhookEvents => Set<ClerkWebhookEvent>();
 
+    public DbSet<FamilyInvitation> FamilyInvitations => Set<FamilyInvitation>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Account>(x =>
@@ -633,6 +635,12 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
                 .HasMaxLength(128)
                 .IsRequired();
 
+            x.Property(y => y.DisplayName)
+                .HasMaxLength(160);
+
+            x.Property(y => y.Email)
+                .HasMaxLength(320);
+
             x.Property(y => y.ClerkMembershipId)
                 .HasMaxLength(128);
 
@@ -676,6 +684,26 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
 
             x.HasIndex(y => y.MessageId)
                 .IsUnique();
+        });
+
+        modelBuilder.Entity<FamilyInvitation>(x =>
+        {
+            x.ToTable("family_invitations");
+            x.HasKey(y => y.Id);
+            x.Property(y => y.ProviderInvitationId).HasMaxLength(128).IsRequired();
+            x.Property(y => y.Email).HasMaxLength(320).IsRequired();
+            x.Property(y => y.Role).HasMaxLength(64).IsRequired();
+            x.Property(y => y.Status).HasMaxLength(32).IsRequired();
+            x.Property(y => y.InvitedByUserId).HasMaxLength(128).IsRequired();
+            x.Property(y => y.CreatedAt).IsRequired();
+            x.Property(y => y.UpdatedAt).IsRequired();
+            x.HasIndex(y => y.TenantId);
+            x.HasIndex(y => y.ProviderInvitationId).IsUnique();
+            x.HasIndex(y => new { y.TenantId, y.Email, y.Status });
+            x.HasOne<Tenant>()
+                .WithMany()
+                .HasForeignKey(y => y.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

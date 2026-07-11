@@ -42,6 +42,7 @@ builder.Services.AddScoped<TenantResolver>();
 builder.Services.Configure<ClerkWebhookOptions>(builder.Configuration.GetSection(ClerkWebhookOptions.SectionName));
 builder.Services.AddSingleton<IClerkWebhookVerifier, ClerkWebhookVerifier>();
 builder.Services.AddScoped<IClerkWebhookIngestor, ClerkWebhookIngestor>();
+builder.Services.AddHttpClient<IClerkOrganizationClient, ClerkOrganizationClient>();
 builder.Services.AddExceptionHandler<TenantExceptionHandler>();
 builder.Services.AddProblemDetails();
 builder.Services.AddQuartz(x =>

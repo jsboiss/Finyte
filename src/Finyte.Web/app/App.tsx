@@ -1,12 +1,12 @@
-import { CreateOrganization, OrganizationProfile, OrganizationSwitcher, SignIn, UserButton, useAuth, useOrganization } from '@clerk/react'
+import { CreateOrganization, OrganizationSwitcher, SignIn, UserButton, useAuth, useOrganization } from '@clerk/react'
 import { link, type LinkError } from '@fiskil/link'
 import { keepPreviousData, QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createRootRoute, createRoute, createRouter, Link, Outlet, RouterProvider, useRouterState } from '@tanstack/react-router'
 import { createColumnHelper, flexRender, getCoreRowModel, getFilteredRowModel, type ColumnFiltersState, useReactTable } from '@tanstack/react-table'
-import { Activity, Banknote, CreditCard, Home, Menu, Plus, ReceiptText, Settings, SlidersHorizontal, Tags, Trash2, X } from 'lucide-react'
+import { Activity, Banknote, CreditCard, Home, Mail, Menu, Plus, ReceiptText, Settings, Shield, SlidersHorizontal, Tags, Trash2, UserPlus, Users, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { getAccounts, getAppStatus } from './api/generated/finyteApi'
-import { httpClient } from './api/httpClient'
+import { getDevIdentity, httpClient, setDevIdentity } from './api/httpClient'
 import { AuthTokenProvider } from './auth/AuthTokenProvider'
 import { BillingPage } from './billing/BillingAccessPanel'
 import { DashboardPage } from './dashboard/DashboardPage'
@@ -50,6 +50,33 @@ type ProviderConnection = {
   isOwnedByCurrentMember: boolean
   createdAt: string
   updatedAt: string
+}
+
+type FamilyMember = {
+  id: string
+  userId: string
+  displayName?: string
+  email?: string
+  role: 'Owner' | 'Member'
+  isCurrent: boolean
+}
+
+type FamilyInvitation = {
+  id: string
+  email: string
+  role: string
+  status: string
+  createdAt: string
+}
+
+type Family = {
+  id: string
+  organizationId: string
+  name: string
+  canManage: boolean
+  isDevelopment: boolean
+  members: FamilyMember[]
+  invitations: FamilyInvitation[]
 }
 
 type CreateMerchantRuleInput = {
@@ -969,31 +996,142 @@ async function disconnectProviderConnection(connectionId: string) {
 }
 
 function SettingsPage() {
-  if (!devAuthEnabled) {
-    return (
-      <section className="page">
-        <header className="page-header">
-          <div>
-            <p>Family</p>
-            <h1>Settings</h1>
-          </div>
-        </header>
-        <OrganizationProfile />
-      </section>
-    )
+  const [inviteEmail, setInviteEmail] = useState('')
+  const queryClient = useQueryClient()
+  const familyQuery = useQuery({ queryKey: ['family'], queryFn: getFamily })
+  const inviteMutation = useMutation({
+    mutationFn: inviteFamilyMember,
+    onSuccess: invitation => {
+      queryClient.setQueryData<Family>(['family'], x => x ? { ...x, invitations: [invitation, ...x.invitations] } : x)
+      setInviteEmail('')
+    },
+  })
+  const revokeMutation = useMutation({
+    mutationFn: revokeFamilyInvitation,
+    onSuccess: (_result, invitationId) => queryClient.setQueryData<Family>(['family'], x => x ? { ...x, invitations: x.invitations.filter(y => y.id !== invitationId) } : x),
+  })
+  const acceptMutation = useMutation({
+    mutationFn: acceptDevelopmentInvitation,
+    onSuccess: (member, invitationId) => queryClient.setQueryData<Family>(['family'], x => x ? {
+      ...x,
+      invitations: x.invitations.filter(y => y.id !== invitationId),
+      members: [...x.members, member],
+    } : x),
+  })
+  const removeMutation = useMutation({
+    mutationFn: removeFamilyMember,
+    onSuccess: (_result, memberId) => queryClient.setQueryData<Family>(['family'], x => x ? { ...x, members: x.members.filter(y => y.id !== memberId) } : x),
+  })
+  const family = familyQuery.data
+
+  const switchDevelopmentMember = (userId: string) => {
+    if (!family) {
+      return
+    }
+
+    const member = family.members.find(x => x.userId === userId)
+    if (!member) {
+      return
+    }
+
+    setDevIdentity({
+      userId: member.userId,
+      organizationId: family.organizationId,
+      role: member.role === 'Owner' ? 'org:admin' : 'org:member',
+    })
+    window.location.reload()
   }
 
   return (
-    <section className="page">
-      <header className="page-header">
+    <section className="page family-settings-page">
+      <header className="page-header family-page-header">
         <div>
-          <p>Account</p>
-          <h1>Settings</h1>
+          <p>Household</p>
+          <h1>{family?.name ?? 'Family settings'}</h1>
         </div>
       </header>
-      <button type="button">Manage security</button>
+      {familyQuery.isLoading && <section className="panel"><p>Loading family…</p></section>}
+      {familyQuery.isError && <section className="panel"><p role="alert">Unable to load family settings.</p></section>}
+      {family?.isDevelopment && (
+        <section className="dev-family-banner">
+          <div>
+            <Shield aria-hidden="true" />
+            <div><strong>Development personas</strong><span>Switch users to verify permissions and shared household data.</span></div>
+          </div>
+          <select onChange={x => switchDevelopmentMember(x.target.value)} value={getDevIdentity().userId}>
+            {family.members.map(x => <option key={x.id} value={x.userId}>{x.displayName ?? x.email ?? x.userId} · {x.role}</option>)}
+          </select>
+        </section>
+      )}
+      {family?.canManage && (
+        <section className="panel family-invite-panel">
+          <div className="family-section-heading">
+            <div className="family-icon"><UserPlus aria-hidden="true" /></div>
+            <div><p>Grow your household</p><h2>Invite a family member</h2><span>Members can connect their own accounts and view shared family finances.</span></div>
+          </div>
+          <form className="family-invite-form" onSubmit={x => { x.preventDefault(); inviteMutation.mutate(inviteEmail) }}>
+            <div><Mail aria-hidden="true" /><input onChange={x => setInviteEmail(x.target.value)} placeholder="family@example.com" type="email" value={inviteEmail} /></div>
+            <button disabled={!inviteEmail.trim() || inviteMutation.isPending} type="submit">{inviteMutation.isPending ? 'Sending…' : 'Send invite'}</button>
+          </form>
+          {inviteMutation.isError && <p className="family-error" role="alert">Unable to send this invitation.</p>}
+        </section>
+      )}
+      {family && (
+        <section className="panel family-members-panel">
+          <div className="family-section-heading">
+            <div className="family-icon"><Users aria-hidden="true" /></div>
+            <div><p>People</p><h2>Family members</h2><span>{family.members.length} active {family.members.length === 1 ? 'member' : 'members'}</span></div>
+          </div>
+          <div className="family-list">
+            {family.members.map(x => (
+              <div className="family-list-row" key={x.id}>
+                <div className="family-avatar">{(x.displayName ?? x.email ?? '?').slice(0, 1).toUpperCase()}</div>
+                <div className="family-person"><strong>{x.displayName ?? x.email ?? 'Family member'}{x.isCurrent ? ' (you)' : ''}</strong><span>{x.email ?? x.userId}</span></div>
+                <span className={x.role === 'Owner' ? 'family-role is-owner' : 'family-role'}>{x.role}</span>
+                {family.canManage && !x.isCurrent && <button className="family-icon-button" aria-label={`Remove ${x.displayName ?? x.email}`} onClick={() => removeMutation.mutate(x.id)} type="button"><Trash2 aria-hidden="true" /></button>}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+      {family?.canManage && family.invitations.length > 0 && (
+        <section className="panel family-members-panel">
+          <div className="family-section-heading"><div className="family-icon"><Mail aria-hidden="true" /></div><div><p>Awaiting response</p><h2>Pending invitations</h2></div></div>
+          <div className="family-list">
+            {family.invitations.map(x => (
+              <div className="family-list-row" key={x.id}>
+                <div className="family-avatar is-pending"><Mail aria-hidden="true" /></div>
+                <div className="family-person"><strong>{x.email}</strong><span>Invited {new Date(x.createdAt).toLocaleDateString()}</span></div>
+                <span className="family-role">Pending</span>
+                {family.isDevelopment && <button onClick={() => acceptMutation.mutate(x.id)} type="button">Accept as test member</button>}
+                <button className="family-icon-button" aria-label={`Revoke invitation for ${x.email}`} onClick={() => revokeMutation.mutate(x.id)} type="button"><X aria-hidden="true" /></button>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
     </section>
   )
+}
+
+async function getFamily() {
+  return httpClient<Family>({ method: 'GET', url: '/api/family' })
+}
+
+async function inviteFamilyMember(email: string) {
+  return httpClient<FamilyInvitation>({ data: { email }, headers: { 'Content-Type': 'application/json' }, method: 'POST', url: '/api/family/invitations' })
+}
+
+async function revokeFamilyInvitation(invitationId: string) {
+  return httpClient<void>({ method: 'DELETE', url: `/api/family/invitations/${invitationId}` })
+}
+
+async function acceptDevelopmentInvitation(invitationId: string) {
+  return httpClient<FamilyMember>({ method: 'POST', url: `/api/family/invitations/${invitationId}/dev-accept` })
+}
+
+async function removeFamilyMember(memberId: string) {
+  return httpClient<void>({ method: 'DELETE', url: `/api/family/members/${memberId}` })
 }
 
 async function getTransactions(page: number, pageSize: number) {

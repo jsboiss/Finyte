@@ -38,6 +38,12 @@ public sealed class ClerkWebhookIngestor(FinyteDbContext dbContext) : IClerkWebh
             case "organizationMembership.deleted":
                 await RemoveMembership(webhook.Data, cancellationToken);
                 break;
+            case "organizationInvitation.accepted":
+                await UpdateInvitation(webhook.Data, FamilyInvitationStatus.Accepted, cancellationToken);
+                break;
+            case "organizationInvitation.revoked":
+                await UpdateInvitation(webhook.Data, FamilyInvitationStatus.Revoked, cancellationToken);
+                break;
         }
 
         dbContext.ClerkWebhookEvents.Add(new ClerkWebhookEvent
@@ -96,8 +102,25 @@ public sealed class ClerkWebhookIngestor(FinyteDbContext dbContext) : IClerkWebh
         }
 
         member.ClerkMembershipId = membershipId;
+        var firstName = GetString(publicUserData, "first_name");
+        var lastName = GetString(publicUserData, "last_name");
+        var displayName = $"{firstName} {lastName}".Trim();
+        member.DisplayName = string.IsNullOrWhiteSpace(displayName) ? member.DisplayName : displayName;
+        member.Email = GetString(publicUserData, "identifier") ?? member.Email;
         member.Role = GetTenantRole(GetRequiredString(data, "role"));
         member.RemovedAt = null;
+    }
+
+    private async Task UpdateInvitation(JsonElement data, string status, CancellationToken cancellationToken)
+    {
+        var providerInvitationId = GetRequiredString(data, "id");
+        var invitation = await dbContext.FamilyInvitations
+            .SingleOrDefaultAsync(x => x.ProviderInvitationId == providerInvitationId, cancellationToken);
+        if (invitation is not null)
+        {
+            invitation.Status = status;
+            invitation.UpdatedAt = DateTimeOffset.UtcNow;
+        }
     }
 
     private async Task RemoveMembership(JsonElement data, CancellationToken cancellationToken)
@@ -122,6 +145,13 @@ public sealed class ClerkWebhookIngestor(FinyteDbContext dbContext) : IClerkWebh
         return data.TryGetProperty(propertyName, out var value) && value.ValueKind == JsonValueKind.String
             ? value.GetString() ?? throw new InvalidOperationException($"Clerk webhook property '{propertyName}' is empty.")
             : throw new InvalidOperationException($"Clerk webhook property '{propertyName}' is missing.");
+    }
+
+    private static string? GetString(JsonElement data, string propertyName)
+    {
+        return data.TryGetProperty(propertyName, out var value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString()
+            : null;
     }
 
     private sealed record ClerkWebhook(

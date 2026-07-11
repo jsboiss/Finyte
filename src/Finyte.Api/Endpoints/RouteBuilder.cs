@@ -7,6 +7,7 @@ public static class RouteBuilder
         app.MapHealthChecks("/health").WithName("GetHealth");
         app.MapAppEndpoints();
         app.MapAuthEndpoints();
+        app.MapFamilyEndpoints();
         app.MapClerkWebhookEndpoints();
         app.MapBillingEndpoints();
         app.MapFiskilWebhookEndpoints();
