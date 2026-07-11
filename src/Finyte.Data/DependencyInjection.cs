@@ -21,6 +21,8 @@ public static class DependencyInjection
         services.AddScoped<IBillingAccess, BillingAccess>();
         services.AddScoped<IFiskilBankingSyncService, FiskilBankingSyncService>();
         services.AddScoped<IProviderSyncRunner, ProviderSyncRunner>();
+        services.AddScoped<IProviderSyncQueue, ProviderSyncQueue>();
+        services.AddScoped<IProviderSyncWorker, ProviderSyncWorker>();
         services.AddScoped<ISyncProjectionRefresher, SyncProjectionRefresher>();
 
         return services;

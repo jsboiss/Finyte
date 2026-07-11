@@ -26,6 +26,9 @@ builder.Services
     .AddOptions<FiskilOptions>()
     .Bind(builder.Configuration.GetSection(FiskilOptions.SectionName));
 builder.Services.AddHttpClient<IFiskilBankingClient, FiskilBankingClient>();
+builder.Services.AddHttpClient<IFiskilLinkClient, FiskilLinkClient>();
+builder.Services.AddHttpClient<FiskilAccessTokenProvider>();
+builder.Services.AddSingleton<IFiskilAccessTokenProvider>(x => x.GetRequiredService<FiskilAccessTokenProvider>());
 builder.Services
     .AddOptions<StripeOptions>()
     .Bind(builder.Configuration.GetSection(StripeOptions.SectionName))
@@ -34,8 +37,28 @@ builder.Services.AddScoped<IStripeCheckoutService, StripeCheckoutService>();
 builder.Services.AddScoped<IStripePortalService, StripePortalService>();
 builder.Services.AddScoped<IStripeWebhookService, StripeWebhookService>();
 builder.Services.AddScoped<IFiskilWebhookIngestor, FiskilWebhookIngestor>();
+builder.Services.AddSingleton<IFiskilWebhookVerifier, FiskilWebhookVerifier>();
 builder.Services.AddScoped<TenantResolver>();
-builder.Services.AddQuartz();
+builder.Services.Configure<ClerkWebhookOptions>(builder.Configuration.GetSection(ClerkWebhookOptions.SectionName));
+builder.Services.AddSingleton<IClerkWebhookVerifier, ClerkWebhookVerifier>();
+builder.Services.AddScoped<IClerkWebhookIngestor, ClerkWebhookIngestor>();
+builder.Services.AddExceptionHandler<TenantExceptionHandler>();
+builder.Services.AddProblemDetails();
+builder.Services.AddQuartz(x =>
+{
+    if (!builder.Configuration.GetValue("ProviderSync:WorkerEnabled", true))
+    {
+        return;
+    }
+
+    var jobKey = new JobKey("provider-sync");
+    x.AddJob<ProviderSyncJob>(y => y.WithIdentity(jobKey));
+    x.AddTrigger(y => y
+        .ForJob(jobKey)
+        .WithIdentity("provider-sync-trigger")
+        .StartNow()
+        .WithSimpleSchedule(z => z.WithIntervalInSeconds(5).RepeatForever()));
+});
 builder.Services.AddQuartzHostedService(x => x.WaitForJobsToComplete = true);
 builder.Services.AddHealthChecks().AddNpgSql(builder.Configuration.GetConnectionString("Finyte")!);
 builder.Services.AddAuthorization();
@@ -67,6 +90,8 @@ else if (hasClerkAuthority)
 }
 
 var app = builder.Build();
+
+app.UseExceptionHandler();
 
 await app.SeedDevelopmentData();
 

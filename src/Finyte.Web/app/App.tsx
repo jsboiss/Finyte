@@ -1,4 +1,5 @@
-import { SignIn, UserButton, useAuth } from '@clerk/react'
+import { CreateOrganization, OrganizationProfile, OrganizationSwitcher, SignIn, UserButton, useAuth, useOrganization } from '@clerk/react'
+import { link, type LinkError } from '@fiskil/link'
 import { keepPreviousData, QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createRootRoute, createRoute, createRouter, Link, Outlet, RouterProvider, useRouterState } from '@tanstack/react-router'
 import { createColumnHelper, flexRender, getCoreRowModel, getFilteredRowModel, type ColumnFiltersState, useReactTable } from '@tanstack/react-table'
@@ -41,6 +42,16 @@ type SetTransactionTagsInput = {
   tagIds: string[]
 }
 
+type ProviderConnection = {
+  id: string
+  provider: string
+  institutionId?: string
+  status: string
+  isOwnedByCurrentMember: boolean
+  createdAt: string
+  updatedAt: string
+}
+
 type CreateMerchantRuleInput = {
   merchantName: string
   tagId: string
@@ -61,7 +72,7 @@ function DashboardShell() {
 }
 
 function ClerkDashboardShell() {
-  const { isLoaded, isSignedIn } = useAuth()
+  const { isLoaded, isSignedIn, orgId } = useAuth()
 
   if (!isLoaded) {
     return (
@@ -73,6 +84,44 @@ function ClerkDashboardShell() {
 
   if (!isSignedIn) {
     return <SignInPage />
+  }
+
+  if (!orgId) {
+    return (
+      <main className="auth-page">
+        <CreateOrganization afterCreateOrganizationUrl="/" />
+      </main>
+    )
+  }
+
+  return <FamilyProvisioner />
+}
+
+function FamilyProvisioner() {
+  const { organization } = useOrganization()
+  const currentUserQuery = useQuery({
+    queryKey: ['current-user', organization?.id],
+    queryFn: getCurrentUser,
+  })
+  const provisionFamilyMutation = useMutation({
+    mutationFn: () => provisionFamily(organization?.name ?? 'My family'),
+    onSuccess: currentUser => queryClient.setQueryData(['current-user', organization?.id], currentUser),
+  })
+
+  useEffect(() => {
+    if (currentUserQuery.data && !currentUserQuery.data.onboarding.hasFamily && provisionFamilyMutation.isIdle) {
+      provisionFamilyMutation.mutate()
+    }
+  }, [currentUserQuery.data, provisionFamilyMutation.isIdle, provisionFamilyMutation.mutate])
+
+  if (currentUserQuery.isLoading || provisionFamilyMutation.isPending || !currentUserQuery.data?.onboarding.hasFamily) {
+    return (
+      <main className="auth-page">
+        <div className="auth-loading">
+          {currentUserQuery.isError || provisionFamilyMutation.isError ? 'Family setup failed. Refresh to try again.' : 'Setting up your family'}
+        </div>
+      </main>
+    )
   }
 
   return <SignedInShell />
@@ -187,6 +236,7 @@ function AuthControls() {
 
   return (
     <div className="auth-panel">
+      <OrganizationSwitcher hidePersonal />
       <UserButton />
     </div>
   )
@@ -198,6 +248,31 @@ function SignInPage() {
       <SignIn />
     </main>
   )
+}
+
+type CurrentUser = {
+  userId?: string
+  tenantId?: string
+  role?: string
+  onboarding: {
+    hasFamily: boolean
+  }
+}
+
+async function getCurrentUser() {
+  return httpClient<CurrentUser>({
+    method: 'GET',
+    url: '/api/auth/me',
+  })
+}
+
+async function provisionFamily(name: string) {
+  return httpClient<CurrentUser>({
+    data: { name },
+    headers: { 'Content-Type': 'application/json' },
+    method: 'POST',
+    url: '/api/auth/family',
+  })
 }
 
 function TransactionsPage() {
@@ -766,6 +841,42 @@ function TagPill({ tag }: { tag: TransactionTag }) {
 }
 
 function ConnectionsPage() {
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [phone, setPhone] = useState('')
+  const [connectionError, setConnectionError] = useState<string>()
+  const queryClient = useQueryClient()
+  const connectionsQuery = useQuery({
+    queryKey: ['provider-connections'],
+    queryFn: getProviderConnections,
+  })
+  const connectMutation = useMutation({
+    mutationFn: async () => {
+      const session = await startFiskilSession({ name, email, phone })
+      const result = await link(session.sessionId)
+      if (!result.consentID) {
+        throw new Error('Fiskil completed without returning a consent.')
+      }
+
+      return completeFiskilSession(session.sessionId, result.consentID)
+    },
+    onMutate: () => setConnectionError(undefined),
+    onSuccess: connection => {
+      queryClient.setQueryData<ProviderConnection[]>(['provider-connections'], x => [connection, ...(x ?? []).filter(y => y.id !== connection.id)])
+    },
+    onError: error => {
+      const linkError = error as Partial<LinkError>
+      setConnectionError(linkError.code === 'LINK_USER_CANCELLED' ? 'Connection cancelled.' : error instanceof Error ? error.message : 'Unable to connect bank.')
+    },
+  })
+  const disconnectMutation = useMutation({
+    mutationFn: disconnectProviderConnection,
+    onSuccess: (_result, connectionId) => {
+      queryClient.setQueryData<ProviderConnection[]>(['provider-connections'], x => (x ?? []).map(y => y.id === connectionId ? { ...y, status: 'revoked' } : y))
+    },
+  })
+  const canConnect = Boolean(name.trim() && email.trim() && phone.trim()) && !connectMutation.isPending
+
   return (
     <section className="page">
       <header className="page-header">
@@ -774,12 +885,97 @@ function ConnectionsPage() {
           <h1>Connections</h1>
         </div>
       </header>
-      <button type="button">Connect bank</button>
+      <section className="panel">
+        <div className="panel-header">
+          <div>
+            <p>Your consent</p>
+            <h2>Connect a bank</h2>
+          </div>
+        </div>
+        <p>These details identify you to Fiskil and are used for consent notifications.</p>
+        <div className="tag-form">
+          <input autoComplete="name" onChange={x => setName(x.target.value)} placeholder="Full name" value={name} />
+          <input autoComplete="email" onChange={x => setEmail(x.target.value)} placeholder="Email" type="email" value={email} />
+          <input autoComplete="tel" onChange={x => setPhone(x.target.value)} placeholder="Phone, e.g. +61412345678" type="tel" value={phone} />
+          <button disabled={!canConnect} onClick={() => connectMutation.mutate()} type="button">
+            {connectMutation.isPending ? 'Connecting…' : 'Connect bank'}
+          </button>
+        </div>
+        {connectionError && <p role="alert">{connectionError}</p>}
+      </section>
+      <section className="panel">
+        <div className="panel-header">
+          <div>
+            <p>Household access</p>
+            <h2>Connections</h2>
+          </div>
+        </div>
+        {connectionsQuery.isLoading && <p>Loading connections…</p>}
+        {!connectionsQuery.isLoading && (connectionsQuery.data?.length ?? 0) === 0 && <p>No banks connected yet.</p>}
+        {(connectionsQuery.data ?? []).map(x => (
+          <div className="tag-form" key={x.id}>
+            <strong>{x.institutionId ? `Institution ${x.institutionId}` : 'Fiskil connection'}</strong>
+            <span>{x.status}</span>
+            <span>{x.isOwnedByCurrentMember ? 'Connected by you' : 'Connected by a family member'}</span>
+            {x.isOwnedByCurrentMember && x.status !== 'revoked' && (
+              <button disabled={disconnectMutation.isPending} onClick={() => disconnectMutation.mutate(x.id)} type="button">
+                Disconnect
+              </button>
+            )}
+          </div>
+        ))}
+      </section>
     </section>
   )
 }
 
+async function getProviderConnections() {
+  return httpClient<ProviderConnection[]>({
+    method: 'GET',
+    url: '/api/provider-connections',
+  })
+}
+
+async function startFiskilSession(input: { name: string; email: string; phone: string }) {
+  return httpClient<{ sessionId: string; expiresAt: string }>({
+    data: input,
+    headers: { 'Content-Type': 'application/json' },
+    method: 'POST',
+    url: '/api/provider-connections/fiskil/session',
+  })
+}
+
+async function completeFiskilSession(sessionId: string, consentId: string) {
+  return httpClient<ProviderConnection>({
+    data: { sessionId, consentId },
+    headers: { 'Content-Type': 'application/json' },
+    method: 'POST',
+    url: '/api/provider-connections/fiskil/complete',
+  })
+}
+
+async function disconnectProviderConnection(connectionId: string) {
+  return httpClient<void>({
+    method: 'DELETE',
+    url: `/api/provider-connections/${connectionId}`,
+  })
+}
+
 function SettingsPage() {
+  if (!devAuthEnabled) {
+    return (
+      <section className="page">
+        <header className="page-header">
+          <div>
+            <p>Family</p>
+            <h1>Settings</h1>
+          </div>
+        </header>
+        <OrganizationProfile />
+      </section>
+    )
+  }
+
   return (
     <section className="page">
       <header className="page-header">

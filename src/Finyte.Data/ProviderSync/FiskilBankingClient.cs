@@ -1,4 +1,3 @@
-using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Options;
@@ -10,7 +9,9 @@ public sealed class FiskilOptions
     public const string SectionName = "Fiskil";
 
     public string BaseUrl { get; set; } = "https://api.fiskil.com";
-    public string AccessToken { get; set; } = "";
+    public string ClientId { get; set; } = "";
+    public string ClientSecret { get; set; } = "";
+    public string WebhookSecret { get; set; } = "";
 }
 
 public interface IFiskilBankingClient
@@ -58,7 +59,10 @@ public sealed record FiskilTransactionData(
     string? Reference,
     string RawJson);
 
-public sealed class FiskilBankingClient(HttpClient httpClient, IOptions<FiskilOptions> options) : IFiskilBankingClient
+public sealed class FiskilBankingClient(
+    HttpClient httpClient,
+    IOptions<FiskilOptions> options,
+    IFiskilAccessTokenProvider accessTokenProvider) : IFiskilBankingClient
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -116,7 +120,11 @@ public sealed class FiskilBankingClient(HttpClient httpClient, IOptions<FiskilOp
                 requestParams.Add(new QueryParam("page[after]", after));
             }
 
-            using var response = await httpClient.GetAsync(BuildUri(path, requestParams), cancellationToken);
+            using var request = new HttpRequestMessage(HttpMethod.Get, BuildUri(path, requestParams));
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
+                "Bearer",
+                await accessTokenProvider.GetAccessToken(cancellationToken));
+            using var response = await httpClient.SendAsync(request, cancellationToken);
             response.EnsureSuccessStatusCode();
 
             using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
@@ -136,13 +144,7 @@ public sealed class FiskilBankingClient(HttpClient httpClient, IOptions<FiskilOp
     private string BuildUri(string path, IReadOnlyCollection<QueryParam> queryParams)
     {
         var fiskilOptions = options.Value;
-        if (string.IsNullOrWhiteSpace(fiskilOptions.AccessToken))
-        {
-            throw new InvalidOperationException("Fiskil access token is not configured.");
-        }
-
         httpClient.BaseAddress ??= new Uri(fiskilOptions.BaseUrl);
-        httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", fiskilOptions.AccessToken);
 
         var query = string.Join("&", queryParams.Select(x => $"{Uri.EscapeDataString(x.Name)}={Uri.EscapeDataString(x.Value)}"));
         return $"{path}?{query}";

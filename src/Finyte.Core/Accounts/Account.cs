@@ -4,6 +4,7 @@ public sealed class Account
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public Guid TenantId { get; set; }
+    public Guid? ProviderConnectionId { get; set; }
     public string? FiskilAccountId { get; set; }
     public string? AccountNumber { get; set; }
     public string? Bsb { get; set; }

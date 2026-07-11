@@ -17,12 +17,21 @@ public sealed class FiskilBankingSyncService(FinyteDbContext dbContext, IFiskilB
     public async Task<SyncChangeSummary> SyncAccounts(ProviderSyncRun syncRun, CancellationToken cancellationToken)
     {
         var endUserId = GetEndUserId(syncRun);
+        var connections = await dbContext.ProviderConnections
+            .Where(x => x.TenantId == syncRun.TenantId && x.EndUserId == endUserId)
+            .ToListAsync(cancellationToken);
+        var connection = connections.SingleOrDefault(x => x.ConsentId == syncRun.ConsentId)
+            ?? connections.SingleOrDefault(x => x.ConsentId == null)
+            ?? throw new InvalidOperationException("The sync run does not have a matching provider connection.");
         var accounts = await fiskilBankingClient.GetAccounts(endUserId, cancellationToken);
         var changedAccountIds = new List<Guid>();
         var now = DateTimeOffset.UtcNow;
 
         foreach (var account in accounts)
         {
+            var accountConnectionId = connections
+                .SingleOrDefault(x => !string.IsNullOrWhiteSpace(account.ConsentId) && x.ConsentId == account.ConsentId)?.Id
+                ?? connection.Id;
             var localAccount = await dbContext.Accounts
                 .FirstOrDefaultAsync(x => x.TenantId == syncRun.TenantId && x.FiskilAccountId == account.Id, cancellationToken);
 
@@ -31,11 +40,18 @@ public sealed class FiskilBankingSyncService(FinyteDbContext dbContext, IFiskilB
                 localAccount = new Account
                 {
                     TenantId = syncRun.TenantId,
+                    ProviderConnectionId = accountConnectionId,
                     FiskilAccountId = account.Id,
                     Name = account.Name ?? "Bank account",
                     CreatedAt = now
                 };
                 dbContext.Accounts.Add(localAccount);
+                changedAccountIds.Add(localAccount.Id);
+            }
+
+            if (localAccount.ProviderConnectionId != accountConnectionId)
+            {
+                localAccount.ProviderConnectionId = accountConnectionId;
                 changedAccountIds.Add(localAccount.Id);
             }
 

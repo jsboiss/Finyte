@@ -66,6 +66,7 @@ public sealed class DevelopmentDataSeedRunner(FinyteDbContext dbContext, IOvervi
 
         if (tenant is not null)
         {
+            tenant.ClerkOrganizationId = "org_dev-family";
             tenant.Name = "Dev household";
             return tenant;
         }
@@ -73,6 +74,7 @@ public sealed class DevelopmentDataSeedRunner(FinyteDbContext dbContext, IOvervi
         tenant = new Tenant
         {
             Id = Guid.Parse("11111111-1111-1111-1111-111111111111"),
+            ClerkOrganizationId = "org_dev-family",
             Name = "Dev household",
             CreatedAt = now.AddMonths(-3)
         };
@@ -395,6 +397,10 @@ public sealed class DevelopmentDataSeedRunner(FinyteDbContext dbContext, IOvervi
 
     private async Task SeedProviderSync(Guid tenantId, DateTimeOffset now, CancellationToken cancellationToken)
     {
+        var tenantMemberId = await dbContext.TenantMembers
+            .Where(x => x.TenantId == tenantId && x.UserId == "dev-user")
+            .Select(x => x.Id)
+            .SingleAsync(cancellationToken);
         var connection = await dbContext.ProviderConnections
             .SingleOrDefaultAsync(x => x.Provider == ProviderSyncProvider.Fiskil && x.EndUserId == "dev-user", cancellationToken);
 
@@ -404,10 +410,12 @@ public sealed class DevelopmentDataSeedRunner(FinyteDbContext dbContext, IOvervi
             {
                 Id = Guid.Parse("55555555-5555-5555-5555-555555555551"),
                 TenantId = tenantId,
+                TenantMemberId = tenantMemberId,
                 Provider = ProviderSyncProvider.Fiskil,
                 EndUserId = "dev-user",
                 ConsentId = "dev-consent",
                 InstitutionId = "dev-bank",
+                Status = ProviderConnectionStatus.Active,
                 CreatedAt = now.AddDays(-20),
                 UpdatedAt = now
             });
@@ -415,8 +423,10 @@ public sealed class DevelopmentDataSeedRunner(FinyteDbContext dbContext, IOvervi
         else
         {
             connection.TenantId = tenantId;
+            connection.TenantMemberId = tenantMemberId;
             connection.ConsentId = "dev-consent";
             connection.InstitutionId = "dev-bank";
+            connection.Status = ProviderConnectionStatus.Active;
             connection.UpdatedAt = now;
         }
 

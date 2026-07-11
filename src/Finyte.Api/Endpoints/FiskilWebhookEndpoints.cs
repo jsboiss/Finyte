@@ -20,11 +20,30 @@ public static class FiskilWebhookEndpoints
 
     private static async Task<IResult> HandleWebhook(
         HttpRequest httpRequest,
+        IFiskilWebhookVerifier webhookVerifier,
         IFiskilWebhookIngestor webhookIngestor,
         CancellationToken cancellationToken)
     {
         using var reader = new StreamReader(httpRequest.Body);
         var payloadJson = await reader.ReadToEndAsync(cancellationToken);
+
+        if (!httpRequest.Headers.TryGetValue("X-Fiskil-Signature", out var signature))
+        {
+            return Results.BadRequest("Fiskil signature is required.");
+        }
+
+        try
+        {
+            if (!webhookVerifier.Verify(payloadJson, signature.ToString()))
+            {
+                return Results.BadRequest("Invalid Fiskil webhook signature.");
+            }
+        }
+        catch (FiskilWebhookConfigurationException exception)
+        {
+            return Results.Problem(exception.Message, statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
+
         var request = JsonSerializer.Deserialize<FiskilWebhookRequest>(payloadJson);
 
         if (request is null || string.IsNullOrWhiteSpace(request.MessageId) || string.IsNullOrWhiteSpace(request.Data.Event))

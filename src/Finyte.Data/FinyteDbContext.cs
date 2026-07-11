@@ -31,6 +31,8 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
 
     public DbSet<ProviderConnection> ProviderConnections => Set<ProviderConnection>();
 
+    public DbSet<ProviderAuthSession> ProviderAuthSessions => Set<ProviderAuthSession>();
+
     public DbSet<ProviderWebhookEvent> ProviderWebhookEvents => Set<ProviderWebhookEvent>();
 
     public DbSet<ProviderSyncRun> ProviderSyncRuns => Set<ProviderSyncRun>();
@@ -38,6 +40,8 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
     public DbSet<Tenant> Tenants => Set<Tenant>();
 
     public DbSet<TenantMember> TenantMembers => Set<TenantMember>();
+
+    public DbSet<ClerkWebhookEvent> ClerkWebhookEvents => Set<ClerkWebhookEvent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -49,6 +53,8 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
 
             x.Property(y => y.TenantId)
                 .IsRequired();
+
+            x.Property(y => y.ProviderConnectionId);
 
             x.Property(y => y.FiskilAccountId)
                 .HasMaxLength(128);
@@ -95,6 +101,11 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
                 .IsRequired();
 
             x.HasIndex(y => y.TenantId);
+            x.HasIndex(y => y.ProviderConnectionId);
+            x.HasOne<ProviderConnection>()
+                .WithMany()
+                .HasForeignKey(y => y.ProviderConnectionId)
+                .OnDelete(DeleteBehavior.SetNull);
             x.HasIndex(y => new { y.TenantId, y.FiskilAccountId })
                 .IsUnique()
                 .HasFilter("\"FiskilAccountId\" IS NOT NULL");
@@ -432,6 +443,9 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
             x.Property(y => y.TenantId)
                 .IsRequired();
 
+            x.Property(y => y.TenantMemberId)
+                .IsRequired();
+
             x.Property(y => y.Provider)
                 .HasMaxLength(64)
                 .IsRequired();
@@ -446,6 +460,10 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
             x.Property(y => y.InstitutionId)
                 .HasMaxLength(128);
 
+            x.Property(y => y.Status)
+                .HasMaxLength(32)
+                .IsRequired();
+
             x.Property(y => y.CreatedAt)
                 .IsRequired();
 
@@ -453,8 +471,56 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
                 .IsRequired();
 
             x.HasIndex(y => y.TenantId);
-            x.HasIndex(y => new { y.Provider, y.EndUserId })
+            x.HasIndex(y => y.TenantMemberId);
+            x.HasOne(y => y.TenantMember)
+                .WithMany()
+                .HasForeignKey(y => y.TenantMemberId)
+                .OnDelete(DeleteBehavior.Restrict);
+            x.HasIndex(y => new { y.Provider, y.EndUserId });
+            x.HasIndex(y => new { y.Provider, y.ConsentId })
+                .IsUnique()
+                .HasFilter("\"ConsentId\" IS NOT NULL");
+        });
+
+        modelBuilder.Entity<ProviderAuthSession>(x =>
+        {
+            x.ToTable("provider_auth_sessions");
+
+            x.HasKey(y => y.Id);
+
+            x.Property(y => y.TenantId)
+                .IsRequired();
+
+            x.Property(y => y.TenantMemberId)
+                .IsRequired();
+
+            x.Property(y => y.Provider)
+                .HasMaxLength(64)
+                .IsRequired();
+
+            x.Property(y => y.EndUserId)
+                .HasMaxLength(128)
+                .IsRequired();
+
+            x.Property(y => y.SessionId)
+                .HasMaxLength(128)
+                .IsRequired();
+
+            x.Property(y => y.ExpiresAt)
+                .IsRequired();
+
+            x.Property(y => y.CreatedAt)
+                .IsRequired();
+
+            x.HasIndex(y => y.TenantId);
+            x.HasIndex(y => y.TenantMemberId);
+            x.HasIndex(y => new { y.Provider, y.SessionId })
                 .IsUnique();
+
+            x.HasOne<TenantMember>()
+                .WithMany()
+                .HasForeignKey(y => y.TenantMemberId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<ProviderWebhookEvent>(x =>
@@ -539,12 +605,19 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
 
             x.HasKey(y => y.Id);
 
+            x.Property(y => y.ClerkOrganizationId)
+                .HasMaxLength(128)
+                .IsRequired();
+
             x.Property(y => y.Name)
                 .HasMaxLength(160)
                 .IsRequired();
 
             x.Property(y => y.CreatedAt)
                 .IsRequired();
+
+            x.HasIndex(y => y.ClerkOrganizationId)
+                .IsUnique();
         });
 
         modelBuilder.Entity<TenantMember>(x =>
@@ -560,6 +633,9 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
                 .HasMaxLength(128)
                 .IsRequired();
 
+            x.Property(y => y.ClerkMembershipId)
+                .HasMaxLength(128);
+
             x.Property(y => y.Role)
                 .HasConversion<string>()
                 .HasMaxLength(32)
@@ -574,7 +650,31 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
                 .OnDelete(DeleteBehavior.Cascade);
 
             x.HasIndex(y => y.TenantId);
-            x.HasIndex(y => y.UserId)
+            x.HasIndex(y => new { y.TenantId, y.UserId })
+                .IsUnique();
+            x.HasIndex(y => y.ClerkMembershipId)
+                .IsUnique()
+                .HasFilter("\"ClerkMembershipId\" IS NOT NULL");
+        });
+
+        modelBuilder.Entity<ClerkWebhookEvent>(x =>
+        {
+            x.ToTable("clerk_webhook_events");
+
+            x.HasKey(y => y.Id);
+
+            x.Property(y => y.MessageId)
+                .HasMaxLength(128)
+                .IsRequired();
+
+            x.Property(y => y.EventType)
+                .HasMaxLength(160)
+                .IsRequired();
+
+            x.Property(y => y.ProcessedAt)
+                .IsRequired();
+
+            x.HasIndex(y => y.MessageId)
                 .IsUnique();
         });
     }
