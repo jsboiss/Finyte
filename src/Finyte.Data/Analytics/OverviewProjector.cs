@@ -60,7 +60,15 @@ public sealed class OverviewProjector(FinyteDbContext dbContext) : IOverviewProj
                     && x.PostedAt >= monthStart
                     && x.PostedAt < nextMonthStart
                     && (x.Status == null || x.Status == "" || x.Status.ToLower() == "posted"))
-                .Select(x => new TransactionRow(x.Amount, x.PostedAt, x.CreatedAt))
+                .Select(x => new TransactionRow(
+                    x.Id,
+                    x.Amount,
+                    x.PostedAt,
+                    x.CreatedAt,
+                    x.TagAssignments
+                        .OrderBy(y => y.Tag == null ? "" : y.Tag.Name)
+                        .Select(y => new TagRow(y.TagId, y.Tag == null ? "Untagged" : y.Tag.Name, y.Tag == null ? "#94a3b8" : y.Tag.Color))
+                        .ToList()))
                 .ToListAsync(cancellationToken);
 
         var incomeMinorUnits = transactionRows
@@ -102,10 +110,40 @@ public sealed class OverviewProjector(FinyteDbContext dbContext) : IOverviewProj
             .OrderBy(x => x.Date)
             .Select(x => new OverviewDailyCashFlowResponse(x.Date.ToString("yyyy-MM-dd"), x.Date.Day, x.IncomeMinorUnits, x.ExpenseMinorUnits))
             .ToList();
-        var monthlySpendByTag = new List<OverviewMonthlySpendByTagResponse>
+        var tagSpend = new Dictionary<string, TagSpendAccumulator>();
+        foreach (var transaction in transactionRows.Where(x => x.Amount < 0))
         {
-            new(null, "Untagged", "#94a3b8", expenseMinorUnits, expenseMinorUnits > 0 ? 100 : 0)
-        };
+            var amount = Math.Abs(ToMinorUnits(transaction.Amount));
+            var tags = transaction.Tags.Count == 0
+                ? [new TagRow(null, "Untagged", "#94a3b8")]
+                : transaction.Tags;
+            var splitAmount = amount / tags.Count;
+            var remainder = amount % tags.Count;
+
+            for (var i = 0; i < tags.Count; i++)
+            {
+                var tag = tags[i];
+                var tagKey = tag.Id?.ToString("N") ?? "untagged";
+                if (!tagSpend.TryGetValue(tagKey, out var accumulator))
+                {
+                    accumulator = new TagSpendAccumulator(tag.Id, tag.Name, tag.Color);
+                    tagSpend[tagKey] = accumulator;
+                }
+
+                accumulator.AmountMinorUnits += splitAmount + (i == 0 ? remainder : 0);
+            }
+        }
+
+        var monthlySpendByTag = tagSpend
+            .OrderByDescending(x => x.Value.AmountMinorUnits)
+            .Select(x => new OverviewMonthlySpendByTagResponse(
+                x.Value.Id,
+                x.Value.Name,
+                x.Value.Color,
+                x.Value.AmountMinorUnits,
+                expenseMinorUnits > 0 ? Math.Round((decimal)x.Value.AmountMinorUnits / expenseMinorUnits * 100, 1) : 0))
+            .DefaultIfEmpty(new OverviewMonthlySpendByTagResponse(null, "Untagged", "#94a3b8", 0, 0))
+            .ToList();
         var sourceWatermark = transactionRows
             .Select(x => x.PostedAt ?? x.CreatedAt)
             .Concat(accountRows.Select(x => x.BalanceAsOf ?? x.CreatedAt))
@@ -188,7 +226,9 @@ public sealed class OverviewProjector(FinyteDbContext dbContext) : IOverviewProj
 
     private sealed record AccountRow(Guid Id, string Name, decimal CurrentBalance, string Currency, DateTimeOffset? BalanceAsOf, DateTimeOffset CreatedAt);
 
-    private sealed record TransactionRow(decimal Amount, DateTimeOffset? PostedAt, DateTimeOffset CreatedAt);
+    private sealed record TransactionRow(Guid Id, decimal Amount, DateTimeOffset? PostedAt, DateTimeOffset CreatedAt, IReadOnlyList<TagRow> Tags);
+
+    private sealed record TagRow(Guid? Id, string Name, string Color);
 
     private sealed record YearMonth(int Year, int Month);
 
@@ -199,5 +239,16 @@ public sealed class OverviewProjector(FinyteDbContext dbContext) : IOverviewProj
         public long IncomeMinorUnits { get; set; }
 
         public long ExpenseMinorUnits { get; set; }
+    }
+
+    private sealed class TagSpendAccumulator(Guid? id, string name, string color)
+    {
+        public Guid? Id { get; } = id;
+
+        public string Name { get; } = name;
+
+        public string Color { get; } = color;
+
+        public long AmountMinorUnits { get; set; }
     }
 }

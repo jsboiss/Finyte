@@ -10,7 +10,9 @@ public static class RouteBuilder
         app.MapBillingEndpoints();
         app.MapFiskilWebhookEndpoints();
         app.MapBankingAccountEndpoints();
+        app.MapTransactionEndpoints();
         app.MapOverviewEndpoints();
+        app.MapCashFlowEndpoints();
 
         return app;
     }
