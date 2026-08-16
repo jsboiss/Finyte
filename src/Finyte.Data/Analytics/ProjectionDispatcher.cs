@@ -6,116 +6,136 @@ namespace Finyte.Data.Analytics;
 
 public sealed class ProjectionDispatcher(FinyteDbContext dbContext, IOverviewProjector overviewProjector) : IProjectionDispatcher
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static JsonSerializerOptions JsonOptions { get; } = new(JsonSerializerDefaults.Web);
 
     public async Task<OverviewResponse> GetOrRebuildOverview(OverviewProjectionScope scope, CancellationToken cancellationToken)
     {
-        var state = await dbContext.ProjectionStates
-            .AsNoTracking()
+        var sourceVersion = await dbContext.Tenants
+            .Where(x => x.Id == scope.TenantId)
+            .Select(x => x.FinancialDataVersion)
+            .SingleAsync(cancellationToken);
+        var projection = await dbContext.OverviewProjections
             .FirstOrDefaultAsync(x => x.TenantId == scope.TenantId
-                && x.ProjectionKey == ProjectionKey.Overview
-                && x.ScopeKey == scope.ScopeKey,
+                && x.AccountId == scope.AccountId
+                && x.MonthKey == scope.MonthKey,
                 cancellationToken);
 
-        if (state is not null && !state.IsStale)
+        if (projection is null)
         {
-            return await overviewProjector.GetOrRebuild(scope.TenantId, scope.AccountId, cancellationToken);
+            projection = await CreatePendingProjection(scope, cancellationToken);
+        }
+        else if (projection.SourceVersion < sourceVersion && projection.Status == ProjectionStatus.Succeeded)
+        {
+            MarkPending(projection, DateTimeOffset.UtcNow);
+            await dbContext.SaveChangesAsync(cancellationToken);
         }
 
-        return await RebuildOverview(scope, cancellationToken);
+        var response = Deserialize(projection.PayloadJson);
+        var isRefreshing = projection.Status is ProjectionStatus.Pending or ProjectionStatus.Running
+            || projection.SourceVersion < sourceVersion;
+        return response with
+        {
+            Freshness = response.Freshness with { IsRefreshing = isRefreshing }
+        };
     }
 
-    public Task<OverviewResponse> RebuildOverview(OverviewProjectionScope scope, CancellationToken cancellationToken)
+    public async Task<OverviewResponse> RebuildOverview(OverviewProjectionScope scope, CancellationToken cancellationToken)
     {
-        var scopeJson = JsonSerializer.Serialize(scope, JsonOptions);
-        var request = new ProjectionRequest(scope.TenantId, ProjectionKey.Overview, scope.ScopeKey, scopeJson);
-        return Run(request, x => overviewProjector.Rebuild(scope, x), cancellationToken);
-    }
-
-    public async Task<T> Run<T>(ProjectionRequest request, Func<CancellationToken, Task<T>> rebuild, CancellationToken cancellationToken)
-    {
-        var state = await GetOrCreateState(request, cancellationToken);
-        var now = DateTimeOffset.UtcNow;
-
-        state.Status = ProjectionStatus.Running;
-        state.LastError = null;
-        state.LastStartedAt = now;
-        state.UpdatedAt = now;
-        await dbContext.SaveChangesAsync(cancellationToken);
-
         try
         {
-            var response = await rebuild(cancellationToken);
-            now = DateTimeOffset.UtcNow;
-            state.Status = ProjectionStatus.Succeeded;
-            state.IsStale = false;
-            state.StaleAt = null;
-            state.StaleReason = null;
-            state.LastError = null;
-            state.LastSucceededAt = now;
-            state.UpdatedAt = now;
-            await dbContext.SaveChangesAsync(cancellationToken);
-
-            return response;
+            return await overviewProjector.Rebuild(scope, cancellationToken);
         }
         catch (Exception exception)
         {
-            now = DateTimeOffset.UtcNow;
-            state.Status = ProjectionStatus.Failed;
-            state.LastError = exception.Message;
-            state.LastFailedAt = now;
-            state.UpdatedAt = now;
-            await dbContext.SaveChangesAsync(cancellationToken);
+            var projection = await dbContext.OverviewProjections
+                .FirstOrDefaultAsync(x => x.TenantId == scope.TenantId
+                    && x.AccountId == scope.AccountId
+                    && x.MonthKey == scope.MonthKey,
+                    cancellationToken);
+
+            if (projection is not null)
+            {
+                projection.Status = ProjectionStatus.Failed;
+                projection.LastError = exception.Message;
+                projection.UpdatedAt = DateTimeOffset.UtcNow;
+                await dbContext.SaveChangesAsync(cancellationToken);
+            }
 
             throw;
         }
     }
 
-    public async Task MarkTenantStale(Guid tenantId, string reason, CancellationToken cancellationToken)
+    private async Task<OverviewProjection> CreatePendingProjection(OverviewProjectionScope scope, CancellationToken cancellationToken)
     {
         var now = DateTimeOffset.UtcNow;
-        var states = await dbContext.ProjectionStates
-            .Where(x => x.TenantId == tenantId)
-            .ToListAsync(cancellationToken);
-
-        foreach (var state in states)
+        var label = scope.AccountId is null
+            ? "All accounts"
+            : await dbContext.Accounts
+                .Where(x => x.TenantId == scope.TenantId && x.Id == scope.AccountId)
+                .Select(x => x.Name)
+                .FirstOrDefaultAsync(cancellationToken) ?? "Selected account";
+        var currency = await dbContext.Accounts
+            .Where(x => x.TenantId == scope.TenantId && (scope.AccountId == null || x.Id == scope.AccountId))
+            .Select(x => x.Currency)
+            .FirstOrDefaultAsync(cancellationToken) ?? "AUD";
+        var response = new OverviewResponse(
+            new OverviewScopeResponse(scope.AccountId, label),
+            scope.MonthKey,
+            currency,
+            0,
+            0,
+            0,
+            new OverviewCashFlowRaceResponse(0, 0, 0),
+            [],
+            [new OverviewMonthlySpendByTagResponse(null, "Untagged", "#94a3b8", 0, 0)],
+            new OverviewFreshnessResponse(now, null, IsRefreshing: true));
+        var projection = new OverviewProjection
         {
-            state.IsStale = true;
-            state.StaleAt = now;
-            state.StaleReason = reason;
-            state.UpdatedAt = now;
-        }
-
-        await dbContext.SaveChangesAsync(cancellationToken);
-    }
-
-    private async Task<ProjectionState> GetOrCreateState(ProjectionRequest request, CancellationToken cancellationToken)
-    {
-        var state = await dbContext.ProjectionStates
-            .FirstOrDefaultAsync(x => x.TenantId == request.TenantId
-                && x.ProjectionKey == request.ProjectionKey
-                && x.ScopeKey == request.ScopeKey,
-                cancellationToken);
-
-        if (state is not null)
-        {
-            state.ScopeJson = request.ScopeJson;
-            return state;
-        }
-
-        var now = DateTimeOffset.UtcNow;
-        state = new ProjectionState
-        {
-            TenantId = request.TenantId,
-            ProjectionKey = request.ProjectionKey,
-            ScopeKey = request.ScopeKey,
-            ScopeJson = request.ScopeJson,
+            TenantId = scope.TenantId,
+            AccountId = scope.AccountId,
+            MonthKey = scope.MonthKey,
+            Currency = currency,
+            PayloadJson = JsonSerializer.Serialize(response, JsonOptions),
+            SourceVersion = -1,
+            Generation = 1,
             Status = ProjectionStatus.Pending,
+            CalculatedAt = now,
+            InvalidatedAt = now,
             CreatedAt = now,
             UpdatedAt = now
         };
 
-        dbContext.ProjectionStates.Add(state);
-        return state;
+        dbContext.OverviewProjections.Add(projection);
+
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+            return projection;
+        }
+        catch (DbUpdateException)
+        {
+            dbContext.Entry(projection).State = EntityState.Detached;
+            return await dbContext.OverviewProjections.SingleAsync(x => x.TenantId == scope.TenantId
+                && x.AccountId == scope.AccountId
+                && x.MonthKey == scope.MonthKey,
+                cancellationToken);
+        }
+    }
+
+    private static void MarkPending(OverviewProjection projection, DateTimeOffset now)
+    {
+        projection.Generation++;
+        projection.Status = ProjectionStatus.Pending;
+        projection.LastError = null;
+        projection.TemporalWorkflowId = null;
+        projection.DispatchedAt = null;
+        projection.InvalidatedAt = now;
+        projection.UpdatedAt = now;
+    }
+
+    private static OverviewResponse Deserialize(string payloadJson)
+    {
+        return JsonSerializer.Deserialize<OverviewResponse>(payloadJson, JsonOptions)
+            ?? throw new InvalidOperationException("Overview projection payload could not be deserialized.");
     }
 }

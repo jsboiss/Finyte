@@ -1,6 +1,7 @@
 using Finyte.Api.Tenancy;
 using Finyte.Core.Accounts;
 using Finyte.Data;
+using Finyte.Data.Analytics;
 using Finyte.Data.Billing;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
@@ -42,6 +43,7 @@ public static class BankingAccountEndpoints
         HttpContext httpContext,
         IBillingAccess billingAccess,
         FinyteDbContext dbContext,
+        IProjectionInvalidator projectionInvalidator,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.Name))
@@ -68,6 +70,7 @@ public static class BankingAccountEndpoints
         };
 
         dbContext.Accounts.Add(account);
+        await projectionInvalidator.TenantProjectionDataChanged(currentTenant.TenantId, "manual account created", cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
 
         var response = new AccountResponse(account.Id, account.Name, account.CurrentBalance, account.AvailableBalance, account.Currency, account.CreatedAt);

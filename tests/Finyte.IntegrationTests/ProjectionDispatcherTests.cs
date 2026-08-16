@@ -1,5 +1,6 @@
-using Finyte.Core.Accounts;
+using System.Text.Json;
 using Finyte.Core.Analytics;
+using Finyte.Core.Tenancy;
 using Finyte.Data;
 using Finyte.Data.Analytics;
 using Microsoft.EntityFrameworkCore;
@@ -10,151 +11,87 @@ namespace Finyte.IntegrationTests;
 public sealed class ProjectionDispatcherTests
 {
     [Fact]
-    public async Task SuccessfulRebuildRecordsProjectionStateSuccess()
+    public async Task CurrentSnapshotReturnsWithoutRebuilding()
     {
         await using var dbContext = CreateDbContext();
-        var dispatcher = new ProjectionDispatcher(dbContext, new SuccessfulOverviewProjector());
-        var scope = new OverviewProjectionScope(Guid.NewGuid(), AccountId: null, "2026-06");
+        var tenant = CreateTenant(financialDataVersion: 3);
+        var projection = CreateProjection(tenant.Id, sourceVersion: 3);
+        dbContext.AddRange(tenant, projection);
+        await dbContext.SaveChangesAsync();
+        var projector = new RecordingOverviewProjector();
+        var dispatcher = new ProjectionDispatcher(dbContext, projector);
 
-        await dispatcher.RebuildOverview(scope, CancellationToken.None);
+        var response = await dispatcher.GetOrRebuildOverview(
+            new OverviewProjectionScope(tenant.Id, null, projection.MonthKey), CancellationToken.None);
 
-        var state = await dbContext.ProjectionStates.SingleAsync();
-        Assert.Equal(scope.TenantId, state.TenantId);
-        Assert.Equal(ProjectionKey.Overview, state.ProjectionKey);
-        Assert.Equal(scope.ScopeKey, state.ScopeKey);
-        Assert.Equal(ProjectionStatus.Succeeded, state.Status);
-        Assert.NotNull(state.LastStartedAt);
-        Assert.NotNull(state.LastSucceededAt);
-        Assert.Null(state.LastFailedAt);
-        Assert.Null(state.LastError);
-        Assert.False(state.IsStale);
-        Assert.Null(state.StaleAt);
-        Assert.Null(state.StaleReason);
+        Assert.False(response.Freshness.IsRefreshing);
+        Assert.Equal(0, projector.RebuildCount);
     }
 
     [Fact]
-    public async Task SuccessfulRebuildClearsProjectionStateStaleMarker()
+    public async Task StaleSnapshotReturnsImmediatelyAndQueuesRefresh()
     {
         await using var dbContext = CreateDbContext();
-        var tenantId = Guid.NewGuid();
-        var scope = new OverviewProjectionScope(tenantId, AccountId: null, "2026-06");
-        dbContext.ProjectionStates.Add(new ProjectionState
-        {
-            TenantId = tenantId,
-            ProjectionKey = ProjectionKey.Overview,
-            ScopeKey = scope.ScopeKey,
-            ScopeJson = "{}",
-            Status = ProjectionStatus.Succeeded,
-            IsStale = true,
-            StaleAt = DateTimeOffset.UtcNow,
-            StaleReason = "tag rule changed",
-            CreatedAt = DateTimeOffset.UtcNow,
-            UpdatedAt = DateTimeOffset.UtcNow
-        });
+        var tenant = CreateTenant(financialDataVersion: 4);
+        var projection = CreateProjection(tenant.Id, sourceVersion: 3);
+        dbContext.AddRange(tenant, projection);
         await dbContext.SaveChangesAsync();
+        var projector = new RecordingOverviewProjector();
+        var dispatcher = new ProjectionDispatcher(dbContext, projector);
 
-        var dispatcher = new ProjectionDispatcher(dbContext, new SuccessfulOverviewProjector());
+        var response = await dispatcher.GetOrRebuildOverview(
+            new OverviewProjectionScope(tenant.Id, null, projection.MonthKey), CancellationToken.None);
 
-        await dispatcher.RebuildOverview(scope, CancellationToken.None);
-
-        var state = await dbContext.ProjectionStates.SingleAsync();
-        Assert.Equal(ProjectionStatus.Succeeded, state.Status);
-        Assert.False(state.IsStale);
-        Assert.Null(state.StaleAt);
-        Assert.Null(state.StaleReason);
+        Assert.True(response.Freshness.IsRefreshing);
+        Assert.Equal(0, projector.RebuildCount);
+        Assert.Equal(ProjectionStatus.Pending, projection.Status);
+        Assert.Null(projection.DispatchedAt);
     }
 
     [Fact]
-    public async Task MarkTenantStaleMarksOnlyTenantProjectionStates()
+    public async Task MissingSnapshotCreatesPendingPlaceholderWithoutRebuilding()
     {
         await using var dbContext = CreateDbContext();
-        var tenantId = Guid.NewGuid();
-        var otherTenantId = Guid.NewGuid();
-        dbContext.ProjectionStates.Add(CreateState(tenantId, "scope-1"));
-        dbContext.ProjectionStates.Add(CreateState(tenantId, "scope-2"));
-        dbContext.ProjectionStates.Add(CreateState(otherTenantId, "scope-3"));
+        var tenant = CreateTenant(financialDataVersion: 1);
+        dbContext.Add(tenant);
         await dbContext.SaveChangesAsync();
+        var projector = new RecordingOverviewProjector();
+        var dispatcher = new ProjectionDispatcher(dbContext, projector);
 
-        var dispatcher = new ProjectionDispatcher(dbContext, new SuccessfulOverviewProjector());
+        var response = await dispatcher.GetOrRebuildOverview(
+            new OverviewProjectionScope(tenant.Id, null, "2026-06"), CancellationToken.None);
 
-        await dispatcher.MarkTenantStale(tenantId, "merchant tag rule changed", CancellationToken.None);
-
-        var tenantStates = await dbContext.ProjectionStates
-            .Where(x => x.TenantId == tenantId)
-            .OrderBy(x => x.ScopeKey)
-            .ToListAsync();
-        Assert.All(tenantStates, x =>
-        {
-            Assert.True(x.IsStale);
-            Assert.NotNull(x.StaleAt);
-            Assert.Equal("merchant tag rule changed", x.StaleReason);
-        });
-
-        var otherTenantState = await dbContext.ProjectionStates.SingleAsync(x => x.TenantId == otherTenantId);
-        Assert.False(otherTenantState.IsStale);
-        Assert.Null(otherTenantState.StaleAt);
-        Assert.Null(otherTenantState.StaleReason);
+        Assert.True(response.Freshness.IsRefreshing);
+        Assert.Equal(0, projector.RebuildCount);
+        Assert.Equal(ProjectionStatus.Pending, (await dbContext.OverviewProjections.SingleAsync()).Status);
     }
 
     [Fact]
-    public async Task GetOrRebuildOverviewRebuildsStaleProjectionState()
+    public async Task FailedRebuildRecordsFailureOnExistingSnapshot()
     {
         await using var dbContext = CreateDbContext();
-        var tenantId = Guid.NewGuid();
-        var scope = new OverviewProjectionScope(tenantId, AccountId: null, "2026-06");
-        dbContext.ProjectionStates.Add(new ProjectionState
-        {
-            TenantId = tenantId,
-            ProjectionKey = ProjectionKey.Overview,
-            ScopeKey = scope.ScopeKey,
-            ScopeJson = "{}",
-            Status = ProjectionStatus.Succeeded,
-            IsStale = true,
-            StaleAt = DateTimeOffset.UtcNow,
-            StaleReason = "tenant data changed",
-            CreatedAt = DateTimeOffset.UtcNow,
-            UpdatedAt = DateTimeOffset.UtcNow
-        });
+        var tenant = CreateTenant(financialDataVersion: 1);
+        var projection = CreateProjection(tenant.Id, sourceVersion: 0);
+        dbContext.AddRange(tenant, projection);
         await dbContext.SaveChangesAsync();
-
-        var dispatcher = new ProjectionDispatcher(dbContext, new SuccessfulOverviewProjector());
-
-        await dispatcher.GetOrRebuildOverview(scope, CancellationToken.None);
-
-        var state = await dbContext.ProjectionStates.SingleAsync();
-        Assert.Equal(ProjectionStatus.Succeeded, state.Status);
-        Assert.False(state.IsStale);
-        Assert.Null(state.StaleAt);
-        Assert.Null(state.StaleReason);
-    }
-
-    [Fact]
-    public async Task FailedRebuildRecordsProjectionStateFailureWithoutChangingRawData()
-    {
-        await using var dbContext = CreateDbContext();
-        var tenantId = Guid.NewGuid();
-        var account = new Account
-        {
-            TenantId = tenantId,
-            Name = "Everyday",
-            CurrentBalance = 123.45m,
-            CreatedAt = DateTimeOffset.UtcNow
-        };
-        dbContext.Accounts.Add(account);
-        await dbContext.SaveChangesAsync();
-
         var dispatcher = new ProjectionDispatcher(dbContext, new FailingOverviewProjector());
-        var scope = new OverviewProjectionScope(tenantId, AccountId: null, "2026-06");
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => dispatcher.RebuildOverview(scope, CancellationToken.None));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => dispatcher.RebuildOverview(
+            new OverviewProjectionScope(tenant.Id, null, projection.MonthKey), CancellationToken.None));
 
-        var state = await dbContext.ProjectionStates.SingleAsync();
-        Assert.Equal(ProjectionStatus.Failed, state.Status);
-        Assert.NotNull(state.LastStartedAt);
-        Assert.NotNull(state.LastFailedAt);
-        Assert.Contains("projection failure", state.LastError);
-        Assert.Equal(1, await dbContext.Accounts.CountAsync());
-        Assert.Equal(123.45m, await dbContext.Accounts.Select(x => x.CurrentBalance).SingleAsync());
+        Assert.Equal(ProjectionStatus.Failed, projection.Status);
+        Assert.Contains("projection failure", projection.LastError);
+    }
+
+    [Fact]
+    public void ProjectionAndTenantVersionsUseOptimisticConcurrency()
+    {
+        using var dbContext = CreateDbContext();
+
+        Assert.True(dbContext.Model.FindEntityType(typeof(OverviewProjection))!
+            .FindProperty(nameof(OverviewProjection.Generation))!.IsConcurrencyToken);
+        Assert.True(dbContext.Model.FindEntityType(typeof(Tenant))!
+            .FindProperty(nameof(Tenant.FinancialDataVersion))!.IsConcurrencyToken);
     }
 
     private static FinyteDbContext CreateDbContext()
@@ -162,50 +99,61 @@ public sealed class ProjectionDispatcherTests
         var options = new DbContextOptionsBuilder<FinyteDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
             .Options;
-
         return new FinyteDbContext(options);
     }
 
-    private static ProjectionState CreateState(Guid tenantId, string scopeKey)
+    private static Tenant CreateTenant(long financialDataVersion)
+    {
+        return new Tenant
+        {
+            ClerkOrganizationId = Guid.NewGuid().ToString("N"),
+            Name = "Family",
+            FinancialDataVersion = financialDataVersion,
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+    }
+
+    private static OverviewProjection CreateProjection(Guid tenantId, long sourceVersion)
     {
         var now = DateTimeOffset.UtcNow;
-        return new ProjectionState
+        var response = new OverviewResponse(
+            new OverviewScopeResponse(null, "All accounts"),
+            "2026-06",
+            "AUD",
+            100,
+            20,
+            1,
+            new OverviewCashFlowRaceResponse(10, 20, -10),
+            [],
+            [],
+            new OverviewFreshnessResponse(now, null, IsRefreshing: false));
+        return new OverviewProjection
         {
             TenantId = tenantId,
-            ProjectionKey = ProjectionKey.Overview,
-            ScopeKey = scopeKey,
-            ScopeJson = "{}",
+            MonthKey = response.MonthKey,
+            Currency = response.Currency,
+            PayloadJson = JsonSerializer.Serialize(response, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
+            SourceVersion = sourceVersion,
             Status = ProjectionStatus.Succeeded,
+            CalculatedAt = now,
             CreatedAt = now,
             UpdatedAt = now
         };
     }
 
-    private sealed class SuccessfulOverviewProjector : IOverviewProjector
+    private sealed class RecordingOverviewProjector : IOverviewProjector
     {
+        public int RebuildCount { get; private set; }
+
         public Task<OverviewResponse> GetOrRebuild(Guid tenantId, Guid? accountId, CancellationToken cancellationToken)
         {
-            return Task.FromResult(CreateResponse(new OverviewProjectionScope(tenantId, accountId, DateTimeOffset.UtcNow.ToString("yyyy-MM"))));
+            throw new NotSupportedException();
         }
 
         public Task<OverviewResponse> Rebuild(OverviewProjectionScope scope, CancellationToken cancellationToken)
         {
-            return Task.FromResult(CreateResponse(scope));
-        }
-
-        private static OverviewResponse CreateResponse(OverviewProjectionScope scope)
-        {
-            return new OverviewResponse(
-                new OverviewScopeResponse(scope.AccountId, "Test"),
-                scope.MonthKey,
-                "AUD",
-                0,
-                0,
-                0,
-                new OverviewCashFlowRaceResponse(0, 0, 0),
-                [],
-                [],
-                new OverviewFreshnessResponse(DateTimeOffset.UtcNow, SourceWatermark: null, IsRefreshing: false));
+            RebuildCount++;
+            throw new NotSupportedException();
         }
     }
 

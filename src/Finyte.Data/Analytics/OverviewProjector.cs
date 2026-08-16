@@ -6,7 +6,7 @@ namespace Finyte.Data.Analytics;
 
 public sealed class OverviewProjector(FinyteDbContext dbContext) : IOverviewProjector
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static JsonSerializerOptions JsonOptions { get; } = new(JsonSerializerDefaults.Web);
 
     public async Task<OverviewResponse> GetOrRebuild(Guid tenantId, Guid? accountId, CancellationToken cancellationToken)
     {
@@ -28,6 +28,10 @@ public sealed class OverviewProjector(FinyteDbContext dbContext) : IOverviewProj
     public async Task<OverviewResponse> Rebuild(OverviewProjectionScope scope, CancellationToken cancellationToken)
     {
         var now = DateTimeOffset.UtcNow;
+        var sourceVersion = await dbContext.Tenants
+            .Where(x => x.Id == scope.TenantId)
+            .Select(x => x.FinancialDataVersion)
+            .SingleAsync(cancellationToken);
         var month = ParseMonthKey(scope.MonthKey);
         var today = DateOnly.FromDateTime(now.UtcDateTime);
         var currentMonthKey = GetCurrentMonthKey();
@@ -51,67 +55,60 @@ public sealed class OverviewProjector(FinyteDbContext dbContext) : IOverviewProj
             ? "All accounts"
             : accountRows.FirstOrDefault()?.Name ?? "Selected account";
 
-        var transactionRows = accountIds.Count == 0
-            ? new List<TransactionRow>()
-            : await dbContext.Transactions
-                .AsNoTracking()
-                .Where(x => x.TenantId == scope.TenantId
-                    && accountIds.Contains(x.AccountId)
-                    && x.PostedAt >= monthStart
-                    && x.PostedAt < nextMonthStart
-                    && (x.Status == null || x.Status == "" || x.Status.ToLower() == "posted"))
-                .Select(x => new TransactionRow(
-                    x.Id,
-                    x.Amount,
-                    x.PostedAt,
-                    x.CreatedAt,
-                    x.TagAssignments
-                        .OrderBy(y => y.Tag == null ? "" : y.Tag.Name)
-                        .Select(y => new TagRow(y.TagId, y.Tag == null ? "Untagged" : y.Tag.Name, y.Tag == null ? "#94a3b8" : y.Tag.Color))
-                        .ToList()))
-                .ToListAsync(cancellationToken);
-
-        var incomeMinorUnits = transactionRows
-            .Where(x => x.Amount > 0)
-            .Sum(x => ToMinorUnits(x.Amount));
-        var expenseMinorUnits = transactionRows
-            .Where(x => x.Amount < 0)
-            .Sum(x => Math.Abs(ToMinorUnits(x.Amount)));
+        var transactionQuery = dbContext.Transactions
+            .AsNoTracking()
+            .Where(x => x.TenantId == scope.TenantId
+                && accountIds.Contains(x.AccountId)
+                && x.PostedAt >= monthStart
+                && x.PostedAt < nextMonthStart
+                && (x.Status == null || x.Status == "" || x.Status == "posted" || x.Status == "POSTED"));
+        var totals = await transactionQuery
+            .GroupBy(x => 1)
+            .Select(x => new TransactionTotals(
+                x.Sum(y => y.Amount > 0 ? y.Amount : 0),
+                x.Sum(y => y.Amount < 0 ? -y.Amount : 0)))
+            .FirstOrDefaultAsync(cancellationToken) ?? new TransactionTotals(0, 0);
+        var incomeMinorUnits = ToMinorUnits(totals.Income);
+        var expenseMinorUnits = ToMinorUnits(totals.Expense);
         var averageDailySpendMinorUnits = expenseMinorUnits / elapsedDays;
         var dailyMap = Enumerable.Range(1, DateTime.DaysInMonth(month.Year, month.Month))
             .Select(x => new OverviewDailyCashFlowAccumulator(new DateOnly(month.Year, month.Month, x)))
             .ToDictionary(x => x.Date);
+        var dailyTotals = await transactionQuery
+            .GroupBy(x => x.PostedAt!.Value.Date)
+            .Select(x => new DailyTransactionTotals(
+                x.Key,
+                x.Sum(y => y.Amount > 0 ? y.Amount : 0),
+                x.Sum(y => y.Amount < 0 ? -y.Amount : 0)))
+            .ToListAsync(cancellationToken);
 
-        foreach (var transaction in transactionRows)
+        foreach (var dailyTotal in dailyTotals)
         {
-            if (transaction.PostedAt is null)
-            {
-                continue;
-            }
-
-            var date = DateOnly.FromDateTime(transaction.PostedAt.Value.UtcDateTime);
+            var date = DateOnly.FromDateTime(dailyTotal.Date);
             if (!dailyMap.TryGetValue(date, out var day))
             {
                 continue;
             }
 
-            var amount = ToMinorUnits(transaction.Amount);
-            if (amount > 0)
-            {
-                day.IncomeMinorUnits += amount;
-            }
-            else
-            {
-                day.ExpenseMinorUnits += Math.Abs(amount);
-            }
+            day.IncomeMinorUnits = ToMinorUnits(dailyTotal.Income);
+            day.ExpenseMinorUnits = ToMinorUnits(dailyTotal.Expense);
         }
 
         var dailyCashFlow = dailyMap.Values
             .OrderBy(x => x.Date)
             .Select(x => new OverviewDailyCashFlowResponse(x.Date.ToString("yyyy-MM-dd"), x.Date.Day, x.IncomeMinorUnits, x.ExpenseMinorUnits))
             .ToList();
+        var expenseRows = await transactionQuery
+            .Where(x => x.Amount < 0)
+            .Select(x => new TransactionRow(
+                x.Amount,
+                x.TagAssignments
+                    .OrderBy(y => y.Tag == null ? "" : y.Tag.Name)
+                    .Select(y => new TagRow(y.TagId, y.Tag == null ? "Untagged" : y.Tag.Name, y.Tag == null ? "#94a3b8" : y.Tag.Color))
+                    .ToList()))
+            .ToListAsync(cancellationToken);
         var tagSpend = new Dictionary<string, TagSpendAccumulator>();
-        foreach (var transaction in transactionRows.Where(x => x.Amount < 0))
+        foreach (var transaction in expenseRows)
         {
             var amount = Math.Abs(ToMinorUnits(transaction.Amount));
             var tags = transaction.Tags.Count == 0
@@ -144,11 +141,15 @@ public sealed class OverviewProjector(FinyteDbContext dbContext) : IOverviewProj
                 expenseMinorUnits > 0 ? Math.Round((decimal)x.Value.AmountMinorUnits / expenseMinorUnits * 100, 1) : 0))
             .DefaultIfEmpty(new OverviewMonthlySpendByTagResponse(null, "Untagged", "#94a3b8", 0, 0))
             .ToList();
-        var sourceWatermark = transactionRows
-            .Select(x => x.PostedAt ?? x.CreatedAt)
-            .Concat(accountRows.Select(x => x.BalanceAsOf ?? x.CreatedAt))
-            .DefaultIfEmpty()
+        var transactionWatermark = await transactionQuery
+            .Select(x => (DateTimeOffset?)(x.PostedAt ?? x.CreatedAt))
+            .MaxAsync(cancellationToken);
+        var accountWatermark = accountRows
+            .Select(x => (DateTimeOffset?)(x.BalanceAsOf ?? x.CreatedAt))
             .Max();
+        var sourceWatermark = transactionWatermark is null || accountWatermark > transactionWatermark
+            ? accountWatermark
+            : transactionWatermark;
         var response = new OverviewResponse(
             new OverviewScopeResponse(scope.AccountId, accountLabel),
             scope.MonthKey,
@@ -159,7 +160,7 @@ public sealed class OverviewProjector(FinyteDbContext dbContext) : IOverviewProj
             new OverviewCashFlowRaceResponse(incomeMinorUnits, expenseMinorUnits, incomeMinorUnits - expenseMinorUnits),
             dailyCashFlow,
             monthlySpendByTag,
-            new OverviewFreshnessResponse(now, sourceWatermark == default ? null : sourceWatermark, IsRefreshing: false));
+            new OverviewFreshnessResponse(now, sourceWatermark, IsRefreshing: false));
         var payloadJson = JsonSerializer.Serialize(response, JsonOptions);
         var existingProjection = await dbContext.OverviewProjections
             .FirstOrDefaultAsync(x => x.TenantId == scope.TenantId && x.AccountId == scope.AccountId && x.MonthKey == scope.MonthKey, cancellationToken);
@@ -173,7 +174,9 @@ public sealed class OverviewProjector(FinyteDbContext dbContext) : IOverviewProj
                 MonthKey = scope.MonthKey,
                 Currency = currency,
                 PayloadJson = payloadJson,
-                SourceWatermark = sourceWatermark == default ? null : sourceWatermark,
+                SourceVersion = sourceVersion,
+                Status = ProjectionStatus.Succeeded,
+                SourceWatermark = sourceWatermark,
                 CalculatedAt = now,
                 CreatedAt = now,
                 UpdatedAt = now
@@ -183,7 +186,11 @@ public sealed class OverviewProjector(FinyteDbContext dbContext) : IOverviewProj
         {
             existingProjection.Currency = currency;
             existingProjection.PayloadJson = payloadJson;
-            existingProjection.SourceWatermark = sourceWatermark == default ? null : sourceWatermark;
+            existingProjection.SourceVersion = sourceVersion;
+            existingProjection.Status = ProjectionStatus.Succeeded;
+            existingProjection.LastError = null;
+            existingProjection.InvalidatedAt = null;
+            existingProjection.SourceWatermark = sourceWatermark;
             existingProjection.CalculatedAt = now;
             existingProjection.UpdatedAt = now;
         }
@@ -226,7 +233,11 @@ public sealed class OverviewProjector(FinyteDbContext dbContext) : IOverviewProj
 
     private sealed record AccountRow(Guid Id, string Name, decimal CurrentBalance, string Currency, DateTimeOffset? BalanceAsOf, DateTimeOffset CreatedAt);
 
-    private sealed record TransactionRow(Guid Id, decimal Amount, DateTimeOffset? PostedAt, DateTimeOffset CreatedAt, IReadOnlyList<TagRow> Tags);
+    private sealed record TransactionRow(decimal Amount, IReadOnlyList<TagRow> Tags);
+
+    private sealed record TransactionTotals(decimal Income, decimal Expense);
+
+    private sealed record DailyTransactionTotals(DateTime Date, decimal Income, decimal Expense);
 
     private sealed record TagRow(Guid? Id, string Name, string Color);
 

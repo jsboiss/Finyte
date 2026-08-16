@@ -45,6 +45,7 @@ public static class OverviewEndpoints
         TenantResolver tenantResolver,
         HttpContext httpContext,
         IBillingAccess billingAccess,
+        IProjectionInvalidator projectionInvalidator,
         IProjectionDispatcher projectionDispatcher,
         CancellationToken cancellationToken)
     {
@@ -55,9 +56,10 @@ public static class OverviewEndpoints
             return Results.Problem("An active subscription is required to refresh the financial overview.", statusCode: StatusCodes.Status402PaymentRequired);
         }
 
-        var response = await projectionDispatcher.RebuildOverview(
-            new OverviewProjectionScope(currentTenant.TenantId, accountId, GetCurrentMonthKey()),
-            cancellationToken);
+        var monthKey = GetCurrentMonthKey();
+        await projectionInvalidator.OverviewRequested(currentTenant.TenantId, accountId, monthKey, cancellationToken);
+        var response = await projectionDispatcher.GetOrRebuildOverview(
+            new OverviewProjectionScope(currentTenant.TenantId, accountId, monthKey), cancellationToken);
 
         return Results.Ok(response);
     }

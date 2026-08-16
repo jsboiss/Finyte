@@ -27,6 +27,7 @@ public sealed class ProviderSyncRunner(
         var now = DateTimeOffset.UtcNow;
         syncRun.Status = ProviderSyncStatus.Running;
         syncRun.StartedAt ??= now;
+        syncRun.CompletedAt = null;
         syncRun.Error = null;
         await dbContext.SaveChangesAsync(cancellationToken);
 

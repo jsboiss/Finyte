@@ -1,5 +1,8 @@
 using Finyte.Core.Analytics;
+using Finyte.Core.Tenancy;
+using Finyte.Data;
 using Finyte.Data.Analytics;
+using Microsoft.EntityFrameworkCore;
 using Xunit;
 
 namespace Finyte.IntegrationTests;
@@ -7,87 +10,103 @@ namespace Finyte.IntegrationTests;
 public sealed class ProjectionInvalidatorTests
 {
     [Fact]
-    public async Task TransactionChangedRebuildsAccountAndAllOverviewScopes()
+    public async Task TransactionChangedAdvancesVersionAndQueuesAccountAndCombinedSnapshots()
     {
-        var dispatcher = new RecordingProjectionDispatcher();
-        var invalidator = new ProjectionInvalidator(dispatcher);
-        var tenantId = Guid.NewGuid();
+        await using var dbContext = CreateDbContext();
+        var tenant = CreateTenant();
         var accountId = Guid.NewGuid();
-        var postedAt = new DateTimeOffset(2026, 6, 3, 12, 0, 0, TimeSpan.Zero);
+        var accountProjection = CreateProjection(tenant.Id, accountId, "2026-06");
+        var allProjection = CreateProjection(tenant.Id, null, "2026-06");
+        var otherMonth = CreateProjection(tenant.Id, accountId, "2026-05");
+        dbContext.AddRange(tenant, accountProjection, allProjection, otherMonth);
+        await dbContext.SaveChangesAsync();
+        var invalidator = new ProjectionInvalidator(dbContext);
 
-        await invalidator.TransactionChanged(tenantId, accountId, postedAt, CancellationToken.None);
+        await invalidator.TransactionChanged(
+            tenant.Id,
+            accountId,
+            new DateTimeOffset(2026, 6, 3, 12, 0, 0, TimeSpan.Zero),
+            CancellationToken.None);
 
-        Assert.Collection(dispatcher.Scopes,
-            x => Assert.Equal(new OverviewProjectionScope(tenantId, accountId, "2026-06"), x),
-            x => Assert.Equal(new OverviewProjectionScope(tenantId, AccountId: null, "2026-06"), x));
+        Assert.Equal(1, tenant.FinancialDataVersion);
+        Assert.Equal(ProjectionStatus.Pending, accountProjection.Status);
+        Assert.Equal(ProjectionStatus.Pending, allProjection.Status);
+        Assert.Equal(ProjectionStatus.Succeeded, otherMonth.Status);
     }
 
     [Fact]
-    public async Task AccountBalanceChangedRebuildsCurrentAccountAndAllOverviewScopes()
+    public async Task TenantChangeQueuesEveryExistingSnapshot()
     {
-        var dispatcher = new RecordingProjectionDispatcher();
-        var invalidator = new ProjectionInvalidator(dispatcher);
-        var tenantId = Guid.NewGuid();
-        var accountId = Guid.NewGuid();
-        var monthKey = DateTimeOffset.UtcNow.ToString("yyyy-MM");
+        await using var dbContext = CreateDbContext();
+        var tenant = CreateTenant();
+        var projections = new[]
+        {
+            CreateProjection(tenant.Id, null, "2026-05"),
+            CreateProjection(tenant.Id, Guid.NewGuid(), "2026-06")
+        };
+        dbContext.Add(tenant);
+        dbContext.AddRange(projections);
+        await dbContext.SaveChangesAsync();
+        var invalidator = new ProjectionInvalidator(dbContext);
 
-        await invalidator.AccountBalanceChanged(tenantId, accountId, CancellationToken.None);
+        await invalidator.TenantProjectionDataChanged(tenant.Id, "broad change", CancellationToken.None);
 
-        Assert.Collection(dispatcher.Scopes,
-            x => Assert.Equal(new OverviewProjectionScope(tenantId, accountId, monthKey), x),
-            x => Assert.Equal(new OverviewProjectionScope(tenantId, AccountId: null, monthKey), x));
+        Assert.Equal(1, tenant.FinancialDataVersion);
+        Assert.All(projections, x => Assert.Equal(ProjectionStatus.Pending, x.Status));
+        Assert.All(projections, x => Assert.NotNull(x.InvalidatedAt));
     }
 
     [Fact]
-    public async Task TenantProjectionDataChangedMarksTenantStale()
+    public async Task ManualRefreshQueuesOnlyRequestedSnapshotWithoutChangingDataVersion()
     {
-        var dispatcher = new RecordingProjectionDispatcher();
-        var invalidator = new ProjectionInvalidator(dispatcher);
-        var tenantId = Guid.NewGuid();
+        await using var dbContext = CreateDbContext();
+        var tenant = CreateTenant();
+        var requested = CreateProjection(tenant.Id, null, "2026-06");
+        var other = CreateProjection(tenant.Id, Guid.NewGuid(), "2026-06");
+        dbContext.AddRange(tenant, requested, other);
+        await dbContext.SaveChangesAsync();
+        var invalidator = new ProjectionInvalidator(dbContext);
 
-        await invalidator.TenantProjectionDataChanged(tenantId, "bulk tag rule changed", CancellationToken.None);
+        await invalidator.OverviewRequested(tenant.Id, null, "2026-06", CancellationToken.None);
 
-        Assert.Equal(tenantId, dispatcher.StaleTenantId);
-        Assert.Equal("bulk tag rule changed", dispatcher.StaleReason);
+        Assert.Equal(0, tenant.FinancialDataVersion);
+        Assert.Equal(1, requested.Generation);
+        Assert.Equal(ProjectionStatus.Pending, requested.Status);
+        Assert.Equal(0, other.Generation);
+        Assert.Equal(ProjectionStatus.Succeeded, other.Status);
     }
 
-    private sealed class RecordingProjectionDispatcher : IProjectionDispatcher
+    private static FinyteDbContext CreateDbContext()
     {
-        public List<OverviewProjectionScope> Scopes { get; } = [];
-        public Guid? StaleTenantId { get; private set; }
-        public string? StaleReason { get; private set; }
+        var options = new DbContextOptionsBuilder<FinyteDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
+            .Options;
+        return new FinyteDbContext(options);
+    }
 
-        public Task<T> Run<T>(ProjectionRequest request, Func<CancellationToken, Task<T>> rebuild, CancellationToken cancellationToken)
+    private static Tenant CreateTenant()
+    {
+        return new Tenant
         {
-            return rebuild(cancellationToken);
-        }
+            ClerkOrganizationId = Guid.NewGuid().ToString("N"),
+            Name = "Family",
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+    }
 
-        public Task<OverviewResponse> GetOrRebuildOverview(OverviewProjectionScope scope, CancellationToken cancellationToken)
+    private static OverviewProjection CreateProjection(Guid tenantId, Guid? accountId, string monthKey)
+    {
+        var now = DateTimeOffset.UtcNow;
+        return new OverviewProjection
         {
-            return RebuildOverview(scope, cancellationToken);
-        }
-
-        public Task<OverviewResponse> RebuildOverview(OverviewProjectionScope scope, CancellationToken cancellationToken)
-        {
-            Scopes.Add(scope);
-            return Task.FromResult(new OverviewResponse(
-                new OverviewScopeResponse(scope.AccountId, "Test"),
-                scope.MonthKey,
-                "AUD",
-                0,
-                0,
-                0,
-                new OverviewCashFlowRaceResponse(0, 0, 0),
-                [],
-                [],
-                new OverviewFreshnessResponse(DateTimeOffset.UtcNow, SourceWatermark: null, IsRefreshing: false)));
-        }
-
-        public Task MarkTenantStale(Guid tenantId, string reason, CancellationToken cancellationToken)
-        {
-            StaleTenantId = tenantId;
-            StaleReason = reason;
-            return Task.CompletedTask;
-        }
+            TenantId = tenantId,
+            AccountId = accountId,
+            MonthKey = monthKey,
+            PayloadJson = "{}",
+            Status = ProjectionStatus.Succeeded,
+            CalculatedAt = now,
+            CreatedAt = now,
+            UpdatedAt = now
+        };
     }
 }

@@ -5,12 +5,12 @@ namespace Finyte.Data.ProviderSync;
 
 public interface IProviderSyncQueue
 {
-    Task EnqueueInitialSync(ProviderConnection connection, CancellationToken cancellationToken);
+    Task<Guid> EnqueueInitialSync(ProviderConnection connection, CancellationToken cancellationToken);
 }
 
 public sealed class ProviderSyncQueue(FinyteDbContext dbContext) : IProviderSyncQueue
 {
-    public async Task EnqueueInitialSync(ProviderConnection connection, CancellationToken cancellationToken)
+    public async Task<Guid> EnqueueInitialSync(ProviderConnection connection, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(connection.ConsentId))
         {
@@ -32,11 +32,13 @@ public sealed class ProviderSyncQueue(FinyteDbContext dbContext) : IProviderSync
             .Select(x => x.Dataset)
             .ToListAsync(cancellationToken);
         var now = DateTimeOffset.UtcNow;
+        var batchId = Guid.NewGuid();
 
         foreach (var dataset in datasets.Where(x => !existingDatasets.Contains(x)))
         {
             dbContext.ProviderSyncRuns.Add(new ProviderSyncRun
             {
+                BatchId = batchId,
                 TenantId = connection.TenantId,
                 Provider = connection.Provider,
                 Dataset = dataset,
@@ -48,5 +50,6 @@ public sealed class ProviderSyncQueue(FinyteDbContext dbContext) : IProviderSync
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
+        return batchId;
     }
 }

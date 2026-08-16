@@ -1,37 +1,76 @@
 using Finyte.Core.Analytics;
+using Microsoft.EntityFrameworkCore;
 
 namespace Finyte.Data.Analytics;
 
-public sealed class ProjectionInvalidator(IProjectionDispatcher projectionDispatcher) : IProjectionInvalidator
+public sealed class ProjectionInvalidator(FinyteDbContext dbContext) : IProjectionInvalidator
 {
-    public async Task AccountBalanceChanged(Guid tenantId, Guid accountId, CancellationToken cancellationToken)
+    public Task AccountBalanceChanged(Guid tenantId, Guid accountId, CancellationToken cancellationToken)
     {
-        var monthKey = GetCurrentMonthKey();
-        await RebuildOverviewAccountAndAll(tenantId, accountId, monthKey, cancellationToken);
+        return MarkChanged(tenantId, accountId, GetCurrentMonthKey(), includeAllAccounts: true, cancellationToken);
     }
 
-    public async Task TransactionChanged(Guid tenantId, Guid accountId, DateTimeOffset? postedAt, CancellationToken cancellationToken)
+    public Task TransactionChanged(Guid tenantId, Guid accountId, DateTimeOffset? postedAt, CancellationToken cancellationToken)
     {
-        var monthKey = postedAt is null
-            ? GetCurrentMonthKey()
-            : ToMonthKey(postedAt.Value);
-        await RebuildOverviewAccountAndAll(tenantId, accountId, monthKey, cancellationToken);
+        var monthKey = postedAt is null ? GetCurrentMonthKey() : ToMonthKey(postedAt.Value);
+        return MarkChanged(tenantId, accountId, monthKey, includeAllAccounts: true, cancellationToken);
     }
 
     public async Task OverviewRequested(Guid tenantId, Guid? accountId, string monthKey, CancellationToken cancellationToken)
     {
-        await projectionDispatcher.RebuildOverview(new OverviewProjectionScope(tenantId, accountId, monthKey), cancellationToken);
+        var projections = await dbContext.OverviewProjections
+            .Where(x => x.TenantId == tenantId && x.AccountId == accountId && x.MonthKey == monthKey)
+            .ToListAsync(cancellationToken);
+        MarkPending(projections);
+        await dbContext.SaveChangesAsync(cancellationToken);
     }
 
     public async Task TenantProjectionDataChanged(Guid tenantId, string reason, CancellationToken cancellationToken)
     {
-        await projectionDispatcher.MarkTenantStale(tenantId, reason, cancellationToken);
+        await AdvanceVersion(tenantId, cancellationToken);
+        var projections = await dbContext.OverviewProjections
+            .Where(x => x.TenantId == tenantId)
+            .ToListAsync(cancellationToken);
+        MarkPending(projections);
+        await dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    private async Task RebuildOverviewAccountAndAll(Guid tenantId, Guid accountId, string monthKey, CancellationToken cancellationToken)
+    private async Task MarkChanged(
+        Guid tenantId,
+        Guid? accountId,
+        string monthKey,
+        bool includeAllAccounts,
+        CancellationToken cancellationToken)
     {
-        await projectionDispatcher.RebuildOverview(new OverviewProjectionScope(tenantId, accountId, monthKey), cancellationToken);
-        await projectionDispatcher.RebuildOverview(new OverviewProjectionScope(tenantId, AccountId: null, monthKey), cancellationToken);
+        await AdvanceVersion(tenantId, cancellationToken);
+        var projections = await dbContext.OverviewProjections
+            .Where(x => x.TenantId == tenantId
+                && x.MonthKey == monthKey
+                && (x.AccountId == accountId || (includeAllAccounts && x.AccountId == null)))
+            .ToListAsync(cancellationToken);
+        MarkPending(projections);
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task AdvanceVersion(Guid tenantId, CancellationToken cancellationToken)
+    {
+        var tenant = await dbContext.Tenants.SingleAsync(x => x.Id == tenantId, cancellationToken);
+        tenant.FinancialDataVersion++;
+    }
+
+    private static void MarkPending(IEnumerable<OverviewProjection> projections)
+    {
+        var now = DateTimeOffset.UtcNow;
+        foreach (var projection in projections)
+        {
+            projection.Generation++;
+            projection.Status = ProjectionStatus.Pending;
+            projection.LastError = null;
+            projection.TemporalWorkflowId = null;
+            projection.DispatchedAt = null;
+            projection.InvalidatedAt = now;
+            projection.UpdatedAt = now;
+        }
     }
 
     private static string GetCurrentMonthKey()

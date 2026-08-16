@@ -21,8 +21,6 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
 
     public DbSet<OverviewProjection> OverviewProjections => Set<OverviewProjection>();
 
-    public DbSet<ProjectionState> ProjectionStates => Set<ProjectionState>();
-
     public DbSet<BillingCustomer> BillingCustomers => Set<BillingCustomer>();
 
     public DbSet<BillingSubscription> BillingSubscriptions => Set<BillingSubscription>();
@@ -164,6 +162,8 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
 
             x.HasIndex(y => y.TenantId);
             x.HasIndex(y => y.AccountId);
+            x.HasIndex(y => new { y.TenantId, y.PostedAt });
+            x.HasIndex(y => new { y.TenantId, y.AccountId, y.PostedAt });
             x.HasIndex(y => new { y.TenantId, y.FiskilTransactionId })
                 .IsUnique();
             x.HasIndex(y => y.PostedAt);
@@ -268,6 +268,19 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
                 .HasColumnType("jsonb")
                 .IsRequired();
 
+            x.Property(y => y.Status)
+                .HasMaxLength(32)
+                .IsRequired();
+
+            x.Property(y => y.Generation)
+                .IsConcurrencyToken();
+
+            x.Property(y => y.LastError)
+                .HasMaxLength(2048);
+
+            x.Property(y => y.TemporalWorkflowId)
+                .HasMaxLength(256);
+
             x.Property(y => y.CalculatedAt)
                 .IsRequired();
 
@@ -283,50 +296,7 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
             x.HasIndex(y => new { y.TenantId, y.MonthKey })
                 .IsUnique()
                 .HasFilter("\"AccountId\" IS NULL");
-        });
-
-        modelBuilder.Entity<ProjectionState>(x =>
-        {
-            x.ToTable("projection_states");
-
-            x.HasKey(y => y.Id);
-
-            x.Property(y => y.TenantId)
-                .IsRequired();
-
-            x.Property(y => y.ProjectionKey)
-                .HasMaxLength(80)
-                .IsRequired();
-
-            x.Property(y => y.ScopeKey)
-                .HasMaxLength(256)
-                .IsRequired();
-
-            x.Property(y => y.ScopeJson)
-                .HasColumnType("jsonb")
-                .IsRequired();
-
-            x.Property(y => y.Status)
-                .HasMaxLength(32)
-                .IsRequired();
-
-            x.Property(y => y.IsStale)
-                .IsRequired();
-
-            x.Property(y => y.StaleReason)
-                .HasMaxLength(512);
-
-            x.Property(y => y.LastError)
-                .HasMaxLength(2048);
-
-            x.Property(y => y.CreatedAt)
-                .IsRequired();
-
-            x.Property(y => y.UpdatedAt)
-                .IsRequired();
-
-            x.HasIndex(y => new { y.TenantId, y.ProjectionKey, y.ScopeKey })
-                .IsUnique();
+            x.HasIndex(y => new { y.Status, y.DispatchedAt });
         });
 
         modelBuilder.Entity<BillingCustomer>(x =>
@@ -593,11 +563,16 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
             x.Property(y => y.Error)
                 .HasMaxLength(2048);
 
+            x.Property(y => y.TemporalWorkflowId)
+                .HasMaxLength(256);
+
             x.Property(y => y.CreatedAt)
                 .IsRequired();
 
             x.HasIndex(y => y.TenantId);
+            x.HasIndex(y => y.BatchId);
             x.HasIndex(y => new { y.TenantId, y.Status });
+            x.HasIndex(y => new { y.Status, y.DispatchedAt });
             x.HasIndex(y => y.ExternalMessageId);
         });
 
@@ -614,6 +589,9 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
             x.Property(y => y.Name)
                 .HasMaxLength(160)
                 .IsRequired();
+
+            x.Property(y => y.FinancialDataVersion)
+                .IsConcurrencyToken();
 
             x.Property(y => y.CreatedAt)
                 .IsRequired();

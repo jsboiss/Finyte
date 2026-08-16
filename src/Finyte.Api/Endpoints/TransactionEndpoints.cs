@@ -2,6 +2,7 @@ using System.Text.RegularExpressions;
 using Finyte.Api.Tenancy;
 using Finyte.Core.Accounts;
 using Finyte.Data;
+using Finyte.Data.Analytics;
 using Finyte.Data.Billing;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
@@ -135,6 +136,7 @@ public static partial class TransactionEndpoints
         TenantResolver tenantResolver,
         HttpContext httpContext,
         FinyteDbContext dbContext,
+        IProjectionInvalidator projectionInvalidator,
         CancellationToken cancellationToken)
     {
         var currentTenant = await tenantResolver.Resolve(httpContext.User, cancellationToken);
@@ -147,6 +149,7 @@ public static partial class TransactionEndpoints
         }
 
         dbContext.TransactionTags.Remove(tag);
+        await projectionInvalidator.TenantProjectionDataChanged(currentTenant.TenantId, "transaction tag deleted", cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return TypedResults.NoContent();
@@ -158,13 +161,16 @@ public static partial class TransactionEndpoints
         TenantResolver tenantResolver,
         HttpContext httpContext,
         FinyteDbContext dbContext,
+        IProjectionInvalidator projectionInvalidator,
         CancellationToken cancellationToken)
     {
         var currentTenant = await tenantResolver.Resolve(httpContext.User, cancellationToken);
-        var transactionExists = await dbContext.Transactions
-            .AnyAsync(x => x.Id == transactionId && x.TenantId == currentTenant.TenantId, cancellationToken);
+        var transaction = await dbContext.Transactions
+            .Where(x => x.Id == transactionId && x.TenantId == currentTenant.TenantId)
+            .Select(x => new { x.AccountId, x.PostedAt })
+            .SingleOrDefaultAsync(cancellationToken);
 
-        if (!transactionExists)
+        if (transaction is null)
         {
             return TypedResults.NotFound();
         }
@@ -198,6 +204,11 @@ public static partial class TransactionEndpoints
             });
         }
 
+        await projectionInvalidator.TransactionChanged(
+            currentTenant.TenantId,
+            transaction.AccountId,
+            transaction.PostedAt,
+            cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return TypedResults.Ok<IReadOnlyList<TransactionTagResponse>>(tags.Select(x => new TransactionTagResponse(x.Id, x.Name, x.Color)).ToList());
@@ -228,6 +239,7 @@ public static partial class TransactionEndpoints
         TenantResolver tenantResolver,
         HttpContext httpContext,
         FinyteDbContext dbContext,
+        IProjectionInvalidator projectionInvalidator,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.MerchantName))
@@ -265,6 +277,7 @@ public static partial class TransactionEndpoints
 
         dbContext.MerchantTagRules.Add(rule);
         await ApplyMerchantRule(currentTenant.TenantId, merchantKey, tag.Id, dbContext, cancellationToken);
+        await projectionInvalidator.TenantProjectionDataChanged(currentTenant.TenantId, "merchant tag rule applied", cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
 
         var response = new MerchantTagRuleResponse(rule.Id, rule.MerchantName, new TransactionTagResponse(tag.Id, tag.Name, tag.Color));
