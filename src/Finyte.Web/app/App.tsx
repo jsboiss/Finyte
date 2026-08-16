@@ -1,11 +1,12 @@
-import { SignIn, UserButton, useAuth } from '@clerk/react'
+import { CreateOrganization, OrganizationSwitcher, SignIn, UserButton, useAuth, useOrganization } from '@clerk/react'
+import { link, type LinkError } from '@fiskil/link'
 import { keepPreviousData, QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createRootRoute, createRoute, createRouter, Link, Outlet, RouterProvider, useRouterState } from '@tanstack/react-router'
 import { createColumnHelper, flexRender, getCoreRowModel, getFilteredRowModel, type ColumnFiltersState, useReactTable } from '@tanstack/react-table'
-import { Activity, Banknote, CreditCard, Home, Menu, Plus, ReceiptText, Settings, SlidersHorizontal, Tags, Trash2, X } from 'lucide-react'
+import { Activity, Banknote, CreditCard, Home, Mail, Menu, Plus, ReceiptText, Settings, Shield, SlidersHorizontal, Tags, Trash2, UserPlus, Users, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { getAccounts, getAppStatus } from './api/generated/finyteApi'
-import { httpClient } from './api/httpClient'
+import { getDevIdentity, httpClient, setDevIdentity } from './api/httpClient'
 import { AuthTokenProvider } from './auth/AuthTokenProvider'
 import { BillingPage } from './billing/BillingAccessPanel'
 import { DashboardPage } from './dashboard/DashboardPage'
@@ -41,6 +42,43 @@ type SetTransactionTagsInput = {
   tagIds: string[]
 }
 
+type ProviderConnection = {
+  id: string
+  provider: string
+  institutionId?: string
+  status: string
+  isOwnedByCurrentMember: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+type FamilyMember = {
+  id: string
+  userId: string
+  displayName?: string
+  email?: string
+  role: 'Owner' | 'Member'
+  isCurrent: boolean
+}
+
+type FamilyInvitation = {
+  id: string
+  email: string
+  role: string
+  status: string
+  createdAt: string
+}
+
+type Family = {
+  id: string
+  organizationId: string
+  name: string
+  canManage: boolean
+  isDevelopment: boolean
+  members: FamilyMember[]
+  invitations: FamilyInvitation[]
+}
+
 type CreateMerchantRuleInput = {
   merchantName: string
   tagId: string
@@ -61,7 +99,7 @@ function DashboardShell() {
 }
 
 function ClerkDashboardShell() {
-  const { isLoaded, isSignedIn } = useAuth()
+  const { isLoaded, isSignedIn, orgId } = useAuth()
 
   if (!isLoaded) {
     return (
@@ -73,6 +111,49 @@ function ClerkDashboardShell() {
 
   if (!isSignedIn) {
     return <SignInPage />
+  }
+
+  if (!orgId) {
+    return (
+      <main className="auth-page">
+        <CreateOrganization afterCreateOrganizationUrl="/" />
+      </main>
+    )
+  }
+
+  return <FamilyProvisioner />
+}
+
+function FamilyProvisioner() {
+  const { organization } = useOrganization()
+  const currentUserQuery = useQuery({
+    queryKey: ['current-user', organization?.id],
+    queryFn: getCurrentUser,
+  })
+  const {
+    error: provisionFamilyError,
+    isIdle: isProvisionFamilyIdle,
+    isPending: isProvisioningFamily,
+    mutate: provisionCurrentFamily,
+  } = useMutation({
+    mutationFn: () => provisionFamily(organization?.name ?? 'My family'),
+    onSuccess: currentUser => queryClient.setQueryData(['current-user', organization?.id], currentUser),
+  })
+
+  useEffect(() => {
+    if (currentUserQuery.data && !currentUserQuery.data.onboarding.hasFamily && isProvisionFamilyIdle) {
+      provisionCurrentFamily()
+    }
+  }, [currentUserQuery.data, isProvisionFamilyIdle, provisionCurrentFamily])
+
+  if (currentUserQuery.isLoading || isProvisioningFamily || !currentUserQuery.data?.onboarding.hasFamily) {
+    return (
+      <main className="auth-page">
+        <div className="auth-loading">
+          {currentUserQuery.isError || provisionFamilyError ? 'Family setup failed. Refresh to try again.' : 'Setting up your family'}
+        </div>
+      </main>
+    )
   }
 
   return <SignedInShell />
@@ -187,6 +268,7 @@ function AuthControls() {
 
   return (
     <div className="auth-panel">
+      <OrganizationSwitcher hidePersonal />
       <UserButton />
     </div>
   )
@@ -198,6 +280,31 @@ function SignInPage() {
       <SignIn />
     </main>
   )
+}
+
+type CurrentUser = {
+  userId?: string
+  tenantId?: string
+  role?: string
+  onboarding: {
+    hasFamily: boolean
+  }
+}
+
+async function getCurrentUser() {
+  return httpClient<CurrentUser>({
+    method: 'GET',
+    url: '/api/auth/me',
+  })
+}
+
+async function provisionFamily(name: string) {
+  return httpClient<CurrentUser>({
+    data: { name },
+    headers: { 'Content-Type': 'application/json' },
+    method: 'POST',
+    url: '/api/auth/family',
+  })
 }
 
 function TransactionsPage() {
@@ -390,6 +497,8 @@ function TransactionsPage() {
       },
     }),
   ], [setTransactionTagIds, tagsQuery.data])
+  // TanStack Table intentionally returns stateful functions that React Compiler cannot memoize.
+  // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data: transactionsQuery.data?.items ?? [],
     columns,
@@ -766,6 +875,42 @@ function TagPill({ tag }: { tag: TransactionTag }) {
 }
 
 function ConnectionsPage() {
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [phone, setPhone] = useState('')
+  const [connectionError, setConnectionError] = useState<string>()
+  const queryClient = useQueryClient()
+  const connectionsQuery = useQuery({
+    queryKey: ['provider-connections'],
+    queryFn: getProviderConnections,
+  })
+  const connectMutation = useMutation({
+    mutationFn: async () => {
+      const session = await startFiskilSession({ name, email, phone })
+      const result = await link(session.sessionId)
+      if (!result.consentID) {
+        throw new Error('Fiskil completed without returning a consent.')
+      }
+
+      return completeFiskilSession(session.sessionId, result.consentID)
+    },
+    onMutate: () => setConnectionError(undefined),
+    onSuccess: connection => {
+      queryClient.setQueryData<ProviderConnection[]>(['provider-connections'], x => [connection, ...(x ?? []).filter(y => y.id !== connection.id)])
+    },
+    onError: error => {
+      const linkError = error as Partial<LinkError>
+      setConnectionError(linkError.code === 'LINK_USER_CANCELLED' ? 'Connection cancelled.' : error instanceof Error ? error.message : 'Unable to connect bank.')
+    },
+  })
+  const disconnectMutation = useMutation({
+    mutationFn: disconnectProviderConnection,
+    onSuccess: (_result, connectionId) => {
+      queryClient.setQueryData<ProviderConnection[]>(['provider-connections'], x => (x ?? []).map(y => y.id === connectionId ? { ...y, status: 'revoked' } : y))
+    },
+  })
+  const canConnect = Boolean(name.trim() && email.trim() && phone.trim()) && !connectMutation.isPending
+
   return (
     <section className="page">
       <header className="page-header">
@@ -774,23 +919,219 @@ function ConnectionsPage() {
           <h1>Connections</h1>
         </div>
       </header>
-      <button type="button">Connect bank</button>
+      <section className="panel">
+        <div className="panel-header">
+          <div>
+            <p>Your consent</p>
+            <h2>Connect a bank</h2>
+          </div>
+        </div>
+        <p>These details identify you to Fiskil and are used for consent notifications.</p>
+        <div className="tag-form">
+          <input autoComplete="name" onChange={x => setName(x.target.value)} placeholder="Full name" value={name} />
+          <input autoComplete="email" onChange={x => setEmail(x.target.value)} placeholder="Email" type="email" value={email} />
+          <input autoComplete="tel" onChange={x => setPhone(x.target.value)} placeholder="Phone, e.g. +61412345678" type="tel" value={phone} />
+          <button disabled={!canConnect} onClick={() => connectMutation.mutate()} type="button">
+            {connectMutation.isPending ? 'Connecting…' : 'Connect bank'}
+          </button>
+        </div>
+        {connectionError && <p role="alert">{connectionError}</p>}
+      </section>
+      <section className="panel">
+        <div className="panel-header">
+          <div>
+            <p>Household access</p>
+            <h2>Connections</h2>
+          </div>
+        </div>
+        {connectionsQuery.isLoading && <p>Loading connections…</p>}
+        {!connectionsQuery.isLoading && (connectionsQuery.data?.length ?? 0) === 0 && <p>No banks connected yet.</p>}
+        {(connectionsQuery.data ?? []).map(x => (
+          <div className="tag-form" key={x.id}>
+            <strong>{x.institutionId ? `Institution ${x.institutionId}` : 'Fiskil connection'}</strong>
+            <span>{x.status}</span>
+            <span>{x.isOwnedByCurrentMember ? 'Connected by you' : 'Connected by a family member'}</span>
+            {x.isOwnedByCurrentMember && x.status !== 'revoked' && (
+              <button disabled={disconnectMutation.isPending} onClick={() => disconnectMutation.mutate(x.id)} type="button">
+                Disconnect
+              </button>
+            )}
+          </div>
+        ))}
+      </section>
     </section>
   )
 }
 
+async function getProviderConnections() {
+  return httpClient<ProviderConnection[]>({
+    method: 'GET',
+    url: '/api/provider-connections',
+  })
+}
+
+async function startFiskilSession(input: { name: string; email: string; phone: string }) {
+  return httpClient<{ sessionId: string; expiresAt: string }>({
+    data: input,
+    headers: { 'Content-Type': 'application/json' },
+    method: 'POST',
+    url: '/api/provider-connections/fiskil/session',
+  })
+}
+
+async function completeFiskilSession(sessionId: string, consentId: string) {
+  return httpClient<ProviderConnection>({
+    data: { sessionId, consentId },
+    headers: { 'Content-Type': 'application/json' },
+    method: 'POST',
+    url: '/api/provider-connections/fiskil/complete',
+  })
+}
+
+async function disconnectProviderConnection(connectionId: string) {
+  return httpClient<void>({
+    method: 'DELETE',
+    url: `/api/provider-connections/${connectionId}`,
+  })
+}
+
 function SettingsPage() {
+  const [inviteEmail, setInviteEmail] = useState('')
+  const queryClient = useQueryClient()
+  const familyQuery = useQuery({ queryKey: ['family'], queryFn: getFamily })
+  const inviteMutation = useMutation({
+    mutationFn: inviteFamilyMember,
+    onSuccess: invitation => {
+      queryClient.setQueryData<Family>(['family'], x => x ? { ...x, invitations: [invitation, ...x.invitations] } : x)
+      setInviteEmail('')
+    },
+  })
+  const revokeMutation = useMutation({
+    mutationFn: revokeFamilyInvitation,
+    onSuccess: (_result, invitationId) => queryClient.setQueryData<Family>(['family'], x => x ? { ...x, invitations: x.invitations.filter(y => y.id !== invitationId) } : x),
+  })
+  const acceptMutation = useMutation({
+    mutationFn: acceptDevelopmentInvitation,
+    onSuccess: (member, invitationId) => queryClient.setQueryData<Family>(['family'], x => x ? {
+      ...x,
+      invitations: x.invitations.filter(y => y.id !== invitationId),
+      members: [...x.members, member],
+    } : x),
+  })
+  const removeMutation = useMutation({
+    mutationFn: removeFamilyMember,
+    onSuccess: (_result, memberId) => queryClient.setQueryData<Family>(['family'], x => x ? { ...x, members: x.members.filter(y => y.id !== memberId) } : x),
+  })
+  const family = familyQuery.data
+
+  const switchDevelopmentMember = (userId: string) => {
+    if (!family) {
+      return
+    }
+
+    const member = family.members.find(x => x.userId === userId)
+    if (!member) {
+      return
+    }
+
+    setDevIdentity({
+      userId: member.userId,
+      organizationId: family.organizationId,
+      role: member.role === 'Owner' ? 'org:admin' : 'org:member',
+    })
+    window.location.reload()
+  }
+
   return (
-    <section className="page">
-      <header className="page-header">
+    <section className="page family-settings-page">
+      <header className="page-header family-page-header">
         <div>
-          <p>Account</p>
-          <h1>Settings</h1>
+          <p>Household</p>
+          <h1>{family?.name ?? 'Family settings'}</h1>
         </div>
       </header>
-      <button type="button">Manage security</button>
+      {familyQuery.isLoading && <section className="panel"><p>Loading family…</p></section>}
+      {familyQuery.isError && <section className="panel"><p role="alert">Unable to load family settings.</p></section>}
+      {family?.isDevelopment && (
+        <section className="dev-family-banner">
+          <div>
+            <Shield aria-hidden="true" />
+            <div><strong>Development personas</strong><span>Switch users to verify permissions and shared household data.</span></div>
+          </div>
+          <select onChange={x => switchDevelopmentMember(x.target.value)} value={getDevIdentity().userId}>
+            {family.members.map(x => <option key={x.id} value={x.userId}>{x.displayName ?? x.email ?? x.userId} · {x.role}</option>)}
+          </select>
+        </section>
+      )}
+      {family?.canManage && (
+        <section className="panel family-invite-panel">
+          <div className="family-section-heading">
+            <div className="family-icon"><UserPlus aria-hidden="true" /></div>
+            <div><p>Grow your household</p><h2>Invite a family member</h2><span>Members can connect their own accounts and view shared family finances.</span></div>
+          </div>
+          <form className="family-invite-form" onSubmit={x => { x.preventDefault(); inviteMutation.mutate(inviteEmail) }}>
+            <div><Mail aria-hidden="true" /><input onChange={x => setInviteEmail(x.target.value)} placeholder="family@example.com" type="email" value={inviteEmail} /></div>
+            <button disabled={!inviteEmail.trim() || inviteMutation.isPending} type="submit">{inviteMutation.isPending ? 'Sending…' : 'Send invite'}</button>
+          </form>
+          {inviteMutation.isError && <p className="family-error" role="alert">Unable to send this invitation.</p>}
+        </section>
+      )}
+      {family && (
+        <section className="panel family-members-panel">
+          <div className="family-section-heading">
+            <div className="family-icon"><Users aria-hidden="true" /></div>
+            <div><p>People</p><h2>Family members</h2><span>{family.members.length} active {family.members.length === 1 ? 'member' : 'members'}</span></div>
+          </div>
+          <div className="family-list">
+            {family.members.map(x => (
+              <div className="family-list-row" key={x.id}>
+                <div className="family-avatar">{(x.displayName ?? x.email ?? '?').slice(0, 1).toUpperCase()}</div>
+                <div className="family-person"><strong>{x.displayName ?? x.email ?? 'Family member'}{x.isCurrent ? ' (you)' : ''}</strong><span>{x.email ?? x.userId}</span></div>
+                <span className={x.role === 'Owner' ? 'family-role is-owner' : 'family-role'}>{x.role}</span>
+                {family.canManage && !x.isCurrent && <button className="family-icon-button" aria-label={`Remove ${x.displayName ?? x.email}`} onClick={() => removeMutation.mutate(x.id)} type="button"><Trash2 aria-hidden="true" /></button>}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+      {family?.canManage && family.invitations.length > 0 && (
+        <section className="panel family-members-panel">
+          <div className="family-section-heading"><div className="family-icon"><Mail aria-hidden="true" /></div><div><p>Awaiting response</p><h2>Pending invitations</h2></div></div>
+          <div className="family-list">
+            {family.invitations.map(x => (
+              <div className="family-list-row" key={x.id}>
+                <div className="family-avatar is-pending"><Mail aria-hidden="true" /></div>
+                <div className="family-person"><strong>{x.email}</strong><span>Invited {new Date(x.createdAt).toLocaleDateString()}</span></div>
+                <span className="family-role">Pending</span>
+                {family.isDevelopment && <button onClick={() => acceptMutation.mutate(x.id)} type="button">Accept as test member</button>}
+                <button className="family-icon-button" aria-label={`Revoke invitation for ${x.email}`} onClick={() => revokeMutation.mutate(x.id)} type="button"><X aria-hidden="true" /></button>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
     </section>
   )
+}
+
+async function getFamily() {
+  return httpClient<Family>({ method: 'GET', url: '/api/family' })
+}
+
+async function inviteFamilyMember(email: string) {
+  return httpClient<FamilyInvitation>({ data: { email }, headers: { 'Content-Type': 'application/json' }, method: 'POST', url: '/api/family/invitations' })
+}
+
+async function revokeFamilyInvitation(invitationId: string) {
+  return httpClient<void>({ method: 'DELETE', url: `/api/family/invitations/${invitationId}` })
+}
+
+async function acceptDevelopmentInvitation(invitationId: string) {
+  return httpClient<FamilyMember>({ method: 'POST', url: `/api/family/invitations/${invitationId}/dev-accept` })
+}
+
+async function removeFamilyMember(memberId: string) {
+  return httpClient<void>({ method: 'DELETE', url: `/api/family/members/${memberId}` })
 }
 
 async function getTransactions(page: number, pageSize: number) {

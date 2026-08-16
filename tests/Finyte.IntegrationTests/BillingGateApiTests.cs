@@ -98,7 +98,8 @@ public sealed class BillingGateApiTests
 
     private static async Task<Guid> ResolveTenantId(HttpClient client)
     {
-        var currentUser = await client.GetFromJsonAsync<CurrentUserResponse>("/api/auth/me");
+        var response = await client.PostAsJsonAsync("/api/auth/family", new { name = "Test family" });
+        var currentUser = await response.Content.ReadFromJsonAsync<CurrentUserResponse>();
 
         Assert.NotNull(currentUser);
         return currentUser.TenantId;

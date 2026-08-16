@@ -1893,3 +1893,227 @@ td {
     transition: none;
   }
 }
+
+.family-settings-page {
+  margin-inline: auto;
+  max-width: 1040px;
+  width: 100%;
+}
+
+.dev-family-banner {
+  align-items: center;
+  background: color-mix(in srgb, #7c3aed 14%, #18191b);
+  border: 1px solid #6d4ab2;
+  border-radius: 8px;
+  display: flex;
+  gap: 20px;
+  justify-content: space-between;
+  padding: 14px 18px;
+}
+
+.dev-family-banner > div {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+}
+
+.dev-family-banner > div > svg {
+  color: #c4b5fd;
+  flex: 0 0 auto;
+}
+
+.dev-family-banner > div > div {
+  display: grid;
+  gap: 3px;
+}
+
+.dev-family-banner span,
+.family-section-heading span,
+.family-person span {
+  color: #a7aaa8;
+  font-size: 13px;
+}
+
+.dev-family-banner select {
+  min-width: 220px;
+}
+
+.family-invite-panel,
+.family-members-panel {
+  gap: 22px;
+}
+
+.family-section-heading {
+  align-items: center;
+  display: flex;
+  gap: 14px;
+}
+
+.family-section-heading > div:last-child {
+  display: grid;
+  gap: 3px;
+}
+
+.family-section-heading p,
+.family-section-heading h2 {
+  margin: 0;
+}
+
+.family-icon {
+  align-items: center;
+  background: #292c2f;
+  border: 1px solid #3f4347;
+  border-radius: 8px;
+  color: #d6d8d4;
+  display: flex;
+  height: 42px;
+  justify-content: center;
+  width: 42px;
+}
+
+.family-invite-form {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.family-invite-form > div {
+  align-items: center;
+  background: #101112;
+  border: 1px solid #36393d;
+  border-radius: 6px;
+  display: flex;
+  gap: 10px;
+  padding-inline: 12px;
+}
+
+.family-invite-form svg {
+  color: #777b80;
+  width: 18px;
+}
+
+.family-invite-form input {
+  background: transparent;
+  border: 0;
+  min-width: 0;
+  padding-inline: 0;
+  width: 100%;
+}
+
+.family-error {
+  color: #ff9b82;
+  margin: 0;
+}
+
+.family-list {
+  border: 1px solid #36393d;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.family-list-row {
+  align-items: center;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+  min-height: 68px;
+  padding: 12px 14px;
+}
+
+.family-list-row + .family-list-row {
+  border-top: 1px solid #36393d;
+}
+
+.family-avatar {
+  align-items: center;
+  background: #34383c;
+  border-radius: 50%;
+  color: #eeeeec;
+  display: flex;
+  font-weight: 750;
+  height: 40px;
+  justify-content: center;
+  width: 40px;
+}
+
+.family-avatar.is-pending {
+  background: #25282b;
+  color: #9da1a5;
+}
+
+.family-avatar svg {
+  width: 17px;
+}
+
+.family-person {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.family-person strong,
+.family-person span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.family-role {
+  background: #292c2f;
+  border: 1px solid #3f4347;
+  border-radius: 999px;
+  color: #c5c7c2;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 5px 9px;
+}
+
+.family-role.is-owner {
+  background: color-mix(in srgb, #d8b45d 14%, #292c2f);
+  border-color: #665736;
+  color: #e8cc82;
+}
+
+.family-icon-button {
+  background: transparent;
+  color: #85898d;
+  min-height: 34px;
+  padding: 6px;
+}
+
+.family-icon-button:hover {
+  color: #ff9b82;
+}
+
+.family-icon-button svg {
+  height: 17px;
+  width: 17px;
+}
+
+@media (max-width: 700px) {
+  .dev-family-banner {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .dev-family-banner select {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .family-invite-form {
+    grid-template-columns: 1fr;
+  }
+
+  .family-invite-form > div {
+    min-height: 44px;
+  }
+
+  .family-list-row {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .family-list-row > button:not(.family-icon-button) {
+    grid-column: 2 / -1;
+  }
+}

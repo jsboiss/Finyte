@@ -37,11 +37,7 @@ public sealed class FiskilWebhookIngestor(FinyteDbContext dbContext) : IFiskilWe
             return new FiskilWebhookIngestionResult(IsDuplicate: true, existingEvent.SyncRunId);
         }
 
-        var connection = string.IsNullOrWhiteSpace(request.Data.EndUserId)
-            ? null
-            : await dbContext.ProviderConnections
-                .AsNoTracking()
-                .FirstOrDefaultAsync(x => x.Provider == ProviderSyncProvider.Fiskil && x.EndUserId == request.Data.EndUserId, cancellationToken);
+        var connection = await ResolveConnection(request.Data, cancellationToken);
 
         var webhookEvent = new ProviderWebhookEvent
         {
@@ -77,6 +73,58 @@ public sealed class FiskilWebhookIngestor(FinyteDbContext dbContext) : IFiskilWe
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return new FiskilWebhookIngestionResult(IsDuplicate: false, webhookEvent.SyncRunId);
+    }
+
+    private async Task<ProviderConnection?> ResolveConnection(FiskilWebhookData data, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(data.EndUserId))
+        {
+            return null;
+        }
+
+        var connections = await dbContext.ProviderConnections
+            .Where(x => x.Provider == ProviderSyncProvider.Fiskil && x.EndUserId == data.EndUserId)
+            .OrderBy(x => x.CreatedAt)
+            .ToListAsync(cancellationToken);
+        var connection = !string.IsNullOrWhiteSpace(data.ConsentId)
+            ? connections.FirstOrDefault(x => x.ConsentId == data.ConsentId)
+            : null;
+        connection ??= connections.FirstOrDefault(x => x.ConsentId == null);
+
+        if (connection is null && !string.IsNullOrWhiteSpace(data.ConsentId) && connections.Count > 0)
+        {
+            var existingConnection = connections[0];
+            connection = new ProviderConnection
+            {
+                TenantId = existingConnection.TenantId,
+                TenantMemberId = existingConnection.TenantMemberId,
+                Provider = ProviderSyncProvider.Fiskil,
+                EndUserId = data.EndUserId,
+                CreatedAt = DateTimeOffset.UtcNow
+            };
+            dbContext.ProviderConnections.Add(connection);
+        }
+
+        if (connection is null)
+        {
+            return connections.FirstOrDefault();
+        }
+
+        if (!string.IsNullOrWhiteSpace(data.ConsentId))
+        {
+            connection.ConsentId = data.ConsentId;
+        }
+
+        if (!string.IsNullOrWhiteSpace(data.InstitutionId))
+        {
+            connection.InstitutionId = data.InstitutionId;
+        }
+
+        connection.Status = data.Event == "consent.revoked"
+            ? ProviderConnectionStatus.Revoked
+            : ProviderConnectionStatus.Active;
+        connection.UpdatedAt = DateTimeOffset.UtcNow;
+        return connection;
     }
 
     private static string? ToDataset(string eventType)

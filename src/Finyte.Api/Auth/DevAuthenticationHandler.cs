@@ -14,10 +14,15 @@ public sealed class DevAuthenticationHandler(
 
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
     {
+        var userId = GetHeader("X-Dev-User") ?? "dev-user";
+        var organizationId = GetHeader("X-Dev-Organization") ?? "org_dev-family";
+        var organizationRole = GetHeader("X-Dev-Role") ?? "org:admin";
         var claims = new[]
         {
-            new Claim(ClaimTypes.NameIdentifier, "dev-user"),
-            new Claim("sub", "dev-user"),
+            new Claim(ClaimTypes.NameIdentifier, userId),
+            new Claim("sub", userId),
+            new Claim("org_id", organizationId),
+            new Claim("org_role", organizationRole),
             new Claim(ClaimTypes.Name, "Dev User")
         };
         var identity = new ClaimsIdentity(claims, SchemeName);
@@ -25,5 +30,11 @@ public sealed class DevAuthenticationHandler(
         var ticket = new AuthenticationTicket(principal, SchemeName);
 
         return Task.FromResult(AuthenticateResult.Success(ticket));
+    }
+
+    private string? GetHeader(string name)
+    {
+        var value = Request.Headers[name].ToString();
+        return string.IsNullOrWhiteSpace(value) ? null : value;
     }
 }

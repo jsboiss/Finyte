@@ -6,6 +6,10 @@ public sealed class TenantMember
     public Guid TenantId { get; set; }
     public Tenant? Tenant { get; set; }
     public required string UserId { get; set; }
+    public string? DisplayName { get; set; }
+    public string? Email { get; set; }
+    public string? ClerkMembershipId { get; set; }
     public TenantRole Role { get; set; } = TenantRole.Owner;
     public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset? RemovedAt { get; set; }
 }

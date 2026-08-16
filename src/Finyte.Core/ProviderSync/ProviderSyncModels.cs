@@ -1,3 +1,5 @@
+using Finyte.Core.Tenancy;
+
 namespace Finyte.Core.ProviderSync;
 
 public static class ProviderSyncDataset
@@ -18,18 +20,42 @@ public static class ProviderSyncStatus
     public const string Running = "running";
     public const string Succeeded = "succeeded";
     public const string Failed = "failed";
+    public const string Cancelled = "cancelled";
+}
+
+public static class ProviderConnectionStatus
+{
+    public const string Pending = "pending";
+    public const string Active = "active";
+    public const string Revoked = "revoked";
 }
 
 public sealed class ProviderConnection
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public Guid TenantId { get; set; }
+    public Guid TenantMemberId { get; set; }
+    public TenantMember? TenantMember { get; set; }
     public string Provider { get; set; } = ProviderSyncProvider.Fiskil;
     public string EndUserId { get; set; } = "";
     public string? ConsentId { get; set; }
     public string? InstitutionId { get; set; }
+    public string Status { get; set; } = ProviderConnectionStatus.Pending;
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
+}
+
+public sealed class ProviderAuthSession
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid TenantId { get; set; }
+    public Guid TenantMemberId { get; set; }
+    public string Provider { get; set; } = ProviderSyncProvider.Fiskil;
+    public string EndUserId { get; set; } = "";
+    public string SessionId { get; set; } = "";
+    public DateTimeOffset ExpiresAt { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset? CompletedAt { get; set; }
 }
 
 public sealed class ProviderWebhookEvent

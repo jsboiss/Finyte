@@ -13,9 +13,11 @@ public sealed class FiskilWebhookIngestorTests
     {
         await using var dbContext = CreateDbContext();
         var tenantId = Guid.NewGuid();
+        var tenantMemberId = Guid.NewGuid();
         dbContext.ProviderConnections.Add(new ProviderConnection
         {
             TenantId = tenantId,
+            TenantMemberId = tenantMemberId,
             Provider = ProviderSyncProvider.Fiskil,
             EndUserId = "end-user-1",
             ConsentId = "consent-1",
@@ -44,9 +46,11 @@ public sealed class FiskilWebhookIngestorTests
     {
         await using var dbContext = CreateDbContext();
         var tenantId = Guid.NewGuid();
+        var tenantMemberId = Guid.NewGuid();
         dbContext.ProviderConnections.Add(new ProviderConnection
         {
             TenantId = tenantId,
+            TenantMemberId = tenantMemberId,
             Provider = ProviderSyncProvider.Fiskil,
             EndUserId = "end-user-1",
             CreatedAt = DateTimeOffset.UtcNow,

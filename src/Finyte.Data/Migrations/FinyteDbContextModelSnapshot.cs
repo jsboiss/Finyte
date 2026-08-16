@@ -17,7 +17,7 @@ namespace Finyte.Data.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.8")
+                .HasAnnotation("ProductVersion", "10.0.9")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -94,10 +94,15 @@ namespace Finyte.Data.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
 
+                    b.Property<Guid?>("ProviderConnectionId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ProviderConnectionId");
 
                     b.HasIndex("TenantId");
 
@@ -512,6 +517,54 @@ namespace Finyte.Data.Migrations
                     b.ToTable("billing_subscriptions", (string)null);
                 });
 
+            modelBuilder.Entity("Finyte.Core.ProviderSync.ProviderAuthSession", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("EndUserId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("SessionId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TenantMemberId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("TenantMemberId");
+
+                    b.HasIndex("Provider", "SessionId")
+                        .IsUnique();
+
+                    b.ToTable("provider_auth_sessions", (string)null);
+                });
+
             modelBuilder.Entity("Finyte.Core.ProviderSync.ProviderConnection", b =>
                 {
                     b.Property<Guid>("Id")
@@ -539,7 +592,15 @@ namespace Finyte.Data.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
                     b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TenantMemberId")
                         .HasColumnType("uuid");
 
                     b.Property<DateTimeOffset>("UpdatedAt")
@@ -549,8 +610,13 @@ namespace Finyte.Data.Migrations
 
                     b.HasIndex("TenantId");
 
-                    b.HasIndex("Provider", "EndUserId")
-                        .IsUnique();
+                    b.HasIndex("TenantMemberId");
+
+                    b.HasIndex("Provider", "ConsentId")
+                        .IsUnique()
+                        .HasFilter("\"ConsentId\" IS NOT NULL");
+
+                    b.HasIndex("Provider", "EndUserId");
 
                     b.ToTable("provider_connections", (string)null);
                 });
@@ -669,11 +735,95 @@ namespace Finyte.Data.Migrations
                     b.ToTable("provider_webhook_events", (string)null);
                 });
 
+            modelBuilder.Entity("Finyte.Core.Tenancy.ClerkWebhookEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<string>("MessageId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTimeOffset>("ProcessedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MessageId")
+                        .IsUnique();
+
+                    b.ToTable("clerk_webhook_events", (string)null);
+                });
+
+            modelBuilder.Entity("Finyte.Core.Tenancy.FamilyInvitation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)");
+
+                    b.Property<string>("InvitedByUserId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("ProviderInvitationId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProviderInvitationId")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("TenantId", "Email", "Status");
+
+                    b.ToTable("family_invitations", (string)null);
+                });
+
             modelBuilder.Entity("Finyte.Core.Tenancy.Tenant", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
+
+                    b.Property<string>("ClerkOrganizationId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -685,6 +835,9 @@ namespace Finyte.Data.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ClerkOrganizationId")
+                        .IsUnique();
+
                     b.ToTable("tenants", (string)null);
                 });
 
@@ -694,7 +847,22 @@ namespace Finyte.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("ClerkMembershipId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
                     b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DisplayName")
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<string>("Email")
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)");
+
+                    b.Property<DateTimeOffset?>("RemovedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Role")
@@ -712,12 +880,24 @@ namespace Finyte.Data.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ClerkMembershipId")
+                        .IsUnique()
+                        .HasFilter("\"ClerkMembershipId\" IS NOT NULL");
+
                     b.HasIndex("TenantId");
 
-                    b.HasIndex("UserId")
+                    b.HasIndex("TenantId", "UserId")
                         .IsUnique();
 
                     b.ToTable("tenant_members", (string)null);
+                });
+
+            modelBuilder.Entity("Finyte.Core.Accounts.Account", b =>
+                {
+                    b.HasOne("Finyte.Core.ProviderSync.ProviderConnection", null)
+                        .WithMany()
+                        .HasForeignKey("ProviderConnectionId")
+                        .OnDelete(DeleteBehavior.SetNull);
                 });
 
             modelBuilder.Entity("Finyte.Core.Accounts.MerchantTagRule", b =>
@@ -789,6 +969,35 @@ namespace Finyte.Data.Migrations
                     b.Navigation("BillingCustomer");
 
                     b.Navigation("Tenant");
+                });
+
+            modelBuilder.Entity("Finyte.Core.ProviderSync.ProviderAuthSession", b =>
+                {
+                    b.HasOne("Finyte.Core.Tenancy.TenantMember", null)
+                        .WithMany()
+                        .HasForeignKey("TenantMemberId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Finyte.Core.ProviderSync.ProviderConnection", b =>
+                {
+                    b.HasOne("Finyte.Core.Tenancy.TenantMember", "TenantMember")
+                        .WithMany()
+                        .HasForeignKey("TenantMemberId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("TenantMember");
+                });
+
+            modelBuilder.Entity("Finyte.Core.Tenancy.FamilyInvitation", b =>
+                {
+                    b.HasOne("Finyte.Core.Tenancy.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Finyte.Core.Tenancy.TenantMember", b =>
