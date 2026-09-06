@@ -52,11 +52,16 @@ public static class BankingAccountEndpoints
         }
 
         var name = request.Name.Trim();
+        if (name.Length > 120 || (!string.IsNullOrWhiteSpace(request.Currency)
+            && (request.Currency.Trim().Length != 3 || !request.Currency.Trim().All(x => char.IsAsciiLetter(x)))))
+        {
+            return TypedResults.BadRequest("Use an account name of up to 120 characters and a three-letter currency code.");
+        }
         var currentTenant = await tenantResolver.Resolve(httpContext.User, cancellationToken);
 
         if (!await billingAccess.HasAccess(currentTenant.TenantId, cancellationToken))
         {
-            return TypedResults.Problem("An active subscription is required before connecting providers.", statusCode: StatusCodes.Status402PaymentRequired);
+            return TypedResults.Problem("An active subscription is required before creating accounts.", statusCode: StatusCodes.Status402PaymentRequired);
         }
 
         var account = new Account

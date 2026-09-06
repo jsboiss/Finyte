@@ -2117,3 +2117,81 @@ td {
     grid-column: 2 / -1;
   }
 }
+.import-panel {
+  display: grid;
+  gap: 18px;
+}
+
+.import-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 16px;
+}
+
+.import-form label {
+  display: grid;
+  gap: 8px;
+  flex: 1 1 180px;
+  min-width: 0;
+}
+
+.import-form input,
+.import-form select {
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  padding: 8px 10px;
+  border: 1px solid #3f4347;
+  border-radius: 6px;
+  background: #202225;
+  color: #eeeeec;
+}
+
+.import-panel h2 {
+  font-size: 18px;
+  font-weight: 650;
+  margin-bottom: 6px;
+}
+
+.import-panel > div > p {
+  color: #a7aaa8;
+}
+
+.import-form button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+}
+
+.import-form button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.import-history article {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 0;
+  border-bottom: 1px solid #3f4347;
+}
+
+.import-history article > div {
+  display: grid;
+  gap: 6px;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+.import-history article > p {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+.import-history article > div > span {
+  color: #9da1a5;
+  font-size: 13px;
+}

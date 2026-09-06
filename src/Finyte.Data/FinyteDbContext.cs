@@ -13,6 +13,10 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
 
     public DbSet<Transaction> Transactions => Set<Transaction>();
 
+    public DbSet<TransactionFileImport> TransactionFileImports => Set<TransactionFileImport>();
+
+    public DbSet<TransactionFileIdentity> TransactionFileIdentities => Set<TransactionFileIdentity>();
+
     public DbSet<TransactionTag> TransactionTags => Set<TransactionTag>();
 
     public DbSet<TransactionTagAssignment> TransactionTagAssignments => Set<TransactionTagAssignment>();
@@ -45,6 +49,25 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<TransactionFileImport>(x =>
+        {
+            x.ToTable("transaction_file_imports");
+            x.HasKey(y => y.Id);
+            x.Property(y => y.FileName).HasMaxLength(255).IsRequired();
+            x.Property(y => y.Status).HasMaxLength(32).IsRequired();
+            x.Property(y => y.Error).HasMaxLength(2048);
+            x.HasIndex(y => new { y.TenantId, y.StartedAt });
+            x.HasOne<Account>().WithMany().HasForeignKey(y => y.AccountId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<TransactionFileIdentity>(x =>
+        {
+            x.ToTable("transaction_file_identities");
+            x.HasKey(y => new { y.TenantId, y.ExternalId });
+            x.Property(y => y.ExternalId).HasMaxLength(128);
+            x.HasOne<Transaction>().WithMany().HasForeignKey(y => y.TransactionId).OnDelete(DeleteBehavior.Cascade);
+        });
+
         modelBuilder.Entity<Account>(x =>
         {
             x.ToTable("accounts");
