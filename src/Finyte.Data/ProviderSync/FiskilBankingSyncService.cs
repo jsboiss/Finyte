@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Finyte.Core.Accounts;
 using Finyte.Core.ProviderSync;
+using Finyte.Data.Tagging;
 using Microsoft.EntityFrameworkCore;
 
 namespace Finyte.Data.ProviderSync;
@@ -12,7 +13,7 @@ public interface IFiskilBankingSyncService
     Task<SyncChangeSummary> SyncTransactions(ProviderSyncRun syncRun, CancellationToken cancellationToken);
 }
 
-public sealed class FiskilBankingSyncService(FinyteDbContext dbContext, IFiskilBankingClient fiskilBankingClient) : IFiskilBankingSyncService
+public sealed class FiskilBankingSyncService(FinyteDbContext dbContext, IFiskilBankingClient fiskilBankingClient, TransactionTagService tagService) : IFiskilBankingSyncService
 {
     public async Task<SyncChangeSummary> SyncAccounts(ProviderSyncRun syncRun, CancellationToken cancellationToken)
     {
@@ -117,6 +118,7 @@ public sealed class FiskilBankingSyncService(FinyteDbContext dbContext, IFiskilB
         var changedAccountIds = new List<Guid>();
         DateTimeOffset? minChangedAt = null;
         DateTimeOffset? maxChangedAt = null;
+        var fetchedTransactions = new List<(Guid AccountId, FiskilTransactionData Transaction)>();
 
         foreach (var externalAccountId in accountIdsToFetch)
         {
@@ -126,34 +128,48 @@ public sealed class FiskilBankingSyncService(FinyteDbContext dbContext, IFiskilB
             }
 
             var transactions = await fiskilBankingClient.GetTransactions(endUserId, externalAccountId, cancellationToken);
-
             foreach (var transaction in transactions)
             {
-                var changed = await UpsertTransaction(syncRun.TenantId, account.Id, transaction, cancellationToken);
-                if (!changed)
-                {
-                    continue;
-                }
-
-                changedAccountIds.Add(account.Id);
-                var changedAt = transaction.PostedAt ?? transaction.ExecutedAt;
-                minChangedAt = Min(minChangedAt, changedAt);
-                maxChangedAt = Max(maxChangedAt, changedAt);
+                fetchedTransactions.Add((account.Id, transaction));
             }
         }
 
+        // Fetch remotely before taking the tag lock; reconcile current rules and manual choices atomically.
+        await using var databaseTransaction = await tagService.BeginMutation(syncRun.TenantId, cancellationToken);
+        var rules = await tagService.GetRules(syncRun.TenantId, cancellationToken);
+        foreach (var fetchedTransaction in fetchedTransactions)
+        {
+            var transaction = fetchedTransaction.Transaction;
+            var changed = await UpsertTransaction(syncRun.TenantId, fetchedTransaction.AccountId, transaction, rules, cancellationToken);
+            if (!changed)
+            {
+                continue;
+            }
+
+            changedAccountIds.Add(fetchedTransaction.AccountId);
+            var changedAt = transaction.PostedAt ?? transaction.ExecutedAt;
+            minChangedAt = Min(minChangedAt, changedAt);
+            maxChangedAt = Max(maxChangedAt, changedAt);
+        }
+
         await dbContext.SaveChangesAsync(cancellationToken);
+        if (databaseTransaction is not null)
+        {
+            await databaseTransaction.CommitAsync(cancellationToken);
+        }
         return CreateSummary(changedAccountIds, minChangedAt, maxChangedAt);
     }
 
-    private async Task<bool> UpsertTransaction(Guid tenantId, Guid accountId, FiskilTransactionData transaction, CancellationToken cancellationToken)
+    private async Task<bool> UpsertTransaction(Guid tenantId, Guid accountId, FiskilTransactionData transaction, IReadOnlyList<MerchantTagRule> rules, CancellationToken cancellationToken)
     {
-        var localTransaction = await dbContext.Transactions
-            .FirstOrDefaultAsync(x => x.TenantId == tenantId && x.FiskilTransactionId == transaction.Id, cancellationToken);
+        var localTransaction = dbContext.Transactions.Local.FirstOrDefault(x => x.TenantId == tenantId && x.FiskilTransactionId == transaction.Id)
+            ?? await dbContext.Transactions
+                .Include(x => x.TagAssignments).Include(x => x.TagExclusions)
+                .FirstOrDefaultAsync(x => x.TenantId == tenantId && x.FiskilTransactionId == transaction.Id, cancellationToken);
 
         if (localTransaction is null)
         {
-            dbContext.Transactions.Add(new Transaction
+            localTransaction = new Transaction
             {
                 TenantId = tenantId,
                 AccountId = accountId,
@@ -170,7 +186,9 @@ public sealed class FiskilBankingSyncService(FinyteDbContext dbContext, IFiskilB
                 Reference = transaction.Reference,
                 RawJson = transaction.RawJson,
                 CreatedAt = DateTimeOffset.UtcNow
-            });
+            };
+            tagService.Reconcile(localTransaction, rules);
+            dbContext.Transactions.Add(localTransaction);
             return true;
         }
 
@@ -187,6 +205,7 @@ public sealed class FiskilBankingSyncService(FinyteDbContext dbContext, IFiskilB
         changed |= SetIfChanged(localTransaction.MerchantName, transaction.MerchantName, x => localTransaction.MerchantName = x);
         changed |= SetIfChanged(localTransaction.Reference, transaction.Reference, x => localTransaction.Reference = x);
         changed |= SetIfChanged(localTransaction.RawJson, transaction.RawJson, x => localTransaction.RawJson = x);
+        changed |= tagService.Reconcile(localTransaction, rules);
         return changed;
     }
 
