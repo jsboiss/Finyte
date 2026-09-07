@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Finyte.Core.Accounts;
 using Finyte.Core.Analytics;
 using Finyte.Data.Transfers;
 using Microsoft.EntityFrameworkCore;
@@ -45,16 +46,16 @@ public sealed class OverviewProjector(FinyteDbContext dbContext) : IOverviewProj
         var accountRows = await dbContext.Accounts
             .AsNoTracking()
             .Where(x => x.TenantId == scope.TenantId && (scope.AccountId == null || x.Id == scope.AccountId))
-            .OrderBy(x => x.Name)
-            .Select(x => new AccountRow(x.Id, x.Name, x.CurrentBalance, x.Currency, x.BalanceAsOf, x.CreatedAt))
+            .OrderBy(x => x.CustomName ?? x.Name).ThenBy(x => x.Id)
             .ToListAsync(cancellationToken);
 
-        var accountIds = accountRows.Select(x => x.Id).ToList();
+        // Account preferences control all-account income/spending, never balances or direct inspection.
+        var accountIds = accountRows.Where(x => scope.AccountId != null || AccountPreferences.IncludeInAnalytics(x)).Select(x => x.Id).ToList();
         var currency = accountRows.Select(x => x.Currency).FirstOrDefault() ?? "AUD";
         var accountBalanceMinorUnits = accountRows.Sum(x => ToMinorUnits(x.CurrentBalance));
         var accountLabel = scope.AccountId is null
             ? "All accounts"
-            : accountRows.FirstOrDefault()?.Name ?? "Selected account";
+            : accountRows.FirstOrDefault() is { } account ? AccountPreferences.DisplayName(account) : "Selected account";
 
         var transactionQuery = dbContext.Transactions
             .AsNoTracking()
@@ -232,8 +233,6 @@ public sealed class OverviewProjector(FinyteDbContext dbContext) : IOverviewProj
     {
         return (long)Math.Round(amount * 100, MidpointRounding.AwayFromZero);
     }
-
-    private sealed record AccountRow(Guid Id, string Name, decimal CurrentBalance, string Currency, DateTimeOffset? BalanceAsOf, DateTimeOffset CreatedAt);
 
     private sealed record TransactionRow(decimal Amount, IReadOnlyList<TagRow> Tags);
 

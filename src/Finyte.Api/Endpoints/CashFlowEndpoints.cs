@@ -1,4 +1,5 @@
 using Finyte.Api.Tenancy;
+using Finyte.Core.Accounts;
 using Finyte.Core.Analytics;
 using Finyte.Data;
 using Finyte.Data.Billing;
@@ -49,15 +50,17 @@ public static class CashFlowEndpoints
 
         var fromTimestamp = new DateTimeOffset(from.Year, from.Month, from.Day, 0, 0, 0, TimeSpan.Zero);
         var toTimestamp = new DateTimeOffset(to.Year, to.Month, to.Day, 0, 0, 0, TimeSpan.Zero).AddDays(1);
-        var currency = await dbContext.Accounts
+        var accounts = await dbContext.Accounts
             .AsNoTracking()
             .Where(x => x.TenantId == currentTenant.TenantId && (accountId == null || x.Id == accountId))
-            .Select(x => x.Currency)
-            .FirstOrDefaultAsync(cancellationToken) ?? "AUD";
+            .OrderBy(x => x.CustomName ?? x.Name).ThenBy(x => x.Id)
+            .ToListAsync(cancellationToken);
+        var currency = accounts.Select(x => x.Currency).FirstOrDefault() ?? "AUD";
+        var accountIds = accounts.Where(x => accountId != null || AccountPreferences.IncludeInAnalytics(x)).Select(x => x.Id).ToList();
         var transactionQuery = dbContext.Transactions
             .AsNoTracking()
             .Where(x => x.TenantId == currentTenant.TenantId
-                && (accountId == null || x.AccountId == accountId)
+                && accountIds.Contains(x.AccountId)
                 && x.PostedAt >= fromTimestamp
                 && x.PostedAt < toTimestamp
                 && (x.Status == null || x.Status == "" || x.Status == "posted" || x.Status == "POSTED"));

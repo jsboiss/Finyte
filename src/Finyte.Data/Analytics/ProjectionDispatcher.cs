@@ -72,7 +72,7 @@ public sealed class ProjectionDispatcher(FinyteDbContext dbContext, IOverviewPro
             ? "All accounts"
             : await dbContext.Accounts
                 .Where(x => x.TenantId == scope.TenantId && x.Id == scope.AccountId)
-                .Select(x => x.Name)
+                .Select(x => x.CustomName ?? x.Name)
                 .FirstOrDefaultAsync(cancellationToken) ?? "Selected account";
         var currency = await dbContext.Accounts
             .Where(x => x.TenantId == scope.TenantId && (scope.AccountId == null || x.Id == scope.AccountId))

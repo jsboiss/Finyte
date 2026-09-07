@@ -157,7 +157,7 @@ public sealed class InternalTransferService(FinyteDbContext dbContext, IProjecti
     }
 
     private static TransferLeg ToLeg(Transaction transaction) => new(transaction.Id, transaction.AccountId,
-        transaction.Account?.Name ?? "Account", transaction.Description ?? "Transaction", transaction.Amount, transaction.Currency, transaction.PostedAt);
+        transaction.Account is null ? "Account" : AccountPreferences.DisplayName(transaction.Account), transaction.Description ?? "Transaction", transaction.Amount, transaction.Currency, transaction.PostedAt);
 }
 
 public sealed record TransferCandidate(Transaction Debit, Transaction Credit);

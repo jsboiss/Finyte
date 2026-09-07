@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { isAxiosError } from 'axios'
+import { Link } from '@tanstack/react-router'
 import { Plus, Upload } from 'lucide-react'
 import { useState } from 'react'
 import { getAccounts } from '../api/generated/finyteApi'
@@ -89,7 +90,7 @@ export function ImportsPage() {
           <button disabled={!name.trim() || createAccount.isPending || upload.isPending} type="submit"><Plus aria-hidden="true" />{createAccount.isPending ? 'Creating…' : 'Create account'}</button>
         </form>
         {createAccount.error && <p role="alert">{errorMessage(createAccount.error)}</p>}
-        {createAccount.isSuccess && <p role="status">Account created and selected for import.</p>}
+        {createAccount.isSuccess && <p role="status">Account created and selected for import. <Link to="/accounts">Set its type and preferences</Link>.</p>}
       </section>
       <section className="panel import-panel">
         <h2>Recent imports</h2>

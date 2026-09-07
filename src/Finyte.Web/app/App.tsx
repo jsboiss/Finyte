@@ -6,6 +6,7 @@ import { createColumnHelper, flexRender, getCoreRowModel, getFilteredRowModel, t
 import { Activity, Banknote, CreditCard, Home, Mail, Menu, Plus, ReceiptText, Settings, Shield, SlidersHorizontal, Tags, Trash2, UserPlus, Users, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { getAccounts, getAppStatus } from './api/generated/finyteApi'
+import { AccountsPage } from './accounts/AccountsPage'
 import { getDevIdentity, httpClient, setDevIdentity } from './api/httpClient'
 import { AuthTokenProvider } from './auth/AuthTokenProvider'
 import { BillingPage } from './billing/BillingAccessPanel'
@@ -227,6 +228,10 @@ function AppNavLinks({ onNavigate }: { onNavigate?: () => void }) {
         <Activity aria-hidden="true" />
         Connections
       </Link>
+      <Link to="/accounts" activeProps={{ className: 'active' }} onClick={onNavigate}>
+        <Banknote aria-hidden="true" />
+        Accounts
+      </Link>
       <Link to="/billing" activeProps={{ className: 'active' }} onClick={onNavigate}>
         <CreditCard aria-hidden="true" />
         Billing
@@ -248,6 +253,9 @@ function AppNavLinks({ onNavigate }: { onNavigate?: () => void }) {
 }
 
 function getPageTitle(pathname: string) {
+  if (pathname.startsWith('/accounts')) {
+    return 'Accounts'
+  }
   if (pathname.startsWith('/transfers')) {
     return 'Transfers'
   }
@@ -1258,13 +1266,14 @@ const transactionsRoute = createRoute({ getParentRoute: () => rootRoute, path: '
 const billingRoute = createRoute({ getParentRoute: () => rootRoute, path: '/billing', component: BillingPage })
 const settingsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings', component: SettingsPage })
 const importsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/imports', component: ImportsPage })
+const accountsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/accounts', component: AccountsPage })
 const transfersRoute = createRoute({
   getParentRoute: () => rootRoute, path: '/transfers', component: TransfersPage,
   validateSearch: (search: Record<string, unknown>): { view?: string } => ({
     view: typeof search.view === 'string' && ['suggested', 'confirmed', 'dismissed', 'needs-review'].includes(search.view) ? search.view : undefined,
   }),
 })
-const routeTree = rootRoute.addChildren([indexRoute, connectionsRoute, transactionsRoute, billingRoute, settingsRoute, importsRoute, transfersRoute])
+const routeTree = rootRoute.addChildren([indexRoute, connectionsRoute, transactionsRoute, billingRoute, settingsRoute, importsRoute, transfersRoute, accountsRoute])
 const router = createRouter({ routeTree })
 
 declare module '@tanstack/react-router' {
