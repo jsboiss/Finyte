@@ -4,6 +4,7 @@ using Finyte.Core.Accounts;
 using Finyte.Data;
 using Finyte.Data.Analytics;
 using Finyte.Data.Billing;
+using Finyte.Data.Transfers;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
 
@@ -48,6 +49,7 @@ public static partial class TransactionEndpoints
 
         var currentPage = Math.Max(page ?? 1, 1);
         var take = Math.Clamp(pageSize ?? 25, 1, 250);
+        var transfers = dbContext.ValidConfirmedTransfers(currentTenant.TenantId);
         var query = dbContext.Transactions
             .AsNoTracking()
             .Where(x => x.TenantId == currentTenant.TenantId);
@@ -67,6 +69,7 @@ public static partial class TransactionEndpoints
                 GetCategory(x.PrimaryCategory, x.SecondaryCategory),
                 ToMinorUnits(x.Amount),
                 x.Currency,
+                transfers.Any(y => y.DebitTransactionId == x.Id || y.CreditTransactionId == x.Id),
                 x.TagAssignments
                     .OrderBy(y => y.Tag == null ? "" : y.Tag.Name)
                     .Select(y => new TransactionTagResponse(y.TagId, y.Tag == null ? "" : y.Tag.Name, y.Tag == null ? "#64748b" : y.Tag.Color))
@@ -403,6 +406,7 @@ public static partial class TransactionEndpoints
         string Category,
         long AmountMinorUnits,
         string Currency,
+        bool IsInternalTransfer,
         IReadOnlyList<TransactionTagResponse> Tags);
 
     private sealed record TransactionPageResponse(

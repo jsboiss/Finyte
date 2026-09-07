@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Finyte.Core.Analytics;
+using Finyte.Data.Transfers;
 using Microsoft.EntityFrameworkCore;
 
 namespace Finyte.Data.Analytics;
@@ -61,7 +62,8 @@ public sealed class OverviewProjector(FinyteDbContext dbContext) : IOverviewProj
                 && accountIds.Contains(x.AccountId)
                 && x.PostedAt >= monthStart
                 && x.PostedAt < nextMonthStart
-                && (x.Status == null || x.Status == "" || x.Status == "posted" || x.Status == "POSTED"));
+                && (x.Status == null || x.Status == "" || x.Status == "posted" || x.Status == "POSTED"))
+            .ExcludeInternalTransfers(dbContext, scope.TenantId);
         var totals = await transactionQuery
             .GroupBy(x => 1)
             .Select(x => new TransactionTotals(

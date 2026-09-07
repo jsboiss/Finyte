@@ -15,6 +15,7 @@ export type Transaction = {
   amountMinorUnits: number
   currency: string
   tags: TransactionTag[]
+  isInternalTransfer?: boolean
 }
 
 export type TransactionPage = {

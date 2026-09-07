@@ -1,0 +1,249 @@
+using System.Net;
+using System.Net.Http.Json;
+using System.Text.Json;
+using Finyte.Core.Accounts;
+using Finyte.Core.Analytics;
+using Finyte.Core.Billing;
+using Finyte.Data;
+using Finyte.Data.Analytics;
+using Finyte.Data.Transfers;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Xunit;
+
+namespace Finyte.IntegrationTests;
+
+public sealed class InternalTransferTests
+{
+    [Fact]
+    public void DetectionKeepsEveryAmbiguousCandidateWithoutGreedyPairing()
+    {
+        var tenantId = Guid.NewGuid();
+        var debit = Transaction(tenantId, Guid.NewGuid(), -100, 1);
+        var credit = Transaction(tenantId, Guid.NewGuid(), 100, 2);
+        var otherCredit = Transaction(tenantId, Guid.NewGuid(), 100, 4);
+        Assert.Equal(2, InternalTransferService.FindCandidates([debit, credit, otherCredit]).Count);
+    }
+
+    [Theory]
+    [InlineData("same-account")]
+    [InlineData("other-family")]
+    [InlineData("currency")]
+    [InlineData("amount")]
+    [InlineData("date")]
+    [InlineData("pending")]
+    [InlineData("no-date")]
+    public void DetectionRejectsInvalidPairs(string scenario)
+    {
+        var tenantId = Guid.NewGuid();
+        var debit = Transaction(tenantId, Guid.NewGuid(), -100, 1);
+        var credit = Transaction(tenantId, Guid.NewGuid(), 100, 2);
+        switch (scenario)
+        {
+            case "same-account": credit.AccountId = debit.AccountId; break;
+            case "other-family": credit.TenantId = Guid.NewGuid(); break;
+            case "currency": credit.Currency = "USD"; break;
+            case "amount": credit.Amount = 99; break;
+            case "date": credit.PostedAt = debit.PostedAt!.Value.AddDays(4); break;
+            case "pending": credit.Status = "pending"; break;
+            case "no-date": credit.PostedAt = null; break;
+        }
+        Assert.Empty(InternalTransferService.FindCandidates([debit, credit]));
+    }
+
+    [Fact]
+    public async Task SuggestionsAreReadOnlyAndConfirmationExcludesBothLegsAcrossMonthAndAccountBoundaries()
+    {
+        await using var factory = new FinyteApiFactory();
+        using var client = factory.CreateClient();
+        var seed = await Seed(factory, client);
+        var suggestions = await GetReview(client);
+        Assert.Single(suggestions.Items);
+        Assert.Equal("suggested", suggestions.Items[0].Status);
+        using (var scope = factory.Services.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<FinyteDbContext>();
+            Assert.Empty(await dbContext.InternalTransfers.ToListAsync());
+        }
+        var before = await CashFlow(client);
+        Assert.Equal(12500, before.DailyCashFlow.Sum(x => x.ExpenseMinorUnits));
+        Assert.Equal(10000, before.DailyCashFlow.Sum(x => x.IncomeMinorUnits));
+
+        (await Decide(client, suggestions.Items[0], "confirm")).EnsureSuccessStatusCode();
+        var after = await CashFlow(client);
+        Assert.Equal(2500, after.DailyCashFlow.Sum(x => x.ExpenseMinorUnits));
+        Assert.Equal(0, after.DailyCashFlow.Sum(x => x.IncomeMinorUnits));
+        var raw = await client.GetFromJsonAsync<CashFlowRangeResponse>("/api/cash-flow?from=2026-08-01&to=2026-09-30&includeInternalTransfers=true");
+        Assert.Equal(12500, raw!.DailyCashFlow.Sum(x => x.ExpenseMinorUnits));
+        var accountFlow = await client.GetFromJsonAsync<CashFlowRangeResponse>($"/api/cash-flow?from=2026-08-01&to=2026-09-30&accountId={seed.DebitAccountId}");
+        Assert.Equal(2500, accountFlow!.DailyCashFlow.Sum(x => x.ExpenseMinorUnits));
+        using (var scope = factory.Services.CreateScope())
+        {
+            var projector = scope.ServiceProvider.GetRequiredService<IOverviewProjector>();
+            var august = await projector.Rebuild(new OverviewProjectionScope(seed.TenantId, null, "2026-08"), CancellationToken.None);
+            var september = await projector.Rebuild(new OverviewProjectionScope(seed.TenantId, null, "2026-09"), CancellationToken.None);
+            Assert.Equal(2500, august.CurrentMonthSpendMinorUnits);
+            Assert.Equal(2500, august.MonthlySpendByTag.Sum(x => x.AmountMinorUnits));
+            Assert.Equal(0, september.CashFlowRace.IncomeMinorUnits);
+            Assert.Equal(100000, august.AccountBalanceMinorUnits);
+        }
+        var transactionPage = await client.GetFromJsonAsync<JsonElement>("/api/transactions");
+        Assert.Equal(2, transactionPage.GetProperty("items").EnumerateArray().Count(x => x.GetProperty("isInternalTransfer").GetBoolean()));
+        Assert.Empty((await GetReview(client)).Items);
+        Assert.Single((await GetReview(client, "confirmed")).Items);
+    }
+
+    [Fact]
+    public async Task DismissalSurvivesRefreshAndCanBeUndone()
+    {
+        await using var factory = new FinyteApiFactory();
+        using var client = factory.CreateClient();
+        await Seed(factory, client);
+        var pair = Assert.Single((await GetReview(client)).Items);
+        (await Decide(client, pair, "dismiss")).EnsureSuccessStatusCode();
+        Assert.Empty((await GetReview(client)).Items);
+        Assert.Single((await GetReview(client, "dismissed")).Items);
+        Assert.Equal(12500, (await CashFlow(client)).DailyCashFlow.Sum(x => x.ExpenseMinorUnits));
+        (await Decide(client, pair, "reset")).EnsureSuccessStatusCode();
+        Assert.Single((await GetReview(client)).Items);
+        (await Decide(client, pair, "confirm")).EnsureSuccessStatusCode();
+        (await Decide(client, pair, "reset")).EnsureSuccessStatusCode();
+        Assert.Single((await GetReview(client)).Items);
+        Assert.Equal(12500, (await CashFlow(client)).DailyCashFlow.Sum(x => x.ExpenseMinorUnits));
+    }
+
+    [Fact]
+    public async Task AmbiguousCandidatesAreLabelledAndOnlyOneCanBeConfirmed()
+    {
+        await using var factory = new FinyteApiFactory();
+        using var client = factory.CreateClient();
+        var seed = await Seed(factory, client);
+        using (var scope = factory.Services.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<FinyteDbContext>();
+            var credit = Transaction(seed.TenantId, seed.CreditAccountId, 100, 2);
+            credit.PostedAt = new DateTimeOffset(2026, 9, 2, 0, 0, 0, TimeSpan.Zero);
+            dbContext.Transactions.Add(credit);
+            await dbContext.SaveChangesAsync();
+        }
+        var pairs = (await GetReview(client)).Items;
+        Assert.Equal(2, pairs.Count);
+        Assert.All(pairs, x => Assert.True(x.IsAmbiguous));
+        (await Decide(client, pairs[0], "confirm")).EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.Conflict, (await Decide(client, pairs[1], "confirm")).StatusCode);
+        Assert.Single((await GetReview(client, "confirmed")).Items);
+    }
+
+    [Theory]
+    [InlineData("amount")]
+    [InlineData("date")]
+    [InlineData("pending")]
+    [InlineData("currency")]
+    [InlineData("account")]
+    public async Task ChangedTransactionsStopBeingExcludedAndRequireReview(string change)
+    {
+        await using var factory = new FinyteApiFactory();
+        using var client = factory.CreateClient();
+        var seed = await Seed(factory, client);
+        var pair = Assert.Single((await GetReview(client)).Items);
+        (await Decide(client, pair, "confirm")).EnsureSuccessStatusCode();
+        using (var scope = factory.Services.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<FinyteDbContext>();
+            var credit = await dbContext.Transactions.SingleAsync(x => x.Id == pair.Credit.Id);
+            switch (change)
+            {
+                case "amount": credit.Amount = 90; break;
+                case "date": credit.PostedAt = credit.PostedAt!.Value.AddDays(1); break;
+                case "pending": credit.Status = "pending"; break;
+                case "currency": credit.Currency = "USD"; break;
+                case "account": credit.AccountId = seed.DebitAccountId; break;
+            }
+            await dbContext.SaveChangesAsync();
+        }
+        Assert.Empty((await GetReview(client, "confirmed")).Items);
+        Assert.Single((await GetReview(client, "needs-review")).Items);
+        Assert.Equal(12500, (await CashFlow(client)).DailyCashFlow.Sum(x => x.ExpenseMinorUnits));
+        Assert.Equal(HttpStatusCode.Conflict, (await Decide(client, pair, "confirm")).StatusCode);
+        (await Decide(client, pair, "reset")).EnsureSuccessStatusCode();
+        Assert.Empty((await GetReview(client, "needs-review")).Items);
+    }
+
+    [Fact]
+    public async Task OtherFamilyCannotSeeOrReviewPairsAndBillingIsRequired()
+    {
+        await using var factory = new FinyteApiFactory();
+        using var client = factory.CreateClient();
+        await Seed(factory, client);
+        var pair = Assert.Single((await GetReview(client)).Items);
+        using var otherClient = factory.CreateClient();
+        otherClient.DefaultRequestHeaders.Add("X-Dev-Organization", "org_other-transfers");
+        otherClient.DefaultRequestHeaders.Add("X-Dev-User", "other-user");
+        await Seed(factory, otherClient);
+        Assert.Equal(HttpStatusCode.NotFound, (await Decide(otherClient, pair, "confirm")).StatusCode);
+        Assert.DoesNotContain((await GetReview(otherClient)).Items, x => x.Debit.Id == pair.Debit.Id);
+        using var unpaidClient = factory.CreateClient();
+        unpaidClient.DefaultRequestHeaders.Add("X-Dev-Organization", "org_unpaid-transfers");
+        await unpaidClient.PostAsJsonAsync("/api/auth/family", new { name = "Unpaid" });
+        Assert.Equal(HttpStatusCode.PaymentRequired, (await unpaidClient.GetAsync("/api/internal-transfers")).StatusCode);
+        Assert.Equal(HttpStatusCode.PaymentRequired, (await Decide(unpaidClient, pair, "confirm")).StatusCode);
+    }
+
+    [Theory]
+    [InlineData("from=2026-09-01&to=2026-08-01")]
+    [InlineData("from=2024-01-01&to=2026-09-01")]
+    [InlineData("to=0001-01-01")]
+    [InlineData("status=bogus")]
+    public async Task RejectsInvalidReviewFilters(string query)
+    {
+        await using var factory = new FinyteApiFactory();
+        using var client = factory.CreateClient();
+        await Seed(factory, client);
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.GetAsync($"/api/internal-transfers?{query}")).StatusCode);
+    }
+
+    private static async Task<TransferReviewPage> GetReview(HttpClient client, string status = "suggested") =>
+        (await client.GetFromJsonAsync<TransferReviewPage>($"/api/internal-transfers?from=2026-08-01&to=2026-09-30&status={status}"))!;
+
+    private static async Task<CashFlowRangeResponse> CashFlow(HttpClient client) =>
+        (await client.GetFromJsonAsync<CashFlowRangeResponse>("/api/cash-flow?from=2026-08-01&to=2026-09-30"))!;
+
+    private static Task<HttpResponseMessage> Decide(HttpClient client, TransferReview pair, string action) =>
+        client.PostAsJsonAsync("/api/internal-transfers/review", new TransferDecisionRequest(pair.Debit.Id, pair.Credit.Id, action,
+            pair.Credit.Amount, pair.Credit.Currency, pair.Debit.AccountId, pair.Credit.AccountId, pair.Debit.PostedAt, pair.Credit.PostedAt));
+
+    private static Transaction Transaction(Guid tenantId, Guid accountId, decimal amount, int day) => new()
+    {
+        TenantId = tenantId, AccountId = accountId, Amount = amount, Currency = "AUD", Status = "posted",
+        FiskilTransactionId = Guid.NewGuid().ToString(), Description = "Transfer test", CreatedAt = DateTimeOffset.UtcNow,
+        PostedAt = new DateTimeOffset(2026, 8, day, 0, 0, 0, TimeSpan.Zero)
+    };
+
+    private static async Task<TransferSeed> Seed(FinyteApiFactory factory, HttpClient client)
+    {
+        var provision = await client.PostAsJsonAsync("/api/auth/family", new { name = "Transfer family" });
+        provision.EnsureSuccessStatusCode();
+        var tenantId = (await provision.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("tenantId").GetGuid();
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<FinyteDbContext>();
+        var customer = new BillingCustomer { TenantId = tenantId, StripeCustomerId = $"cus_{tenantId:N}", CreatedAt = DateTimeOffset.UtcNow };
+        dbContext.BillingCustomers.Add(customer);
+        dbContext.BillingSubscriptions.Add(new BillingSubscription
+        {
+            TenantId = tenantId, BillingCustomer = customer, StripeCustomerId = customer.StripeCustomerId,
+            StripeSubscriptionId = $"sub_{tenantId:N}", StripePriceId = "price_test", Status = "active",
+            CurrentPeriodEnd = DateTimeOffset.UtcNow.AddDays(30), CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow
+        });
+        var debitAccount = new Account { TenantId = tenantId, Name = "Everyday", CurrentBalance = 300, CreatedAt = DateTimeOffset.UtcNow };
+        var creditAccount = new Account { TenantId = tenantId, Name = "Savings", CurrentBalance = 700, CreatedAt = DateTimeOffset.UtcNow };
+        dbContext.Accounts.AddRange(debitAccount, creditAccount);
+        var debit = Transaction(tenantId, debitAccount.Id, -100, 31);
+        var credit = Transaction(tenantId, creditAccount.Id, 100, 1);
+        credit.PostedAt = new DateTimeOffset(2026, 9, 1, 0, 0, 0, TimeSpan.Zero);
+        dbContext.Transactions.AddRange(debit, credit, Transaction(tenantId, debitAccount.Id, -25, 15));
+        await dbContext.SaveChangesAsync();
+        return new TransferSeed(tenantId, debitAccount.Id, creditAccount.Id);
+    }
+
+    private sealed record TransferSeed(Guid TenantId, Guid DebitAccountId, Guid CreditAccountId);
+}

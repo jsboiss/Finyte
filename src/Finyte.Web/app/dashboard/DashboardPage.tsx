@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Link } from '@tanstack/react-router'
 import { RefreshCcw } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { getAccounts, type AccountResponse } from '../api/generated/finyteApi'
@@ -84,6 +85,7 @@ export function DashboardPage() {
       </div>
 
       <DashboardMetricGrid metrics={metrics} />
+      <p className="transfer-dashboard-note">Spending and income exclude confirmed internal transfers. Balances include all account movements. <Link to="/transfers">Review transfers</Link>.</p>
 
       <CashFlowRaceModule overview={overview} />
 

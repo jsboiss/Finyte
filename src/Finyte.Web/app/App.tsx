@@ -11,6 +11,7 @@ import { AuthTokenProvider } from './auth/AuthTokenProvider'
 import { BillingPage } from './billing/BillingAccessPanel'
 import { DashboardPage } from './dashboard/DashboardPage'
 import { ImportsPage } from './imports/ImportsPage'
+import { TransfersPage } from './transfers/TransfersPage'
 import { TransactionAccountChip, TransactionAmount } from './transactions/TransactionCard'
 import { TransactionCardList } from './transactions/TransactionCardList'
 import { TransactionPagination } from './transactions/TransactionPagination'
@@ -234,6 +235,10 @@ function AppNavLinks({ onNavigate }: { onNavigate?: () => void }) {
         <ReceiptText aria-hidden="true" />
         Imports
       </Link>
+      <Link to="/transfers" activeProps={{ className: 'active' }} onClick={onNavigate}>
+        <Activity aria-hidden="true" />
+        Transfers
+      </Link>
       <Link to="/settings" activeProps={{ className: 'active' }} onClick={onNavigate}>
         <Settings aria-hidden="true" />
         Settings
@@ -243,6 +248,9 @@ function AppNavLinks({ onNavigate }: { onNavigate?: () => void }) {
 }
 
 function getPageTitle(pathname: string) {
+  if (pathname.startsWith('/transfers')) {
+    return 'Transfers'
+  }
   if (pathname.startsWith('/imports')) {
     return 'Imports'
   }
@@ -474,6 +482,7 @@ function TransactionsPage() {
       cell: x => (
         <div className="transaction-description">
           <strong>{x.getValue()}</strong>
+          {x.row.original.isInternalTransfer && <Link className="transfer-badge" to="/transfers" search={{ view: 'confirmed' }}>Internal transfer · excluded from totals</Link>}
           <span>{x.row.original.merchantName ?? ''}</span>
         </div>
       ),
@@ -1249,7 +1258,13 @@ const transactionsRoute = createRoute({ getParentRoute: () => rootRoute, path: '
 const billingRoute = createRoute({ getParentRoute: () => rootRoute, path: '/billing', component: BillingPage })
 const settingsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings', component: SettingsPage })
 const importsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/imports', component: ImportsPage })
-const routeTree = rootRoute.addChildren([indexRoute, connectionsRoute, transactionsRoute, billingRoute, settingsRoute, importsRoute])
+const transfersRoute = createRoute({
+  getParentRoute: () => rootRoute, path: '/transfers', component: TransfersPage,
+  validateSearch: (search: Record<string, unknown>): { view?: string } => ({
+    view: typeof search.view === 'string' && ['suggested', 'confirmed', 'dismissed', 'needs-review'].includes(search.view) ? search.view : undefined,
+  }),
+})
+const routeTree = rootRoute.addChildren([indexRoute, connectionsRoute, transactionsRoute, billingRoute, settingsRoute, importsRoute, transfersRoute])
 const router = createRouter({ routeTree })
 
 declare module '@tanstack/react-router' {

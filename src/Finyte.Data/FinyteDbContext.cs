@@ -13,6 +13,8 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
 
     public DbSet<Transaction> Transactions => Set<Transaction>();
 
+    public DbSet<InternalTransfer> InternalTransfers => Set<InternalTransfer>();
+
     public DbSet<TransactionFileImport> TransactionFileImports => Set<TransactionFileImport>();
 
     public DbSet<TransactionFileIdentity> TransactionFileIdentities => Set<TransactionFileIdentity>();
@@ -49,6 +51,22 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<InternalTransfer>(x =>
+        {
+            x.ToTable("internal_transfers");
+            x.HasKey(y => y.Id);
+            x.Property(y => y.Status).HasMaxLength(32).IsRequired();
+            x.Property(y => y.Amount).HasPrecision(18, 2);
+            x.Property(y => y.Currency).HasMaxLength(3).IsRequired();
+            x.Property(y => y.ReviewedByUserId).HasMaxLength(128).IsRequired();
+            x.Property(y => y.UpdatedAt).IsConcurrencyToken();
+            x.HasIndex(y => new { y.TenantId, y.DebitTransactionId, y.CreditTransactionId }).IsUnique();
+            x.HasIndex(y => y.DebitTransactionId).IsUnique().HasFilter("\"Status\" = 'confirmed'");
+            x.HasIndex(y => y.CreditTransactionId).IsUnique().HasFilter("\"Status\" = 'confirmed'");
+            x.HasOne(y => y.DebitTransaction).WithMany().HasForeignKey(y => y.DebitTransactionId).OnDelete(DeleteBehavior.Cascade);
+            x.HasOne(y => y.CreditTransaction).WithMany().HasForeignKey(y => y.CreditTransactionId).OnDelete(DeleteBehavior.Cascade);
+        });
+
         modelBuilder.Entity<TransactionFileImport>(x =>
         {
             x.ToTable("transaction_file_imports");

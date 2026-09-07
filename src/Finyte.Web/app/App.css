@@ -2195,3 +2195,32 @@ td {
   color: #9da1a5;
   font-size: 13px;
 }
+.transfer-intro p + p { margin-top: 12px; }
+.transfer-intro details { margin-top: 16px; }
+.transfer-intro summary { cursor: pointer; color: #93d7bf; }
+.transfer-intro h2, .transfer-pair h2 { font-size: 18px; font-weight: 650; }
+.transfer-intro p, .transfer-pair > p, .transfer-dashboard-note { color: #a7aaa8; }
+.transfer-intro a, .transfer-dashboard-note a, .transfer-badge { color: #93d7bf; text-decoration: underline; }
+.transfer-views, .transfer-filters, .transfer-actions, .transfer-pagination { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.transfer-views button, .transfer-secondary { background: #25282b; color: #d5dad7; border: 1px solid #44494b; }
+.transfer-views button[aria-pressed="true"] { background: #c9e9db; color: #12251e; }
+.transfer-filters { align-items: end; }
+.transfer-filters label { display: grid; gap: 6px; }
+.transfer-filters input { padding: 8px 10px; border: 1px solid #44494b; border-radius: 6px; color: #eee; background: #25282b; color-scheme: dark; }
+.transfer-list { display: grid; gap: 20px; }
+.transfer-pair { display: grid; gap: 16px; }
+.transfer-pair-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; justify-content: space-between; }
+.transfer-ambiguous { color: #edcc83; font-size: 13px; border: 1px solid #78643f; border-radius: 6px; padding: 5px 9px; }
+.transfer-legs { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 16px; }
+.transfer-leg { display: grid; gap: 8px; border: 1px solid #3c4343; border-radius: 8px; padding: 16px; background: #202426; overflow-wrap: anywhere; }
+.transfer-leg strong { font-size: 24px; }
+.transfer-leg span, .transfer-leg time, .transfer-reviewed { font-size: 13px; color: #a7aaa8; }
+.transfer-notice { border-left: 3px solid #93d7bf; padding: 12px; background: #202c27; }
+.transfer-badge { display: block; font-size: 12px; font-weight: 500; }
+.transfers-page button:disabled { opacity: .5; cursor: not-allowed; }
+@media (max-width: 700px) {
+  .transfer-legs { grid-template-columns: minmax(0, 1fr); }
+  .transfer-legs > svg { justify-self: center; }
+  .transfer-views button { flex: 1 1 140px; }
+  .transfer-actions button { flex: 1 1 160px; }
+}

@@ -1,4 +1,5 @@
 import { CreditCard } from 'lucide-react'
+import { Link } from '@tanstack/react-router'
 import { type CSSProperties, type ReactNode } from 'react'
 import { currency, formatChartDate } from '../shared/formatters'
 import type { Transaction } from './types'
@@ -31,6 +32,7 @@ export function TransactionCard({ tags, transaction }: TransactionCardProps) {
         <div className="transaction-card-heading">
           <div className="transaction-card-description">
             <strong>{transaction.description}</strong>
+            {transaction.isInternalTransfer && <Link className="transfer-badge" to="/transfers" search={{ view: 'confirmed' }}>Internal transfer · excluded from totals</Link>}
             {transaction.merchantName && <span>{transaction.merchantName}</span>}
           </div>
           <TransactionAmount amountMinorUnits={transaction.amountMinorUnits} className="transaction-card-amount" currencyCode={transaction.currency} />
