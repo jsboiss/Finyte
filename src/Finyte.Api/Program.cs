@@ -9,7 +9,8 @@ using Finyte.Api.ProviderSync;
 using Finyte.Api.Tenancy;
 using Finyte.Data;
 using Finyte.Data.ProviderSync;
-using Quartz;
+using Finyte.Data.Temporal;
+using Microsoft.EntityFrameworkCore;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -21,14 +22,14 @@ builder.Host.UseSerilog((context, configuration) =>
 
 builder.Services.AddOpenApi();
 builder.Services.AddFinyteData(builder.Configuration);
-builder.Services.AddDevelopmentDataSeeder();
+builder.Services.AddFiskilProvider(builder.Configuration);
 builder.Services
-    .AddOptions<FiskilOptions>()
-    .Bind(builder.Configuration.GetSection(FiskilOptions.SectionName));
-builder.Services.AddHttpClient<IFiskilBankingClient, FiskilBankingClient>();
-builder.Services.AddHttpClient<IFiskilLinkClient, FiskilLinkClient>();
-builder.Services.AddHttpClient<FiskilAccessTokenProvider>();
-builder.Services.AddSingleton<IFiskilAccessTokenProvider>(x => x.GetRequiredService<FiskilAccessTokenProvider>());
+    .AddOptions<TemporalOptions>()
+    .Bind(builder.Configuration.GetSection(TemporalOptions.SectionName));
+builder.Services.AddSingleton<ITemporalProviderSyncDispatcher, TemporalProviderSyncDispatcher>();
+builder.Services.AddSingleton<ITemporalDashboardDispatcher, TemporalDashboardDispatcher>();
+builder.Services.AddHostedService<TemporalDispatchReconciler>();
+builder.Services.AddDevelopmentDataSeeder();
 builder.Services
     .AddOptions<StripeOptions>()
     .Bind(builder.Configuration.GetSection(StripeOptions.SectionName))
@@ -45,22 +46,6 @@ builder.Services.AddScoped<IClerkWebhookIngestor, ClerkWebhookIngestor>();
 builder.Services.AddHttpClient<IClerkOrganizationClient, ClerkOrganizationClient>();
 builder.Services.AddExceptionHandler<TenantExceptionHandler>();
 builder.Services.AddProblemDetails();
-builder.Services.AddQuartz(x =>
-{
-    if (!builder.Configuration.GetValue("ProviderSync:WorkerEnabled", true))
-    {
-        return;
-    }
-
-    var jobKey = new JobKey("provider-sync");
-    x.AddJob<ProviderSyncJob>(y => y.WithIdentity(jobKey));
-    x.AddTrigger(y => y
-        .ForJob(jobKey)
-        .WithIdentity("provider-sync-trigger")
-        .StartNow()
-        .WithSimpleSchedule(z => z.WithIntervalInSeconds(5).RepeatForever()));
-});
-builder.Services.AddQuartzHostedService(x => x.WaitForJobsToComplete = true);
 builder.Services.AddHealthChecks().AddNpgSql(builder.Configuration.GetConnectionString("Finyte")!);
 builder.Services.AddAuthorization();
 
@@ -93,6 +78,12 @@ else if (hasClerkAuthority)
 var app = builder.Build();
 
 app.UseExceptionHandler();
+
+if (app.Configuration.GetValue<bool>("Database:MigrateOnStartup"))
+{
+    await using var scope = app.Services.CreateAsyncScope();
+    await scope.ServiceProvider.GetRequiredService<FinyteDbContext>().Database.MigrateAsync();
+}
 
 await app.SeedDevelopmentData();
 

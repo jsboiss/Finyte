@@ -55,6 +55,7 @@ public sealed class FiskilWebhookIngestor(FinyteDbContext dbContext) : IFiskilWe
         {
             var syncRun = new ProviderSyncRun
             {
+                BatchId = Guid.NewGuid(),
                 TenantId = connection.TenantId,
                 Provider = ProviderSyncProvider.Fiskil,
                 Dataset = dataset,

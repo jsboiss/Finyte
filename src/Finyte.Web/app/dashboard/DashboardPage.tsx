@@ -1,6 +1,6 @@
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { RefreshCcw } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { getAccounts, type AccountResponse } from '../api/generated/finyteApi'
 import { BillingAccessPanel } from '../billing/BillingAccessPanel'
 import { getBillingAccess } from '../billing/billingApi'
@@ -36,7 +36,7 @@ export function DashboardPage() {
     queryKey: getOverviewQueryKey(accountId),
     queryFn: () => getOverview(accountId),
     enabled: hasBillingAccess,
-    placeholderData: keepPreviousData,
+    refetchInterval: x => x.state.data?.freshness.isRefreshing ? 1_000 : false,
     staleTime: 60_000,
   })
   const refreshOverviewMutation = useMutation({
@@ -49,21 +49,6 @@ export function DashboardPage() {
     { id: allAccountsValue, label: 'All accounts' },
     ...(accountsQuery.data ?? []).map(x => ({ id: x.id, label: x.name })),
   ], [accountsQuery.data])
-
-  useEffect(() => {
-    if (!hasBillingAccess || !accountsQuery.data) {
-      return
-    }
-
-    const ids = [null, ...accountsQuery.data.map(x => x.id)]
-    for (const id of ids) {
-      queryClient.prefetchQuery({
-        queryKey: getOverviewQueryKey(id),
-        queryFn: () => getOverview(id),
-        staleTime: 60_000,
-      })
-    }
-  }, [accountsQuery.data, hasBillingAccess, queryClient])
 
   const overview = overviewQuery.data ?? createEmptyOverview(accountId, selectedAccountId, accountsQuery.data)
   const metrics = useMemo<DashboardMetric[]>(() => [

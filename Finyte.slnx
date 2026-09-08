@@ -3,6 +3,7 @@
     <Project Path="src/Finyte.Api/Finyte.Api.csproj" />
     <Project Path="src/Finyte.Core/Finyte.Core.csproj" />
     <Project Path="src/Finyte.Data/Finyte.Data.csproj" />
+    <Project Path="src/Finyte.Worker/Finyte.Worker.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Finyte.IntegrationTests/Finyte.IntegrationTests.csproj" />

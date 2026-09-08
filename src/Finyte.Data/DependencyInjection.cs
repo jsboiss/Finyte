@@ -22,9 +22,20 @@ public static class DependencyInjection
         services.AddScoped<IFiskilBankingSyncService, FiskilBankingSyncService>();
         services.AddScoped<IProviderSyncRunner, ProviderSyncRunner>();
         services.AddScoped<IProviderSyncQueue, ProviderSyncQueue>();
-        services.AddScoped<IProviderSyncWorker, ProviderSyncWorker>();
         services.AddScoped<ISyncProjectionRefresher, SyncProjectionRefresher>();
 
+        return services;
+    }
+
+    public static IServiceCollection AddFiskilProvider(this IServiceCollection services, IConfiguration configuration)
+    {
+        services
+            .AddOptions<FiskilOptions>()
+            .Bind(configuration.GetSection(FiskilOptions.SectionName));
+        services.AddHttpClient<IFiskilBankingClient, FiskilBankingClient>();
+        services.AddHttpClient<IFiskilLinkClient, FiskilLinkClient>();
+        services.AddHttpClient<FiskilAccessTokenProvider>();
+        services.AddSingleton<IFiskilAccessTokenProvider>(x => x.GetRequiredService<FiskilAccessTokenProvider>());
         return services;
     }
 }

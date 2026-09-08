@@ -16,5 +16,66 @@ services:
       timeout: 5s
       retries: 5
 
+  temporal-volume-init:
+    image: temporalio/temporal:1.8.1
+    user: "0:0"
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["chown -R 1000:1000 /var/lib/temporal"]
+    volumes:
+      - finyte-temporal-data:/var/lib/temporal
+
+  temporal:
+    image: temporalio/temporal:1.8.1
+    container_name: finyte-temporal
+    command: server start-dev --ip 0.0.0.0 --db-filename /var/lib/temporal/temporal.db
+    ports:
+      - "7233:7233"
+      - "8233:8233"
+    volumes:
+      - finyte-temporal-data:/var/lib/temporal
+    healthcheck:
+      test: ["CMD", "temporal", "operator", "cluster", "health", "--address", "localhost:7233"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    depends_on:
+      temporal-volume-init:
+        condition: service_completed_successfully
+
+  api:
+    build:
+      context: .
+      dockerfile: src/Finyte.Api/Dockerfile
+    container_name: finyte-api
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__Finyte: Host=postgres;Port=5432;Database=finyte;Username=finyte;Password=finyte_dev_password
+      Database__MigrateOnStartup: "true"
+      Temporal__Address: temporal:7233
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      temporal:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: .
+      dockerfile: src/Finyte.Worker/Dockerfile
+    container_name: finyte-worker
+    environment:
+      DOTNET_ENVIRONMENT: Development
+      ConnectionStrings__Finyte: Host=postgres;Port=5432;Database=finyte;Username=finyte;Password=finyte_dev_password
+      Temporal__Address: temporal:7233
+    depends_on:
+      api:
+        condition: service_started
+      temporal:
+        condition: service_healthy
+
 volumes:
   finyte-postgres-data:
+  finyte-temporal-data:

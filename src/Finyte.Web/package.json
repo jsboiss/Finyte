@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --config config/vite.config.ts",
+    "dev:docker": "vite --config config/vite.config.ts --mode docker",
     "build": "tsc -b && vite --config config/vite.config.ts build",
     "generate:api": "orval --config config/orval.config.ts",
     "lint": "eslint . --config config/eslint.config.js",

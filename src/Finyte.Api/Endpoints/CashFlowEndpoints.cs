@@ -52,41 +52,35 @@ public static class CashFlowEndpoints
             .Where(x => x.TenantId == currentTenant.TenantId && (accountId == null || x.Id == accountId))
             .Select(x => x.Currency)
             .FirstOrDefaultAsync(cancellationToken) ?? "AUD";
-        var transactions = await dbContext.Transactions
+        var dailyTotals = await dbContext.Transactions
             .AsNoTracking()
             .Where(x => x.TenantId == currentTenant.TenantId
                 && (accountId == null || x.AccountId == accountId)
                 && x.PostedAt >= fromTimestamp
                 && x.PostedAt < toTimestamp
-                && (x.Status == null || x.Status == "" || x.Status.ToLower() == "posted"))
-            .Select(x => new { x.Amount, x.PostedAt })
+                && (x.Status == null || x.Status == "" || x.Status == "posted" || x.Status == "POSTED"))
+            .GroupBy(x => x.PostedAt!.Value.Date)
+            .Select(x => new
+            {
+                Date = x.Key,
+                Income = x.Sum(y => y.Amount > 0 ? y.Amount : 0),
+                Expense = x.Sum(y => y.Amount < 0 ? -y.Amount : 0)
+            })
             .ToListAsync(cancellationToken);
         var days = Enumerable.Range(0, dayCount)
             .Select(x => new CashFlowDay(from.AddDays(x)))
             .ToDictionary(x => x.Date);
 
-        foreach (var transaction in transactions)
+        foreach (var dailyTotal in dailyTotals)
         {
-            if (transaction.PostedAt is null)
-            {
-                continue;
-            }
-
-            var date = DateOnly.FromDateTime(transaction.PostedAt.Value.UtcDateTime);
+            var date = DateOnly.FromDateTime(dailyTotal.Date);
             if (!days.TryGetValue(date, out var day))
             {
                 continue;
             }
 
-            var amount = ToMinorUnits(transaction.Amount);
-            if (amount > 0)
-            {
-                day.IncomeMinorUnits += amount;
-            }
-            else
-            {
-                day.ExpenseMinorUnits += Math.Abs(amount);
-            }
+            day.IncomeMinorUnits = ToMinorUnits(dailyTotal.Income);
+            day.ExpenseMinorUnits = ToMinorUnits(dailyTotal.Expense);
         }
 
         var response = new CashFlowRangeResponse(

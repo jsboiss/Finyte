@@ -1,0 +1,11 @@
+{
+  "name": "finyte",
+  "private": true,
+  "scripts": {
+    "backend": "docker compose up -d --build api worker",
+    "dev": "docker compose up -d api worker && npm --prefix src/Finyte.Web run dev:docker",
+    "logs": "docker compose logs -f api worker temporal",
+    "status": "docker compose ps",
+    "stop": "docker compose down"
+  }
+}

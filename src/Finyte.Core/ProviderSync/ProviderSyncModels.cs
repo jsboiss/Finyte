@@ -73,6 +73,7 @@ public sealed class ProviderWebhookEvent
 public sealed class ProviderSyncRun
 {
     public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid BatchId { get; set; } = Guid.NewGuid();
     public Guid TenantId { get; set; }
     public string Provider { get; set; } = ProviderSyncProvider.Fiskil;
     public string Dataset { get; set; } = "";
@@ -86,4 +87,6 @@ public sealed class ProviderSyncRun
     public DateTimeOffset? StartedAt { get; set; }
     public DateTimeOffset? CompletedAt { get; set; }
     public DateTimeOffset? ProjectionRefreshedAt { get; set; }
+    public string? TemporalWorkflowId { get; set; }
+    public DateTimeOffset? DispatchedAt { get; set; }
 }

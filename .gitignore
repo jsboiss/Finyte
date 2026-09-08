@@ -41,6 +41,7 @@ coverage-final.json
 .env.*
 !.env.example
 !.env.template
+!.env.docker
 
 # Logs
 logs/
