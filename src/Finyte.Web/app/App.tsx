@@ -10,6 +10,7 @@ import { getDevIdentity, httpClient, setDevIdentity } from './api/httpClient'
 import { AuthTokenProvider } from './auth/AuthTokenProvider'
 import { BillingPage } from './billing/BillingAccessPanel'
 import { DashboardPage } from './dashboard/DashboardPage'
+import { ImportsPage } from './imports/ImportsPage'
 import { TransactionAccountChip, TransactionAmount } from './transactions/TransactionCard'
 import { TransactionCardList } from './transactions/TransactionCardList'
 import { TransactionPagination } from './transactions/TransactionPagination'
@@ -229,6 +230,10 @@ function AppNavLinks({ onNavigate }: { onNavigate?: () => void }) {
         <CreditCard aria-hidden="true" />
         Billing
       </Link>
+      <Link to="/imports" activeProps={{ className: 'active' }} onClick={onNavigate}>
+        <ReceiptText aria-hidden="true" />
+        Imports
+      </Link>
       <Link to="/settings" activeProps={{ className: 'active' }} onClick={onNavigate}>
         <Settings aria-hidden="true" />
         Settings
@@ -238,6 +243,9 @@ function AppNavLinks({ onNavigate }: { onNavigate?: () => void }) {
 }
 
 function getPageTitle(pathname: string) {
+  if (pathname.startsWith('/imports')) {
+    return 'Imports'
+  }
   if (pathname.startsWith('/connections')) {
     return 'Connections'
   }
@@ -927,6 +935,7 @@ function ConnectionsPage() {
           </div>
         </div>
         <p>These details identify you to Fiskil and are used for consent notifications.</p>
+        <p>You can also <Link to="/imports">import an OFX export</Link> without connecting a bank.</p>
         <div className="tag-form">
           <input autoComplete="name" onChange={x => setName(x.target.value)} placeholder="Full name" value={name} />
           <input autoComplete="email" onChange={x => setEmail(x.target.value)} placeholder="Email" type="email" value={email} />
@@ -1239,7 +1248,8 @@ const connectionsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/
 const transactionsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/transactions', component: TransactionsPage })
 const billingRoute = createRoute({ getParentRoute: () => rootRoute, path: '/billing', component: BillingPage })
 const settingsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings', component: SettingsPage })
-const routeTree = rootRoute.addChildren([indexRoute, connectionsRoute, transactionsRoute, billingRoute, settingsRoute])
+const importsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/imports', component: ImportsPage })
+const routeTree = rootRoute.addChildren([indexRoute, connectionsRoute, transactionsRoute, billingRoute, settingsRoute, importsRoute])
 const router = createRouter({ routeTree })
 
 declare module '@tanstack/react-router' {
