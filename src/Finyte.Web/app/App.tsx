@@ -7,6 +7,7 @@ import { Activity, Banknote, CreditCard, Home, Mail, Menu, Plus, ReceiptText, Se
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { getAccounts, getAppStatus } from './api/generated/finyteApi'
 import { AccountsPage } from './accounts/AccountsPage'
+import { BudgetsPage } from './budgets/BudgetsPage'
 import { getDevIdentity, httpClient, setDevIdentity } from './api/httpClient'
 import { AuthTokenProvider } from './auth/AuthTokenProvider'
 import { BillingPage } from './billing/BillingAccessPanel'
@@ -248,11 +249,15 @@ function AppNavLinks({ onNavigate }: { onNavigate?: () => void }) {
         <Settings aria-hidden="true" />
         Settings
       </Link>
+      <Link to="/budgets" activeProps={{ className: 'active' }} onClick={onNavigate}><Banknote aria-hidden="true" />Budgets</Link>
     </>
   )
 }
 
 function getPageTitle(pathname: string) {
+  if (pathname.startsWith('/budgets')) {
+    return 'Budgets'
+  }
   if (pathname.startsWith('/accounts')) {
     return 'Accounts'
   }
@@ -379,6 +384,7 @@ function TransactionsPage() {
   })
   const deleteTagMutation = useMutation({
     mutationFn: (tagId: string) => deleteTag(tagId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['budgets'] }),
     onMutate: async tagId => {
       await queryClient.cancelQueries({ queryKey: ['tags'] })
       await queryClient.cancelQueries({ queryKey: ['transactions'] })
@@ -413,6 +419,7 @@ function TransactionsPage() {
     onSuccess: (nextTags, input) => {
       queryClient.setQueryData<TransactionPage>(['transactions', transactionPage], x => x ? { ...x, items: x.items.map(y => y.id === input.transactionId ? { ...y, tags: nextTags } : y) } : x)
       queryClient.invalidateQueries({ queryKey: ['overview'] })
+      queryClient.invalidateQueries({ queryKey: ['budgets'] })
     },
   })
   const setTransactionTagIds = useCallback((transactionId: string, tagIds: string[]) => {
@@ -455,6 +462,7 @@ function TransactionsPage() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['transactions'] }),
         queryClient.invalidateQueries({ queryKey: ['overview'] }),
+        queryClient.invalidateQueries({ queryKey: ['budgets'] }),
       ])
     },
   })
@@ -1267,13 +1275,14 @@ const billingRoute = createRoute({ getParentRoute: () => rootRoute, path: '/bill
 const settingsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings', component: SettingsPage })
 const importsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/imports', component: ImportsPage })
 const accountsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/accounts', component: AccountsPage })
+const budgetsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/budgets', component: BudgetsPage })
 const transfersRoute = createRoute({
   getParentRoute: () => rootRoute, path: '/transfers', component: TransfersPage,
   validateSearch: (search: Record<string, unknown>): { view?: string } => ({
     view: typeof search.view === 'string' && ['suggested', 'confirmed', 'dismissed', 'needs-review'].includes(search.view) ? search.view : undefined,
   }),
 })
-const routeTree = rootRoute.addChildren([indexRoute, connectionsRoute, transactionsRoute, billingRoute, settingsRoute, importsRoute, transfersRoute, accountsRoute])
+const routeTree = rootRoute.addChildren([indexRoute, connectionsRoute, transactionsRoute, billingRoute, settingsRoute, importsRoute, transfersRoute, accountsRoute, budgetsRoute])
 const router = createRouter({ routeTree })
 
 declare module '@tanstack/react-router' {

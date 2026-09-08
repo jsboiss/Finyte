@@ -21,6 +21,8 @@ builder.Host.UseSerilog((context, configuration) =>
 });
 
 builder.Services.AddOpenApi();
+// Malformed query values are client errors in development as well as production.
+builder.Services.Configure<Microsoft.AspNetCore.Routing.RouteHandlerOptions>(x => x.ThrowOnBadRequest = false);
 builder.Services.AddFinyteData(builder.Configuration);
 builder.Services.AddFiskilProvider(builder.Configuration);
 builder.Services
