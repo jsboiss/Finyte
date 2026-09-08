@@ -21,6 +21,7 @@ public static class DependencyInjection
         services.AddScoped<IBillingAccess, BillingAccess>();
         services.AddScoped<Imports.TransactionFileImportService>();
         services.AddScoped<Transfers.InternalTransferService>();
+        services.AddScoped<PayCycles.PayCycleQueries>();
         services.AddScoped<IFiskilBankingSyncService, FiskilBankingSyncService>();
         services.AddScoped<IProviderSyncRunner, ProviderSyncRunner>();
         services.AddScoped<IProviderSyncQueue, ProviderSyncQueue>();

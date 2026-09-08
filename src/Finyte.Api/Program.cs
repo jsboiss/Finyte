@@ -21,6 +21,7 @@ builder.Host.UseSerilog((context, configuration) =>
 });
 
 builder.Services.AddOpenApi();
+builder.Services.Configure<RouteHandlerOptions>(x => x.ThrowOnBadRequest = false);
 builder.Services.AddFinyteData(builder.Configuration);
 builder.Services.AddFiskilProvider(builder.Configuration);
 builder.Services

@@ -18,6 +18,7 @@ public static class RouteBuilder
         app.MapTransactionEndpoints();
         app.MapOverviewEndpoints();
         app.MapCashFlowEndpoints();
+        app.MapPayCycleEndpoints();
 
         return app;
     }
