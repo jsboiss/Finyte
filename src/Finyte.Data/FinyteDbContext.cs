@@ -25,6 +25,7 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
     public DbSet<TransactionTag> TransactionTags => Set<TransactionTag>();
 
     public DbSet<TransactionTagAssignment> TransactionTagAssignments => Set<TransactionTagAssignment>();
+    public DbSet<TransactionTagExclusion> TransactionTagExclusions => Set<TransactionTagExclusion>();
 
     public DbSet<MerchantTagRule> MerchantTagRules => Set<MerchantTagRule>();
 
@@ -281,6 +282,16 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
             x.Property(y => y.CreatedAt)
                 .IsRequired();
 
+            x.Property(y => y.Source)
+                .HasMaxLength(24)
+                .HasDefaultValue(TransactionTagSource.Legacy)
+                .IsRequired();
+
+            x.HasOne(y => y.MerchantRule)
+                .WithMany()
+                .HasForeignKey(y => y.MerchantRuleId)
+                .OnDelete(DeleteBehavior.SetNull);
+
             x.HasOne(y => y.Transaction)
                 .WithMany(y => y.TagAssignments)
                 .HasForeignKey(y => y.TransactionId)
@@ -292,6 +303,20 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
                 .OnDelete(DeleteBehavior.Cascade);
 
             x.HasIndex(y => y.TagId);
+        });
+
+        modelBuilder.Entity<TransactionTagExclusion>(x =>
+        {
+            x.ToTable("transaction_tag_exclusions");
+            x.HasKey(y => new { y.TransactionId, y.TagId });
+            x.HasOne(y => y.Transaction)
+                .WithMany(y => y.TagExclusions)
+                .HasForeignKey(y => y.TransactionId)
+                .OnDelete(DeleteBehavior.Cascade);
+            x.HasOne(y => y.Tag)
+                .WithMany()
+                .HasForeignKey(y => y.TagId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<MerchantTagRule>(x =>

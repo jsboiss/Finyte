@@ -5,7 +5,10 @@ using Finyte.Data;
 using Finyte.Data.Analytics;
 using Finyte.Data.Billing;
 using Finyte.Data.Transfers;
+using Finyte.Data.Tagging;
+using Finyte.Data.Transactions;
 using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace Finyte.Api.Endpoints;
@@ -17,6 +20,7 @@ public static partial class TransactionEndpoints
         var transactions = app.MapGroup("/api/transactions").RequireAuthorization();
         transactions.MapGet("/", GetTransactions).WithName("GetTransactions");
         transactions.MapPut("/{transactionId:guid}/tags", SetTransactionTags).WithName("SetTransactionTags");
+        transactions.MapPost("/{transactionId:guid}/tags/restore-automatic", RestoreAutomaticTags).WithName("RestoreAutomaticTransactionTags");
 
         var tags = app.MapGroup("/api/tags").RequireAuthorization();
         tags.MapGet("/", GetTags).WithName("GetTransactionTags");
@@ -26,6 +30,7 @@ public static partial class TransactionEndpoints
         var merchantTags = app.MapGroup("/api/merchant-tags").RequireAuthorization();
         merchantTags.MapGet("/", GetMerchantRules).WithName("GetMerchantTagRules");
         merchantTags.MapPost("/", CreateMerchantRule).WithName("CreateMerchantTagRule");
+        merchantTags.MapPut("/{ruleId:guid}", UpdateMerchantRule).WithName("UpdateMerchantTagRule");
         merchantTags.MapDelete("/{ruleId:guid}", DeleteMerchantRule).WithName("DeleteMerchantTagRule");
 
         return app;
@@ -34,6 +39,18 @@ public static partial class TransactionEndpoints
     private static async Task<IResult> GetTransactions(
         int? page,
         int? pageSize,
+        Guid? accountId,
+        DateOnly? from,
+        DateOnly? to,
+        string? search,
+        string? category,
+        [FromQuery] Guid[]? tagIds,
+        string? tagMatch,
+        bool? untagged,
+        decimal? minAmount,
+        decimal? maxAmount,
+        string? currency,
+        string? sort,
         TenantResolver tenantResolver,
         HttpContext httpContext,
         IBillingAccess billingAccess,
@@ -47,23 +64,43 @@ public static partial class TransactionEndpoints
             return TypedResults.Problem("An active subscription is required to view transactions.", statusCode: StatusCodes.Status402PaymentRequired);
         }
 
-        var currentPage = Math.Max(page ?? 1, 1);
-        var take = Math.Clamp(pageSize ?? 25, 1, 250);
+        var filters = new TransactionSearch
+        {
+            Page = page ?? 1,
+            PageSize = pageSize ?? 25,
+            AccountId = accountId,
+            From = from,
+            To = to,
+            Search = search?.Trim(),
+            Category = category?.Trim(),
+            TagIds = tagIds ?? [],
+            TagMatch = tagMatch ?? "any",
+            Untagged = untagged ?? false,
+            MinAmount = minAmount,
+            MaxAmount = maxAmount,
+            Currency = string.IsNullOrWhiteSpace(currency) ? null : currency.Trim().ToUpperInvariant(),
+            Sort = sort ?? "-date"
+        };
+        var errors = filters.Validate();
+
+        if (errors.Count > 0)
+        {
+            return TypedResults.ValidationProblem(errors);
+        }
+
+        var currentPage = filters.Page;
+        var take = filters.PageSize;
         var transfers = dbContext.ValidConfirmedTransfers(currentTenant.TenantId);
-        var query = dbContext.Transactions
-            .AsNoTracking()
-            .Where(x => x.TenantId == currentTenant.TenantId);
+        var query = filters.Apply(dbContext.Transactions.AsNoTracking(), currentTenant.TenantId);
         var totalCount = await query.CountAsync(cancellationToken);
-        var transactions = await query
-            .OrderByDescending(x => x.PostedAt ?? x.CreatedAt)
-            .ThenByDescending(x => x.CreatedAt)
+        var transactions = await filters.Order(query)
             .Skip((currentPage - 1) * take)
             .Take(take)
             .Select(x => new TransactionResponse(
                 x.Id,
                 x.AccountId,
                 x.Account == null ? "Account" : x.Account.CustomName ?? x.Account.Name,
-                x.PostedAt == null ? x.CreatedAt.ToString("yyyy-MM-dd") : x.PostedAt.Value.ToString("yyyy-MM-dd"),
+                GetPostedDate(x.PostedAt ?? x.CreatedAt),
                 x.Description ?? "",
                 x.MerchantName,
                 GetCategory(x.PrimaryCategory, x.SecondaryCategory),
@@ -71,9 +108,12 @@ public static partial class TransactionEndpoints
                 x.Currency,
                 transfers.Any(y => y.DebitTransactionId == x.Id || y.CreditTransactionId == x.Id),
                 x.TagAssignments
+                    .Where(y => y.Tag != null && y.Tag.TenantId == currentTenant.TenantId)
                     .OrderBy(y => y.Tag == null ? "" : y.Tag.Name)
-                    .Select(y => new TransactionTagResponse(y.TagId, y.Tag == null ? "" : y.Tag.Name, y.Tag == null ? "#64748b" : y.Tag.Color))
-                    .ToList()))
+                    .Select(y => new TransactionTagResponse(y.TagId, y.Tag == null ? "" : y.Tag.Name, y.Tag == null ? "#64748b" : y.Tag.Color,
+                        y.Source, y.MerchantRuleId, y.MerchantRule == null ? null : y.MerchantRule.MerchantName))
+                    .ToList(),
+                x.TagExclusions.Select(y => y.TagId).ToList()))
             .ToListAsync(cancellationToken);
 
         return TypedResults.Ok(new TransactionPageResponse(transactions, currentPage, take, totalCount));
@@ -140,9 +180,11 @@ public static partial class TransactionEndpoints
         HttpContext httpContext,
         FinyteDbContext dbContext,
         IProjectionInvalidator projectionInvalidator,
+        TransactionTagService tagService,
         CancellationToken cancellationToken)
     {
         var currentTenant = await tenantResolver.Resolve(httpContext.User, cancellationToken);
+        await using var databaseTransaction = await tagService.BeginMutation(currentTenant.TenantId, cancellationToken);
         var tag = await dbContext.TransactionTags
             .SingleOrDefaultAsync(x => x.Id == tagId && x.TenantId == currentTenant.TenantId, cancellationToken);
 
@@ -155,6 +197,11 @@ public static partial class TransactionEndpoints
         await projectionInvalidator.TenantProjectionDataChanged(currentTenant.TenantId, "transaction tag deleted", cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
 
+        if (databaseTransaction is not null)
+        {
+            await databaseTransaction.CommitAsync(cancellationToken);
+        }
+
         return TypedResults.NoContent();
     }
 
@@ -165,12 +212,14 @@ public static partial class TransactionEndpoints
         HttpContext httpContext,
         FinyteDbContext dbContext,
         IProjectionInvalidator projectionInvalidator,
+        TransactionTagService tagService,
         CancellationToken cancellationToken)
     {
         var currentTenant = await tenantResolver.Resolve(httpContext.User, cancellationToken);
+        await using var databaseTransaction = await tagService.BeginMutation(currentTenant.TenantId, cancellationToken);
         var transaction = await dbContext.Transactions
             .Where(x => x.Id == transactionId && x.TenantId == currentTenant.TenantId)
-            .Select(x => new { x.AccountId, x.PostedAt })
+            .Include(x => x.TagAssignments).Include(x => x.TagExclusions)
             .SingleOrDefaultAsync(cancellationToken);
 
         if (transaction is null)
@@ -178,7 +227,16 @@ public static partial class TransactionEndpoints
             return TypedResults.NotFound();
         }
 
+        if (request.TagIds is null)
+        {
+            return TypedResults.BadRequest("Tag IDs are required.");
+        }
         var tagIds = request.TagIds.Distinct().ToList();
+        var manualIds = (request.ManualTagIds ?? []).ToHashSet();
+        if (!manualIds.IsSubsetOf(tagIds))
+        {
+            return TypedResults.BadRequest("Manual tag IDs must be selected tags.");
+        }
         var tags = await dbContext.TransactionTags
             .Where(x => x.TenantId == currentTenant.TenantId && tagIds.Contains(x.Id))
             .OrderBy(x => x.Name)
@@ -189,23 +247,7 @@ public static partial class TransactionEndpoints
             return TypedResults.BadRequest("One or more tags do not exist.");
         }
 
-        var existingAssignments = await dbContext.TransactionTagAssignments
-            .Where(x => x.TransactionId == transactionId)
-            .ToListAsync(cancellationToken);
-        var existingTagIds = existingAssignments.Select(x => x.TagId).ToHashSet();
-        var nextTagIds = tagIds.ToHashSet();
-
-        dbContext.TransactionTagAssignments.RemoveRange(existingAssignments.Where(x => !nextTagIds.Contains(x.TagId)));
-
-        foreach (var tagId in nextTagIds.Where(x => !existingTagIds.Contains(x)))
-        {
-            dbContext.TransactionTagAssignments.Add(new TransactionTagAssignment
-            {
-                TransactionId = transactionId,
-                TagId = tagId,
-                CreatedAt = DateTimeOffset.UtcNow
-            });
-        }
+        tagService.SetTags(transaction, tagIds.ToHashSet(), manualIds);
 
         await projectionInvalidator.TransactionChanged(
             currentTenant.TenantId,
@@ -213,8 +255,53 @@ public static partial class TransactionEndpoints
             transaction.PostedAt,
             cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
+        if (databaseTransaction is not null)
+        {
+            await databaseTransaction.CommitAsync(cancellationToken);
+        }
+        return TypedResults.Ok(await ReadTransactionTags(currentTenant.TenantId, transactionId, dbContext, cancellationToken));
+    }
 
-        return TypedResults.Ok<IReadOnlyList<TransactionTagResponse>>(tags.Select(x => new TransactionTagResponse(x.Id, x.Name, x.Color)).ToList());
+    private static async Task<Results<Ok<IReadOnlyList<TransactionTagResponse>>, NotFound>> RestoreAutomaticTags(
+        Guid transactionId,
+        TenantResolver tenantResolver,
+        HttpContext httpContext,
+        FinyteDbContext dbContext,
+        IProjectionInvalidator projectionInvalidator,
+        TransactionTagService tagService,
+        CancellationToken cancellationToken)
+    {
+        var currentTenant = await tenantResolver.Resolve(httpContext.User, cancellationToken);
+        await using var databaseTransaction = await tagService.BeginMutation(currentTenant.TenantId, cancellationToken);
+        var transaction = await dbContext.Transactions
+            .Where(x => x.TenantId == currentTenant.TenantId && x.Id == transactionId)
+            .Include(x => x.TagAssignments).Include(x => x.TagExclusions)
+            .SingleOrDefaultAsync(cancellationToken);
+        if (transaction is null)
+        {
+            return TypedResults.NotFound();
+        }
+        tagService.ClearExclusions(transaction);
+        tagService.Reconcile(transaction, await tagService.GetRules(currentTenant.TenantId, cancellationToken));
+        await projectionInvalidator.TransactionChanged(currentTenant.TenantId, transaction.AccountId, transaction.PostedAt, cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        if (databaseTransaction is not null)
+        {
+            await databaseTransaction.CommitAsync(cancellationToken);
+        }
+        return TypedResults.Ok(await ReadTransactionTags(currentTenant.TenantId, transactionId, dbContext, cancellationToken));
+    }
+
+    private static async Task<IReadOnlyList<TransactionTagResponse>> ReadTransactionTags(
+        Guid tenantId, Guid transactionId, FinyteDbContext dbContext, CancellationToken cancellationToken)
+    {
+        return await dbContext.TransactionTagAssignments.AsNoTracking()
+            .Where(x => x.TransactionId == transactionId && x.Transaction != null && x.Transaction.TenantId == tenantId
+                && x.Tag != null && x.Tag.TenantId == tenantId)
+            .OrderBy(x => x.Tag!.Name)
+            .Select(x => new TransactionTagResponse(x.TagId, x.Tag!.Name, x.Tag.Color,
+                x.Source, x.MerchantRuleId, x.MerchantRule == null ? null : x.MerchantRule.MerchantName))
+            .ToListAsync(cancellationToken);
     }
 
     private static async Task<Ok<IReadOnlyList<MerchantTagRuleResponse>>> GetMerchantRules(
@@ -231,7 +318,8 @@ public static partial class TransactionEndpoints
             .Select(x => new MerchantTagRuleResponse(
                 x.Id,
                 x.MerchantName,
-                new TransactionTagResponse(x.TagId, x.Tag == null ? "" : x.Tag.Name, x.Tag == null ? "#64748b" : x.Tag.Color)))
+                new TransactionTagResponse(x.TagId, x.Tag == null ? "" : x.Tag.Name, x.Tag == null ? "#64748b" : x.Tag.Color),
+                x.MerchantKey, x.MerchantKey != MerchantTagMatcher.Normalize(x.MerchantName)))
             .ToListAsync(cancellationToken);
 
         return TypedResults.Ok<IReadOnlyList<MerchantTagRuleResponse>>(rules);
@@ -243,14 +331,18 @@ public static partial class TransactionEndpoints
         HttpContext httpContext,
         FinyteDbContext dbContext,
         IProjectionInvalidator projectionInvalidator,
+        TransactionTagService tagService,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request.MerchantName))
+        var merchantName = request.MerchantName?.Trim();
+        var merchantKey = MerchantTagMatcher.Normalize(merchantName);
+        if (string.IsNullOrEmpty(merchantKey) || merchantName!.Length > 256)
         {
-            return TypedResults.BadRequest("Merchant name is required.");
+            return TypedResults.BadRequest("Merchant name must contain letters or numbers and be at most 256 characters.");
         }
 
         var currentTenant = await tenantResolver.Resolve(httpContext.User, cancellationToken);
+        await using var databaseTransaction = await tagService.BeginMutation(currentTenant.TenantId, cancellationToken);
         var tag = await dbContext.TransactionTags
             .SingleOrDefaultAsync(x => x.Id == request.TagId && x.TenantId == currentTenant.TenantId, cancellationToken);
 
@@ -259,10 +351,8 @@ public static partial class TransactionEndpoints
             return TypedResults.NotFound();
         }
 
-        var merchantName = request.MerchantName.Trim();
-        var merchantKey = GetMerchantKey(merchantName);
-        var exists = await dbContext.MerchantTagRules
-            .AnyAsync(x => x.TenantId == currentTenant.TenantId && x.MerchantKey == merchantKey && x.TagId == tag.Id, cancellationToken);
+        var rules = await tagService.GetRules(currentTenant.TenantId, cancellationToken);
+        var exists = rules.Any(x => x.MerchantKey == merchantKey && x.TagId == tag.Id);
 
         if (exists)
         {
@@ -279,9 +369,13 @@ public static partial class TransactionEndpoints
         };
 
         dbContext.MerchantTagRules.Add(rule);
-        await ApplyMerchantRule(currentTenant.TenantId, merchantKey, tag.Id, dbContext, cancellationToken);
+        await tagService.ReconcileTenant(currentTenant.TenantId, cancellationToken);
         await projectionInvalidator.TenantProjectionDataChanged(currentTenant.TenantId, "merchant tag rule applied", cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
+        if (databaseTransaction is not null)
+        {
+            await databaseTransaction.CommitAsync(cancellationToken);
+        }
 
         var response = new MerchantTagRuleResponse(rule.Id, rule.MerchantName, new TransactionTagResponse(tag.Id, tag.Name, tag.Color));
         return TypedResults.Created($"/api/merchant-tags/{rule.Id}", response);
@@ -292,9 +386,12 @@ public static partial class TransactionEndpoints
         TenantResolver tenantResolver,
         HttpContext httpContext,
         FinyteDbContext dbContext,
+        IProjectionInvalidator projectionInvalidator,
+        TransactionTagService tagService,
         CancellationToken cancellationToken)
     {
         var currentTenant = await tenantResolver.Resolve(httpContext.User, cancellationToken);
+        await using var databaseTransaction = await tagService.BeginMutation(currentTenant.TenantId, cancellationToken);
         var rule = await dbContext.MerchantTagRules
             .SingleOrDefaultAsync(x => x.Id == ruleId && x.TenantId == currentTenant.TenantId, cancellationToken);
 
@@ -304,42 +401,58 @@ public static partial class TransactionEndpoints
         }
 
         dbContext.MerchantTagRules.Remove(rule);
+        await tagService.ReconcileTenant(currentTenant.TenantId, cancellationToken);
+        await projectionInvalidator.TenantProjectionDataChanged(currentTenant.TenantId, "merchant tag rule deleted", cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
+        if (databaseTransaction is not null)
+        {
+            await databaseTransaction.CommitAsync(cancellationToken);
+        }
 
         return TypedResults.NoContent();
     }
 
-    private static async Task ApplyMerchantRule(
-        Guid tenantId,
-        string merchantKey,
-        Guid tagId,
+    private static async Task<Results<Ok<MerchantTagRuleResponse>, BadRequest<string>, NotFound, Conflict<string>>> UpdateMerchantRule(
+        Guid ruleId,
+        CreateMerchantTagRuleRequest request,
+        TenantResolver tenantResolver,
+        HttpContext httpContext,
         FinyteDbContext dbContext,
+        IProjectionInvalidator projectionInvalidator,
+        TransactionTagService tagService,
         CancellationToken cancellationToken)
     {
-        var now = DateTimeOffset.UtcNow;
-        var transactionIds = await dbContext.Transactions
-            .Where(x => x.TenantId == tenantId)
-            .Select(x => new { x.Id, x.MerchantName, x.Description })
-            .ToListAsync(cancellationToken);
-        var matchingIds = transactionIds
-            .Where(x => MatchesMerchantRule(GetTransactionMerchantKey(x.MerchantName, x.Description), merchantKey))
-            .Select(x => x.Id)
-            .ToList();
-        var existingIds = await dbContext.TransactionTagAssignments
-            .Where(x => x.TagId == tagId && matchingIds.Contains(x.TransactionId))
-            .Select(x => x.TransactionId)
-            .ToListAsync(cancellationToken);
-        var existingIdSet = existingIds.ToHashSet();
-
-        foreach (var transactionId in matchingIds.Where(x => !existingIdSet.Contains(x)))
+        var merchantName = request.MerchantName?.Trim();
+        var merchantKey = MerchantTagMatcher.Normalize(merchantName);
+        if (string.IsNullOrEmpty(merchantKey) || merchantName!.Length > 256)
         {
-            dbContext.TransactionTagAssignments.Add(new TransactionTagAssignment
-            {
-                TransactionId = transactionId,
-                TagId = tagId,
-                CreatedAt = now
-            });
+            return TypedResults.BadRequest("Merchant name must contain letters or numbers and be at most 256 characters.");
         }
+        var currentTenant = await tenantResolver.Resolve(httpContext.User, cancellationToken);
+        await using var databaseTransaction = await tagService.BeginMutation(currentTenant.TenantId, cancellationToken);
+        var rules = await tagService.GetRules(currentTenant.TenantId, cancellationToken);
+        var rule = rules.SingleOrDefault(x => x.Id == ruleId);
+        var tag = await dbContext.TransactionTags.SingleOrDefaultAsync(x => x.TenantId == currentTenant.TenantId && x.Id == request.TagId, cancellationToken);
+        if (rule is null || tag is null)
+        {
+            return TypedResults.NotFound();
+        }
+        if (rules.Any(x => x.Id != ruleId && x.MerchantKey == merchantKey && x.TagId == tag.Id))
+        {
+            return TypedResults.Conflict("This merchant rule already exists.");
+        }
+        rule.MerchantName = merchantName!;
+        rule.MerchantKey = merchantKey;
+        rule.TagId = tag.Id;
+        rule.Tag = tag;
+        await tagService.ReconcileTenant(currentTenant.TenantId, cancellationToken);
+        await projectionInvalidator.TenantProjectionDataChanged(currentTenant.TenantId, "merchant tag rule updated", cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        if (databaseTransaction is not null)
+        {
+            await databaseTransaction.CommitAsync(cancellationToken);
+        }
+        return TypedResults.Ok(new MerchantTagRuleResponse(rule.Id, rule.MerchantName, new TransactionTagResponse(tag.Id, tag.Name, tag.Color)));
     }
 
     private static string GetCategory(string? primaryCategory, string? secondaryCategory)
@@ -362,39 +475,18 @@ public static partial class TransactionEndpoints
         return "#64748b";
     }
 
-    private static string GetMerchantKey(string merchantName)
-    {
-        var ignoredTokens = new HashSet<string>(["au", "aus", "vi", "pty", "ltd", "limited", "australia", "melbourne", "sydney", "brisbane", "card", "com"]);
-        return string.Join(
-            " ",
-            NonAlphaNumericRegex()
-                .Replace(merchantName.Trim().ToLowerInvariant(), " ")
-                .Split(' ', StringSplitOptions.RemoveEmptyEntries)
-                .Where(x => !ignoredTokens.Contains(x)));
-    }
-
-    private static string GetTransactionMerchantKey(string? merchantName, string? description)
-    {
-        var value = string.IsNullOrWhiteSpace(merchantName) ? description : merchantName;
-        return string.IsNullOrWhiteSpace(value) ? "" : GetMerchantKey(value);
-    }
-
-    private static bool MatchesMerchantRule(string transactionMerchantKey, string ruleMerchantKey)
-    {
-        return transactionMerchantKey == ruleMerchantKey
-            || transactionMerchantKey.StartsWith($"{ruleMerchantKey} ", StringComparison.Ordinal);
-    }
-
     private static long ToMinorUnits(decimal amount)
     {
         return (long)Math.Round(amount * 100, MidpointRounding.AwayFromZero);
     }
 
+    private static string GetPostedDate(DateTimeOffset postedAt)
+    {
+        return postedAt.UtcDateTime.ToString("yyyy-MM-dd");
+    }
+
     [GeneratedRegex("^#[0-9a-fA-F]{6}$")]
     private static partial Regex HexColorRegex();
-
-    [GeneratedRegex("[^a-z0-9]+")]
-    private static partial Regex NonAlphaNumericRegex();
 
     private sealed record TransactionResponse(
         Guid Id,
@@ -407,7 +499,8 @@ public static partial class TransactionEndpoints
         long AmountMinorUnits,
         string Currency,
         bool IsInternalTransfer,
-        IReadOnlyList<TransactionTagResponse> Tags);
+        IReadOnlyList<TransactionTagResponse> Tags,
+        IReadOnlyList<Guid> AutomaticTagExclusions);
 
     private sealed record TransactionPageResponse(
         IReadOnlyList<TransactionResponse> Items,
@@ -415,13 +508,15 @@ public static partial class TransactionEndpoints
         int PageSize,
         int TotalCount);
 
-    private sealed record TransactionTagResponse(Guid Id, string Name, string Color);
+    private sealed record TransactionTagResponse(Guid Id, string Name, string Color,
+        string? Source = null, Guid? MerchantRuleId = null, string? MerchantRuleName = null);
 
     private sealed record CreateTransactionTagRequest(string Name, string? Color);
 
-    private sealed record SetTransactionTagsRequest(IReadOnlyList<Guid> TagIds);
+    private sealed record SetTransactionTagsRequest(IReadOnlyList<Guid>? TagIds, IReadOnlyList<Guid>? ManualTagIds = null);
 
-    private sealed record MerchantTagRuleResponse(Guid Id, string MerchantName, TransactionTagResponse Tag);
+    private sealed record MerchantTagRuleResponse(Guid Id, string MerchantName, TransactionTagResponse Tag,
+        string? MatchingWords = null, bool UsesLegacyMatchingWords = false);
 
     private sealed record CreateMerchantTagRuleRequest(string MerchantName, Guid TagId);
 }

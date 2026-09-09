@@ -2,6 +2,9 @@ export type TransactionTag = {
   id: string
   name: string
   color: string
+  source?: 'manual' | 'merchant-rule' | 'system' | 'legacy' | null
+  merchantRuleId?: string | null
+  merchantRuleName?: string | null
 }
 
 export type Transaction = {
@@ -15,6 +18,7 @@ export type Transaction = {
   amountMinorUnits: number
   currency: string
   tags: TransactionTag[]
+  automaticTagExclusions?: string[]
   isInternalTransfer?: boolean
 }
 

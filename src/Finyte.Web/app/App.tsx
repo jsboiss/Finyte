@@ -1,10 +1,10 @@
 import { CreateOrganization, OrganizationSwitcher, SignIn, UserButton, useAuth, useOrganization } from '@clerk/react'
 import { link, type LinkError } from '@fiskil/link'
-import { keepPreviousData, QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createRootRoute, createRoute, createRouter, Link, Outlet, RouterProvider, useRouterState } from '@tanstack/react-router'
-import { createColumnHelper, flexRender, getCoreRowModel, getFilteredRowModel, type ColumnFiltersState, useReactTable } from '@tanstack/react-table'
+import { createColumnHelper, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table'
 import { Activity, Banknote, CreditCard, Home, Mail, Menu, Plus, ReceiptText, Settings, Shield, SlidersHorizontal, Tags, Trash2, UserPlus, Users, X } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { getAccounts, getAppStatus } from './api/generated/finyteApi'
 import { AccountsPage } from './accounts/AccountsPage'
 import { BudgetsPage } from './budgets/BudgetsPage'
@@ -17,6 +17,8 @@ import { TransfersPage } from './transfers/TransfersPage'
 import { TransactionAccountChip, TransactionAmount } from './transactions/TransactionCard'
 import { TransactionCardList } from './transactions/TransactionCardList'
 import { TransactionPagination } from './transactions/TransactionPagination'
+import { TransactionFilterForm } from './transactions/TransactionFilters'
+import { defaultTransactionFilters, transactionSearchParams, type TransactionFilters } from './transactions/transactionSearch'
 import type { Transaction, TransactionPage, TransactionTag } from './transactions/types'
 import './App.css'
 
@@ -24,16 +26,8 @@ type MerchantTagRule = {
   id: string
   merchantName: string
   tag: TransactionTag
-}
-
-type DateFilter = {
-  from?: string
-  to?: string
-}
-
-type AmountFilter = {
-  min?: string
-  max?: string
+  matchingWords?: string
+  usesLegacyMatchingWords?: boolean
 }
 
 type CreateTagInput = {
@@ -44,6 +38,7 @@ type CreateTagInput = {
 type SetTransactionTagsInput = {
   transactionId: string
   tagIds: string[]
+  manualTagIds?: string[]
 }
 
 type ProviderConnection = {
@@ -84,6 +79,7 @@ type Family = {
 }
 
 type CreateMerchantRuleInput = {
+  ruleId?: string
   merchantName: string
   tagId: string
 }
@@ -337,19 +333,19 @@ async function provisionFamily(name: string) {
 }
 
 function TransactionsPage() {
-  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
+  const [transactionSearch, setTransactionSearch] = useState({ page: 1, filters: defaultTransactionFilters })
   const [showFilters, setShowFilters] = useState(false)
   const [showTagManagement, setShowTagManagement] = useState(false)
   const [tagName, setTagName] = useState('')
   const [tagColor, setTagColor] = useState('#64748b')
   const [merchantName, setMerchantName] = useState('')
   const [merchantTagId, setMerchantTagId] = useState('')
-  const [transactionPage, setTransactionPage] = useState(1)
+  const [editingMerchantRuleId, setEditingMerchantRuleId] = useState<string>()
+  const { page: transactionPage, filters } = transactionSearch
   const queryClient = useQueryClient()
   const transactionsQuery = useQuery({
-    queryKey: ['transactions', transactionPage],
-    queryFn: () => getTransactions(transactionPage, transactionsPageSize),
-    placeholderData: keepPreviousData,
+    queryKey: ['transactions', transactionSearch],
+    queryFn: ({ signal }) => getTransactions(transactionPage, transactionsPageSize, filters, signal),
   })
   const accountsQuery = useQuery({
     queryKey: ['accounts'],
@@ -390,76 +386,54 @@ function TransactionsPage() {
       await queryClient.cancelQueries({ queryKey: ['transactions'] })
       await queryClient.cancelQueries({ queryKey: ['merchant-tags'] })
       const previousTags = queryClient.getQueryData<TransactionTag[]>(['tags'])
-      const previousTransactions = queryClient.getQueryData<TransactionPage>(['transactions', transactionPage])
       const previousMerchantRules = queryClient.getQueryData<MerchantTagRule[]>(['merchant-tags'])
       queryClient.setQueryData<TransactionTag[]>(['tags'], x => (x ?? []).filter(y => y.id !== tagId))
-      queryClient.setQueryData<TransactionPage>(['transactions', transactionPage], x => x ? { ...x, items: x.items.map(y => ({ ...y, tags: y.tags.filter(z => z.id !== tagId) })) } : x)
       queryClient.setQueryData<MerchantTagRule[]>(['merchant-tags'], x => (x ?? []).filter(y => y.tag.id !== tagId))
-      return { previousTags, previousTransactions, previousMerchantRules }
+      return { previousTags, previousMerchantRules }
     },
     onError: (_error, _tagId, context) => {
       queryClient.setQueryData(['tags'], context?.previousTags)
-      queryClient.setQueryData(['transactions', transactionPage], context?.previousTransactions)
       queryClient.setQueryData(['merchant-tags'], context?.previousMerchantRules)
+    },
+    onSuccess: async (_data, tagId) => {
+      setTransactionSearch(x => ({ page: 1, filters: { ...x.filters, tagIds: x.filters.tagIds.filter(y => y !== tagId) } }))
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['transactions'] }),
+        queryClient.invalidateQueries({ queryKey: ['overview'] }),
+      ])
     },
   })
   const updateTransactionTagsMutation = useMutation({
     mutationFn: (input: SetTransactionTagsInput) => setTransactionTags(input),
-    onMutate: async input => {
-      await queryClient.cancelQueries({ queryKey: ['transactions'] })
-      const previousTransactions = queryClient.getQueryData<TransactionPage>(['transactions', transactionPage])
-      const allTags = queryClient.getQueryData<TransactionTag[]>(['tags']) ?? []
-      const nextTags = allTags.filter(x => input.tagIds.includes(x.id))
-      queryClient.setQueryData<TransactionPage>(['transactions', transactionPage], x => x ? { ...x, items: x.items.map(y => y.id === input.transactionId ? { ...y, tags: nextTags } : y) } : x)
-      return { previousTransactions }
-    },
-    onError: (_error, _input, context) => {
-      queryClient.setQueryData(['transactions', transactionPage], context?.previousTransactions)
-    },
-    onSuccess: (nextTags, input) => {
-      queryClient.setQueryData<TransactionPage>(['transactions', transactionPage], x => x ? { ...x, items: x.items.map(y => y.id === input.transactionId ? { ...y, tags: nextTags } : y) } : x)
-      queryClient.invalidateQueries({ queryKey: ['overview'] })
-      queryClient.invalidateQueries({ queryKey: ['budgets'] })
+    onSuccess: async () => {
+      setTransactionSearch(x => ({ ...x, page: 1 }))
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['transactions'] }),
+        queryClient.invalidateQueries({ queryKey: ['overview'] }),
+      ])
     },
   })
-  const setTransactionTagIds = useCallback((transactionId: string, tagIds: string[]) => {
-    updateTransactionTagsMutation.mutate({ transactionId, tagIds })
+  const setTransactionTagIds = useCallback((transactionId: string, tagIds: string[], manualTagIds?: string[]) => {
+    updateTransactionTagsMutation.mutate({ transactionId, tagIds, manualTagIds })
   }, [updateTransactionTagsMutation])
+  const restoreAutomaticTagsMutation = useMutation({
+    mutationFn: (transactionId: string) => httpClient<TransactionTag[]>({
+      method: 'POST', url: `/api/transactions/${transactionId}/tags/restore-automatic`,
+    }),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['transactions'] }),
+        queryClient.invalidateQueries({ queryKey: ['overview'] }),
+      ])
+    },
+  })
   const createMerchantRuleMutation = useMutation({
     mutationFn: (input: CreateMerchantRuleInput) => createMerchantRule(input),
-    onMutate: async input => {
-      await queryClient.cancelQueries({ queryKey: ['merchant-tags'] })
-      await queryClient.cancelQueries({ queryKey: ['transactions'] })
-      const previousMerchantRules = queryClient.getQueryData<MerchantTagRule[]>(['merchant-tags'])
-      const previousTransactions = queryClient.getQueryData<TransactionPage>(['transactions', transactionPage])
-      const tag = queryClient.getQueryData<TransactionTag[]>(['tags'])?.find(x => x.id === input.tagId)
-      const optimisticRuleId = `pending-${crypto.randomUUID()}`
-      if (tag) {
-        const ruleMerchantKey = getMerchantKey(input.merchantName)
-        queryClient.setQueryData<MerchantTagRule[]>(['merchant-tags'], x => [...(x ?? []), { id: optimisticRuleId, merchantName: input.merchantName, tag }])
-        queryClient.setQueryData<TransactionPage>(['transactions', transactionPage], x => x ? {
-          ...x,
-          items: x.items.map(y => {
-          const transactionMerchantName = y.merchantName?.trim() ? y.merchantName : y.description
-          if (!transactionMerchantName || !matchesMerchantRule(getMerchantKey(transactionMerchantName), ruleMerchantKey) || y.tags.some(z => z.id === tag.id)) {
-            return y
-          }
-
-          return { ...y, tags: [...y.tags, tag] }
-          }),
-        } : x)
-      }
-
+    onSuccess: async () => {
       setMerchantName('')
-      return { optimisticRuleId, previousMerchantRules, previousTransactions }
-    },
-    onError: (_error, _input, context) => {
-      queryClient.setQueryData(['merchant-tags'], context?.previousMerchantRules)
-      queryClient.setQueryData(['transactions', transactionPage], context?.previousTransactions)
-    },
-    onSuccess: async (rule, _input, context) => {
-      queryClient.setQueryData<MerchantTagRule[]>(['merchant-tags'], x => uniqueMerchantRulesById((x ?? []).map(y => y.id === context.optimisticRuleId ? rule : y)))
+      setEditingMerchantRuleId(undefined)
       await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['merchant-tags'] }),
         queryClient.invalidateQueries({ queryKey: ['transactions'] }),
         queryClient.invalidateQueries({ queryKey: ['overview'] }),
         queryClient.invalidateQueries({ queryKey: ['budgets'] }),
@@ -477,21 +451,22 @@ function TransactionsPage() {
     onError: (_error, _ruleId, context) => {
       queryClient.setQueryData(['merchant-tags'], context?.previousMerchantRules)
     },
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['transactions'] }),
+        queryClient.invalidateQueries({ queryKey: ['overview'] }),
+      ])
+    },
   })
   const columns = useMemo(() => [
     transactionColumnHelper.accessor('postedDate', {
       header: 'Date',
-      filterFn: (x, y, z: DateFilter) => {
-        const value = x.getValue<string>(y)
-        return (!z.from || value >= z.from) && (!z.to || value <= z.to)
-      },
     }),
     transactionColumnHelper.accessor('accountId', {
       header: 'Account',
       cell: x => (
         <TransactionAccountChip accountId={x.getValue()}>{x.row.original.accountDisplayName}</TransactionAccountChip>
       ),
-      filterFn: (x, y, z: string) => x.getValue<string>(y) === z,
     }),
     transactionColumnHelper.accessor('description', {
       header: 'Description',
@@ -502,11 +477,9 @@ function TransactionsPage() {
           <span>{x.row.original.merchantName ?? ''}</span>
         </div>
       ),
-      filterFn: 'includesString',
     }),
     transactionColumnHelper.accessor('category', {
       header: 'Category',
-      filterFn: 'includesString',
     }),
     transactionColumnHelper.accessor('tags', {
       header: 'Tags',
@@ -514,37 +487,36 @@ function TransactionsPage() {
         <TagEditor
           allTags={tagsQuery.data ?? []}
           selectedTags={x.row.original.tags}
-          onChange={y => setTransactionTagIds(x.row.original.id, y)}
+          excludedTagIds={x.row.original.automaticTagExclusions}
+          onChange={(y, z) => setTransactionTagIds(x.row.original.id, y, z)}
+          onRestore={() => restoreAutomaticTagsMutation.mutate(x.row.original.id)}
+          disabled={updateTransactionTagsMutation.isPending || restoreAutomaticTagsMutation.isPending}
         />
       ),
-      filterFn: (x, y, z: string) => x.getValue<TransactionTag[]>(y).some(a => a.name.toLowerCase().includes(z.toLowerCase())),
     }),
     transactionColumnHelper.accessor('amountMinorUnits', {
       header: 'Amount',
       cell: x => <TransactionAmount amountMinorUnits={x.getValue()} currencyCode={x.row.original.currency} />,
-      filterFn: (x, y, z: AmountFilter) => {
-        const value = x.getValue<number>(y) / 100
-        const min = z.min ? Number(z.min) : null
-        const max = z.max ? Number(z.max) : null
-        return (min == null || value >= min) && (max == null || value <= max)
-      },
     }),
-  ], [setTransactionTagIds, tagsQuery.data])
+  ], [setTransactionTagIds, tagsQuery.data, restoreAutomaticTagsMutation, updateTransactionTagsMutation.isPending])
   // TanStack Table intentionally returns stateful functions that React Compiler cannot memoize.
   // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data: transactionsQuery.data?.items ?? [],
     columns,
-    state: { columnFilters, columnVisibility: { category: false } },
-    onColumnFiltersChange: setColumnFilters,
+    state: { columnVisibility: { category: false } },
+    manualFiltering: true,
+    manualSorting: true,
+    manualPagination: true,
+    getRowId: x => x.id,
     getCoreRowModel: getCoreRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
   })
-  const hasFilters = columnFilters.length > 0
+  const hasFilters = JSON.stringify(filters) !== JSON.stringify(defaultTransactionFilters)
   const isLoading = transactionsQuery.isLoading || transactionsQuery.isFetching
   const totalTransactions = transactionsQuery.data?.totalCount ?? 0
   const totalPages = Math.max(Math.ceil(totalTransactions / transactionsPageSize), 1)
   const visibleTransactions = table.getRowModel().rows.map(x => x.original)
+  const emptyMessage = transactionsQuery.isError ? 'Transactions are unavailable.' : isLoading ? 'Loading transactions…' : hasFilters ? 'No transactions match the current filters.' : 'No transactions imported yet.'
 
   return (
     <section className="page transactions-page">
@@ -562,12 +534,16 @@ function TransactionsPage() {
             <SlidersHorizontal aria-hidden="true" />
             Filters
           </button>
-          <button className="secondary-button" disabled={!hasFilters} onClick={() => table.resetColumnFilters()} type="button">
+          <button className="secondary-button" disabled={!hasFilters} onClick={() => setTransactionSearch({ page: 1, filters: defaultTransactionFilters })} type="button">
             <X aria-hidden="true" />
             Clear
           </button>
         </div>
       </header>
+
+      {(updateTransactionTagsMutation.isError || restoreAutomaticTagsMutation.isError || createMerchantRuleMutation.isError || deleteMerchantRuleMutation.isError) && (
+        <p role="alert">Could not save the tag change. Check the merchant name and tag, then try again.</p>
+      )}
 
       {showTagManagement && (
         <section className="panel tag-management-panel">
@@ -617,23 +593,28 @@ function TransactionsPage() {
                 <h2>Merchant tag rules</h2>
               </div>
             </div>
+            <p className="tag-rule-help">Rules apply to existing and future transactions from every source. Matching ignores case and punctuation, and matches whole words at the start of the merchant name (or description when no merchant is supplied). For example, “Coles” includes “Coles 4568”.</p>
+            <p className="tag-rule-help">Editing or deleting a rule updates automatic tags. Manual tags and tags with an unknown original source stay. Removing a tag from one transaction prevents a rule from adding it back.</p>
             <div className="merchant-rule-form">
-              <input onChange={x => setMerchantName(x.target.value)} placeholder="Merchant name" value={merchantName} />
-              <select onChange={x => setMerchantTagId(x.target.value)} value={merchantTagId}>
+              <input aria-label="Merchant rule name" maxLength={256} onChange={x => setMerchantName(x.target.value)} placeholder="Merchant name" value={merchantName} />
+              <select aria-label="Merchant rule tag" onChange={x => setMerchantTagId(x.target.value)} value={merchantTagId}>
                 <option value="">Select tag</option>
                 {(tagsQuery.data ?? []).map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
               </select>
-              <button disabled={!merchantName.trim() || !merchantTagId || createMerchantRuleMutation.isPending} onClick={() => createMerchantRuleMutation.mutate({ merchantName: merchantName.trim(), tagId: merchantTagId })} type="button">
+              <button disabled={!merchantName.trim() || !merchantTagId || createMerchantRuleMutation.isPending} onClick={() => createMerchantRuleMutation.mutate({ ruleId: editingMerchantRuleId, merchantName: merchantName.trim(), tagId: merchantTagId })} type="button">
                 <Plus aria-hidden="true" />
-                Rule
+                {editingMerchantRuleId ? 'Save rule' : 'Add rule'}
               </button>
+              {editingMerchantRuleId && <button onClick={() => { setEditingMerchantRuleId(undefined); setMerchantName('') }} type="button">Cancel</button>}
             </div>
             <div className="tag-pill-list">
               {(merchantRulesQuery.data ?? []).map(x => (
                 <span className="merchant-rule-pill" key={x.id}>
                   {x.merchantName}
+                  {x.usesLegacyMatchingWords && <small>Saved matching words: “{x.matchingWords}”. Edit and save to use all words in the rule name.</small>}
                   <TagPill tag={x.tag} />
-                  <button aria-label={`Delete rule for ${x.merchantName}`} onClick={() => deleteMerchantRuleMutation.mutate(x.id)} type="button">
+                  <button aria-label={`Edit rule for ${x.merchantName}`} onClick={() => { setEditingMerchantRuleId(x.id); setMerchantName(x.merchantName); setMerchantTagId(x.tag.id) }} type="button">Edit</button>
+                  <button aria-label={`Delete rule for ${x.merchantName}`} disabled={deleteMerchantRuleMutation.isPending} onClick={() => deleteMerchantRuleMutation.mutate(x.id)} type="button">
                     <Trash2 aria-hidden="true" />
                   </button>
                 </span>
@@ -645,67 +626,37 @@ function TransactionsPage() {
       )}
 
       {showFilters && (
-        <section className="panel transaction-filters-panel">
-          <FilterField className="date-filter-field" label="Date">
-            <DateRangeFilter
-              value={(table.getColumn('postedDate')?.getFilterValue() as DateFilter | undefined) ?? {}}
-              onChange={x => table.getColumn('postedDate')?.setFilterValue(x.from || x.to ? x : undefined)}
-            />
-          </FilterField>
-          <FilterField label="Account">
-            <select
-              disabled={accountsQuery.isLoading}
-              onChange={x => table.getColumn('accountId')?.setFilterValue(x.target.value || undefined)}
-              value={(table.getColumn('accountId')?.getFilterValue() as string | undefined) ?? ''}
-            >
-              <option value="">All accounts</option>
-              {(accountsQuery.data ?? []).map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
-            </select>
-          </FilterField>
-          <FilterField label="Description">
-            <DebouncedFilterInput
-              onChange={x => table.getColumn('description')?.setFilterValue(x)}
-              placeholder="Search descriptions"
-              value={(table.getColumn('description')?.getFilterValue() as string | undefined) ?? ''}
-            />
-          </FilterField>
-          <FilterField label="Category">
-            <DebouncedFilterInput
-              onChange={x => table.getColumn('category')?.setFilterValue(x)}
-              placeholder="Search categories"
-              value={(table.getColumn('category')?.getFilterValue() as string | undefined) ?? ''}
-            />
-          </FilterField>
-          <FilterField label="Tags">
-            <DebouncedFilterInput
-              onChange={x => table.getColumn('tags')?.setFilterValue(x)}
-              placeholder="Search tags"
-              value={(table.getColumn('tags')?.getFilterValue() as string | undefined) ?? ''}
-            />
-          </FilterField>
-          <FilterField className="amount-filter-field" label="Amount">
-            <AmountRangeFilter
-              value={(table.getColumn('amountMinorUnits')?.getFilterValue() as AmountFilter | undefined) ?? {}}
-              onChange={x => table.getColumn('amountMinorUnits')?.setFilterValue(x.min || x.max ? x : undefined)}
-            />
-          </FilterField>
-        </section>
+        <TransactionFilterForm
+          key={JSON.stringify(filters)}
+          filters={filters}
+          accounts={accountsQuery.data ?? []}
+          tags={tagsQuery.data ?? []}
+          onApply={nextFilters => setTransactionSearch({ page: 1, filters: nextFilters })}
+        />
       )}
+      {hasFilters && <p className="transaction-search-summary">Filters applied across all transaction history.</p>}
+      {transactionsQuery.isError && (
+        <p role="alert">Transactions could not be loaded. Check your filters and <button className="secondary-button" type="button" onClick={() => transactionsQuery.refetch()}>Try again</button>.</p>
+      )}
+      {(updateTransactionTagsMutation.isError || deleteTagMutation.isError || createMerchantRuleMutation.isError) && <p role="alert">The tag change could not be saved. Please try again.</p>}
 
       <TransactionCardList
-        emptyMessage={hasFilters ? 'No transactions match the current filters.' : 'No transactions imported yet.'}
+        emptyMessage={emptyMessage}
         isLoading={isLoading}
         renderTags={x => (
           <TagEditor
             allTags={tagsQuery.data ?? []}
             selectedTags={x.tags}
-            onChange={y => setTransactionTagIds(x.id, y)}
+            excludedTagIds={x.automaticTagExclusions}
+            onChange={(y, z) => setTransactionTagIds(x.id, y, z)}
+            onRestore={() => restoreAutomaticTagsMutation.mutate(x.id)}
+            disabled={updateTransactionTagsMutation.isPending || restoreAutomaticTagsMutation.isPending}
           />
         )}
         transactions={visibleTransactions}
       />
 
-      <section className="transaction-table-section">
+      <section aria-busy={isLoading} className="transaction-table-section">
         <div className={isLoading ? 'table-progress is-visible' : 'table-progress'} />
         <table>
           <thead>
@@ -719,7 +670,7 @@ function TransactionsPage() {
             ))}
             {table.getRowModel().rows.length === 0 && (
               <tr>
-                <td className="empty-table-cell" colSpan={5}>{hasFilters ? 'No transactions match the current filters.' : 'No transactions imported yet.'}</td>
+                <td className="empty-table-cell" colSpan={5}>{emptyMessage}</td>
               </tr>
             )}
           </tbody>
@@ -728,8 +679,8 @@ function TransactionsPage() {
 
       <TransactionPagination
         isLoading={isLoading}
-        onNext={() => setTransactionPage(x => x + 1)}
-        onPrevious={() => setTransactionPage(x => Math.max(1, x - 1))}
+        onNext={() => setTransactionSearch(x => ({ ...x, page: x.page + 1 }))}
+        onPrevious={() => setTransactionSearch(x => ({ ...x, page: Math.max(1, Math.min(x.page - 1, totalPages)) }))}
         page={transactionPage}
         totalCount={totalTransactions}
         totalPages={totalPages}
@@ -739,65 +690,20 @@ function TransactionsPage() {
   )
 }
 
-function FilterField({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
-  return (
-    <label className={className ? `filter-field ${className}` : 'filter-field'}>
-      <span>{label}</span>
-      {children}
-    </label>
-  )
-}
-
-function DebouncedFilterInput({ value, onChange, placeholder }: { value: string; onChange: (value: string) => void; placeholder: string }) {
-  return <DebouncedFilterInputDraft initialValue={value} key={value} onChange={onChange} placeholder={placeholder} />
-}
-
-function DebouncedFilterInputDraft({ initialValue, onChange, placeholder }: { initialValue: string; onChange: (value: string) => void; placeholder: string }) {
-  const [draftValue, setDraftValue] = useState(initialValue)
-  const onChangeRef = useRef(onChange)
-
-  useEffect(() => {
-    onChangeRef.current = onChange
-  }, [onChange])
-
-  useEffect(() => {
-    if (draftValue === initialValue) {
-      return
-    }
-
-    const timeout = window.setTimeout(() => onChangeRef.current(draftValue), 150)
-    return () => window.clearTimeout(timeout)
-  }, [draftValue, initialValue])
-
-  return <input onChange={x => setDraftValue(x.target.value)} placeholder={placeholder} value={draftValue} />
-}
-
-function DateRangeFilter({ value, onChange }: { value: DateFilter; onChange: (value: DateFilter) => void }) {
-  return (
-    <div className="range-filter">
-      <input onChange={x => onChange({ ...value, from: x.target.value })} type="date" value={value.from ?? ''} />
-      <input onChange={x => onChange({ ...value, to: x.target.value })} type="date" value={value.to ?? ''} />
-    </div>
-  )
-}
-
-function AmountRangeFilter({ value, onChange }: { value: AmountFilter; onChange: (value: AmountFilter) => void }) {
-  return (
-    <div className="range-filter">
-      <input onChange={x => onChange({ ...value, min: x.target.value })} placeholder="Min" type="number" value={value.min ?? ''} />
-      <input onChange={x => onChange({ ...value, max: x.target.value })} placeholder="Max" type="number" value={value.max ?? ''} />
-    </div>
-  )
-}
-
-function TagEditor({ allTags, selectedTags, onChange }: { allTags: TransactionTag[]; selectedTags: TransactionTag[]; onChange: (tagIds: string[]) => void }) {
+function TagEditor({ allTags, selectedTags, excludedTagIds = [], onChange, onRestore, disabled }: {
+  allTags: TransactionTag[]
+  selectedTags: TransactionTag[]
+  excludedTagIds?: string[]
+  onChange: (tagIds: string[], manualTagIds?: string[]) => void
+  onRestore: () => void
+  disabled: boolean
+}) {
   const [isOpen, setIsOpen] = useState(false)
   const [popupPosition, setPopupPosition] = useState<{ left: number; maxHeight: number; placement: 'above' | 'below'; top: number }>({ left: 0, maxHeight: 280, placement: 'below', top: 0 })
-  const [selectedTagIds, setSelectedTagIds] = useState(() => selectedTags.map(x => x.id))
   const containerRef = useRef<HTMLDivElement>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
-  const selectedIds = new Set(isOpen ? selectedTagIds : selectedTags.map(x => x.id))
-  const visibleSelectedTags = allTags.filter(x => selectedIds.has(x.id))
+  const selectedIds = new Set(selectedTags.map(x => x.id))
+  const visibleSelectedTags = allTags.filter(x => selectedIds.has(x.id)).map(x => selectedTags.find(y => y.id === x.id) ?? x)
 
   const updatePopupPosition = useCallback(() => {
     const rect = buttonRef.current?.getBoundingClientRect()
@@ -807,8 +713,8 @@ function TagEditor({ allTags, selectedTags, onChange }: { allTags: TransactionTa
 
     const viewportGap = 8
     const triggerGap = 4
-    const popupMinWidth = 192
-    const preferredMaxHeight = 280
+    const popupMinWidth = Math.min(320, window.innerWidth - 16)
+    const preferredMaxHeight = 400
     const viewportHeight = window.innerHeight
     const viewportWidth = window.innerWidth
     const availableBelow = viewportHeight - rect.bottom - viewportGap - triggerGap
@@ -859,9 +765,9 @@ function TagEditor({ allTags, selectedTags, onChange }: { allTags: TransactionTa
     <div className="tag-editor" ref={containerRef}>
       <button
         aria-label="Edit transaction tags"
+        disabled={disabled}
         onClick={() => {
           updatePopupPosition()
-          setSelectedTagIds(selectedTags.map(x => x.id))
           setIsOpen(true)
         }}
         ref={buttonRef}
@@ -879,20 +785,29 @@ function TagEditor({ allTags, selectedTags, onChange }: { allTags: TransactionTa
             transform: popupPosition.placement === 'above' ? 'translateY(-100%)' : undefined,
           }}
         >
+          <p className="tag-rule-help">Unchecking a tag keeps it removed during future syncs. Use “Keep manual” to retain an automatic tag when its rule changes.</p>
           {allTags.map(x => (
-            <label key={x.id}>
-              <input
-                checked={selectedIds.has(x.id)}
-                onChange={y => {
-                  const nextIds = y.target.checked ? [...selectedIds, x.id] : [...selectedIds].filter(z => z !== x.id)
-                  setSelectedTagIds(nextIds)
-                  onChange(nextIds)
-                }}
-                type="checkbox"
-              />
-              <TagPill tag={x} />
-            </label>
+            <div className="tag-menu-option" key={x.id}>
+              <label>
+                <input
+                  checked={selectedIds.has(x.id)}
+                  disabled={disabled}
+                  onChange={y => {
+                    const nextIds = y.target.checked ? [...selectedIds, x.id] : [...selectedIds].filter(z => z !== x.id)
+                    onChange(nextIds)
+                  }}
+                  type="checkbox"
+                />
+                <TagPill tag={selectedTags.find(y => y.id === x.id) ?? x} />
+              </label>
+              {excludedTagIds.includes(x.id) && <small>Removed from rules</small>}
+              {selectedIds.has(x.id) && selectedTags.some(y => y.id === x.id && (y.source === 'merchant-rule' || y.source === 'legacy')) && (
+                <button disabled={disabled} onClick={() => onChange([...selectedIds], [x.id])} type="button">Keep manual</button>
+              )}
+            </div>
           ))}
+          <button disabled={disabled || excludedTagIds.length === 0} onClick={() => { setIsOpen(false); onRestore() }} type="button">Restore removed automatic tags</button>
+          <p className="tag-rule-help">Restoring keeps manual tags and allows current and future merchant rules to add removed tags again.</p>
         </div>
       )}
     </div>
@@ -900,9 +815,14 @@ function TagEditor({ allTags, selectedTags, onChange }: { allTags: TransactionTa
 }
 
 function TagPill({ tag }: { tag: TransactionTag }) {
+  const sourceLabel = tag.source === 'merchant-rule' ? 'Auto' : tag.source === 'legacy' ? 'Unknown' : tag.source === 'manual' ? 'Manual' : tag.source === 'system' ? 'System' : null
+  const sourceDescription = tag.source === 'merchant-rule' ? `Automatically applied by merchant rule: ${tag.merchantRuleName ?? 'matching merchant'}`
+    : tag.source === 'legacy' ? 'Added before source tracking. Preserved when merchant rules change.'
+    : tag.source === 'manual' ? 'Manually chosen. Preserved when merchant rules change.' : undefined
   return (
-    <span className="tag-pill" style={{ backgroundColor: tag.color, color: getReadableTextColor(tag.color) }}>
-      {tag.name}
+    <span aria-label={sourceLabel ? `${tag.name}: ${sourceLabel}` : undefined} className="tag-pill" title={sourceDescription} style={{ backgroundColor: tag.color, color: getReadableTextColor(tag.color) }}>
+      <span className="tag-name">{tag.name}</span>
+      {sourceLabel && <small> · {sourceLabel}</small>}
     </span>
   )
 }
@@ -1168,10 +1088,11 @@ async function removeFamilyMember(memberId: string) {
   return httpClient<void>({ method: 'DELETE', url: `/api/family/members/${memberId}` })
 }
 
-async function getTransactions(page: number, pageSize: number) {
+async function getTransactions(page: number, pageSize: number, filters: TransactionFilters, signal: AbortSignal) {
   return httpClient<TransactionPage>({
     method: 'GET',
-    url: `/api/transactions?page=${page}&pageSize=${pageSize}`,
+    url: `/api/transactions?${transactionSearchParams(page, pageSize, filters)}`,
+    signal,
   })
 }
 
@@ -1200,7 +1121,7 @@ async function deleteTag(tagId: string) {
 
 async function setTransactionTags(input: SetTransactionTagsInput) {
   return httpClient<TransactionTag[]>({
-    data: { tagIds: input.tagIds },
+    data: { tagIds: input.tagIds, manualTagIds: input.manualTagIds },
     headers: { 'Content-Type': 'application/json' },
     method: 'PUT',
     url: `/api/transactions/${input.transactionId}/tags`,
@@ -1218,8 +1139,8 @@ async function createMerchantRule(input: CreateMerchantRuleInput) {
   return httpClient<MerchantTagRule>({
     data: input,
     headers: { 'Content-Type': 'application/json' },
-    method: 'POST',
-    url: '/api/merchant-tags',
+    method: input.ruleId ? 'PUT' : 'POST',
+    url: input.ruleId ? `/api/merchant-tags/${input.ruleId}` : '/api/merchant-tags',
   })
 }
 
@@ -1234,10 +1155,6 @@ function uniqueTagsById(tags: TransactionTag[]) {
   return tags.filter((x, index) => tags.findIndex(y => y.id === x.id) === index)
 }
 
-function uniqueMerchantRulesById(rules: MerchantTagRule[]) {
-  return rules.filter((x, index) => rules.findIndex(y => y.id === x.id) === index)
-}
-
 function getReadableTextColor(backgroundColor: string) {
   const hex = backgroundColor.replace('#', '')
   if (hex.length !== 6) {
@@ -1249,22 +1166,6 @@ function getReadableTextColor(backgroundColor: string) {
   const blue = Number.parseInt(hex.slice(4, 6), 16)
   const luminance = (red * 0.299 + green * 0.587 + blue * 0.114) / 255
   return luminance > 0.65 ? '#111827' : '#ffffff'
-}
-
-function getMerchantKey(merchantName: string) {
-  const ignoredTokens = new Set(['au', 'aus', 'vi', 'pty', 'ltd', 'limited', 'australia', 'melbourne', 'sydney', 'brisbane', 'card', 'com'])
-  return merchantName
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim()
-    .split(' ')
-    .filter(x => x && !ignoredTokens.has(x))
-    .join(' ')
-}
-
-function matchesMerchantRule(transactionMerchantKey: string, ruleMerchantKey: string) {
-  return transactionMerchantKey === ruleMerchantKey || transactionMerchantKey.startsWith(`${ruleMerchantKey} `)
 }
 
 const rootRoute = createRootRoute({ component: DashboardShell })

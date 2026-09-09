@@ -79,7 +79,7 @@ public sealed class AccountPreferencesApiTests
             });
             await dbContext.SaveChangesAsync();
             var bankingClient = new AccountBankingClient();
-            await new FiskilBankingSyncService(dbContext, bankingClient).SyncAccounts(new ProviderSyncRun
+            await new FiskilBankingSyncService(dbContext, bankingClient, new Finyte.Data.Tagging.TransactionTagService(dbContext)).SyncAccounts(new ProviderSyncRun
             {
                 TenantId = seed.TenantId, Provider = "fiskil", Dataset = "accounts", Status = "running", EndUserId = "end-user", CreatedAt = DateTimeOffset.UtcNow
             }, CancellationToken.None);
