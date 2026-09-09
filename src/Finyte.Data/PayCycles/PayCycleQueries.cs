@@ -39,23 +39,27 @@ public sealed class PayCycleQueries(FinyteDbContext dbContext, TimeProvider time
         var to = new DateTimeOffset((observedThrough?.AddDays(1) ?? period.From).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
         var scoped = dbContext.Transactions.AsNoTracking().Where(x => x.TenantId == tenantId && accountIds.Contains(x.AccountId));
         var dated = scoped.Where(x => x.PostedAt >= from && x.PostedAt < to);
-        var posted = dated.Where(x => x.Status == null || x.Status == "" || x.Status == "posted" || x.Status == "POSTED");
+        var posted = dated.Where(x => x.Status == null || x.Status == "" || x.Status.ToLower() == "posted");
         var validTransfers = dbContext.ValidConfirmedTransfers(tenantId);
         var query = posted.Where(x => x.Currency == profile.Currency)
-            .Select(x => new TransactionRow
+            .GroupJoin(validTransfers, x => x.Id, y => y.DebitTransactionId, (x, y) => new { Transaction = x, Debits = y })
+            .SelectMany(x => x.Debits.DefaultIfEmpty(), (x, y) => new { x.Transaction, Debit = y })
+            .GroupJoin(validTransfers, x => x.Transaction.Id, y => y.CreditTransactionId, (x, y) => new { x.Transaction, x.Debit, Credits = y })
+            .SelectMany(x => x.Credits.DefaultIfEmpty(), (x, y) => new TransactionRow
             {
-                Id = x.Id, AccountId = x.AccountId, AccountName = x.Account!.CustomName ?? x.Account.Name,
-                Description = x.Description, MerchantName = x.MerchantName, Amount = x.Amount,
-                PostedAt = x.PostedAt!.Value,
-                Category = x.SecondaryCategory != null && x.SecondaryCategory.Trim() != "" ? x.SecondaryCategory.Trim()
-                    : x.PrimaryCategory == null || x.PrimaryCategory.Trim() == "" ? "Uncategorised" : x.PrimaryCategory.Trim(),
-                Kind = validTransfers.Any(y => y.DebitTransactionId == x.Id && accountIds.Contains(y.CreditAccountId)
-                    || y.CreditTransactionId == x.Id && accountIds.Contains(y.DebitAccountId)) ? "within-scope"
-                    : validTransfers.Any(y => y.DebitTransactionId == x.Id && savingsIds.Contains(y.CreditAccountId)) ? "savings-out"
-                    : validTransfers.Any(y => y.CreditTransactionId == x.Id && savingsIds.Contains(y.DebitAccountId)) ? "savings-in"
-                    : validTransfers.Any(y => y.DebitTransactionId == x.Id) ? "transfer-out"
-                    : validTransfers.Any(y => y.CreditTransactionId == x.Id) ? "transfer-in"
-                    : x.Amount > 0 ? "external-credit" : x.Amount < 0 ? "spending" : "zero"
+                Id = x.Transaction.Id, AccountId = x.Transaction.AccountId, AccountName = x.Transaction.Account!.CustomName ?? x.Transaction.Account.Name,
+                Description = x.Transaction.Description, MerchantName = x.Transaction.MerchantName, Amount = x.Transaction.Amount,
+                PostedAt = x.Transaction.PostedAt!.Value,
+                Category = x.Transaction.SecondaryCategory != null && x.Transaction.SecondaryCategory.Trim() != "" ? x.Transaction.SecondaryCategory.Trim()
+                    : x.Transaction.PrimaryCategory == null || x.Transaction.PrimaryCategory.Trim() == "" ? "Uncategorised" : x.Transaction.PrimaryCategory.Trim(),
+                // Confirmed debit/credit IDs are unique, so these joins cannot multiply ledger rows.
+                Kind = x.Debit != null && accountIds.Contains(x.Debit.CreditAccountId)
+                    || y != null && accountIds.Contains(y.DebitAccountId) ? "within-scope"
+                    : x.Debit != null && savingsIds.Contains(x.Debit.CreditAccountId) ? "savings-out"
+                    : y != null && savingsIds.Contains(y.DebitAccountId) ? "savings-in"
+                    : x.Debit != null ? "transfer-out"
+                    : y != null ? "transfer-in"
+                    : x.Transaction.Amount > 0 ? "external-credit" : x.Transaction.Amount < 0 ? "spending" : "zero"
             });
         var groups = await query.GroupBy(x => x.Kind)
             .Select(x => new { Kind = x.Key, Amount = x.Sum(y => y.Amount), Count = x.Count() }).ToListAsync(cancellationToken);
@@ -68,7 +72,7 @@ public sealed class PayCycleQueries(FinyteDbContext dbContext, TimeProvider time
         var rows = await filtered.OrderByDescending(x => x.PostedAt).ThenBy(x => x.Id)
             .Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(cancellationToken);
         var undatedCount = await scoped.CountAsync(x => x.PostedAt == null, cancellationToken);
-        var unpostedCount = await dated.CountAsync(x => x.Status != null && x.Status != "" && x.Status != "posted" && x.Status != "POSTED", cancellationToken);
+        var unpostedCount = await dated.CountAsync(x => x.Status != null && x.Status != "" && x.Status.ToLower() != "posted", cancellationToken);
         var currencyCount = await posted.CountAsync(x => x.Currency != profile.Currency, cancellationToken);
         var credits = totals.GetValueOrDefault("external-credit");
         var result = new PayCycleBreakdownResponse(ToResponse(profile), period.From, period.ToExclusive.AddDays(-1),

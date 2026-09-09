@@ -15,25 +15,9 @@ public static class PayCycleCalendar
         {
             throw new ArgumentException("Use a supported frequency and dates between 1900-01-01 and 9998-12-31.");
         }
-        if (frequency == "monthly")
-        {
-            var month = new DateOnly(date.Year, date.Month, 1);
-            var start = AtAnchorDay(month, anchorDate.Day);
-            if (date < start)
-            {
-                month = month.AddMonths(-1);
-                start = AtAnchorDay(month, anchorDate.Day);
-            }
-            return new PayCyclePeriod(start, AtAnchorDay(month.AddMonths(1), anchorDate.Day));
-        }
-        var length = frequency == "weekly" ? 7 : 14;
-        var offset = date.DayNumber - anchorDate.DayNumber;
-        var periodNumber = (int)Math.Floor((decimal)offset / length);
-        var from = anchorDate.AddDays(periodNumber * length);
-        return new PayCyclePeriod(from, from.AddDays(length));
+        var period = Finyte.Core.Scheduling.AnchoredPeriods.Resolve(frequency, anchorDate, date);
+        return new PayCyclePeriod(period.From, period.ToExclusive);
     }
-
-    private static DateOnly AtAnchorDay(DateOnly month, int day) => new(month.Year, month.Month, Math.Min(day, DateTime.DaysInMonth(month.Year, month.Month)));
 }
 
 public sealed record PayCyclePeriod(DateOnly From, DateOnly ToExclusive);
