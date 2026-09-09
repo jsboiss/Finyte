@@ -16,6 +16,118 @@ namespace Finyte.IntegrationTests;
 public sealed class InternalTransferTests
 {
     [Fact]
+    public async Task DismissalsAndRepeatedDecisionsDoNotInvalidateFinancialProjections()
+    {
+        await using var factory = new FinyteApiFactory();
+        using var client = factory.CreateClient();
+        var seed = await Seed(factory, client);
+        var pair = Assert.Single((await GetReview(client)).Items);
+        async Task<long> Version()
+        {
+            using var scope = factory.Services.CreateScope();
+            return await scope.ServiceProvider.GetRequiredService<FinyteDbContext>().Tenants
+                .Where(x => x.Id == seed.TenantId).Select(x => x.FinancialDataVersion).SingleAsync();
+        }
+        var initial = await Version();
+        (await Decide(client, pair, "dismiss")).EnsureSuccessStatusCode();
+        (await Decide(client, pair, "reset")).EnsureSuccessStatusCode();
+        (await Decide(client, pair, "reset")).EnsureSuccessStatusCode();
+        Assert.Equal(initial, await Version());
+        (await Decide(client, pair, "confirm")).EnsureSuccessStatusCode();
+        var confirmed = await Version();
+        Assert.True(confirmed > initial);
+        (await Decide(client, pair, "confirm")).EnsureSuccessStatusCode();
+        Assert.Equal(confirmed, await Version());
+        (await Decide(client, pair, "reset")).EnsureSuccessStatusCode();
+        Assert.True(await Version() > confirmed);
+    }
+
+    [Theory]
+    [InlineData("Posted", "pOsTeD")]
+    [InlineData("POSTED", "posted")]
+    public async Task StatusCasingAgreesAcrossMatchingAndConfirmedAnalytics(string debitStatus, string creditStatus)
+    {
+        await using var factory = new FinyteApiFactory();
+        using var client = factory.CreateClient();
+        await Seed(factory, client);
+        var pair = Assert.Single((await GetReview(client)).Items);
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<FinyteDbContext>();
+            (await db.Transactions.SingleAsync(x => x.Id == pair.Debit.Id)).Status = debitStatus;
+            (await db.Transactions.SingleAsync(x => x.Id == pair.Credit.Id)).Status = creditStatus;
+            await db.SaveChangesAsync();
+        }
+        Assert.Single((await GetReview(client)).Items);
+        (await Decide(client, pair, "confirm")).EnsureSuccessStatusCode();
+        Assert.Single((await GetReview(client, "confirmed")).Items);
+        Assert.Empty((await GetReview(client, "needs-review")).Items);
+        Assert.Equal(2500, (await CashFlow(client)).DailyCashFlow.Sum(x => x.ExpenseMinorUnits));
+    }
+
+    [PostgreSqlFact]
+    public async Task PostgreSqlReviewFiltersAndPagesInTheDatabase()
+    {
+        var connection = Environment.GetEnvironmentVariable("FINYTE_TEST_POSTGRES")!;
+        var schema = $"transfer_review_{Guid.NewGuid():N}";
+        await using var admin = new Npgsql.NpgsqlConnection(connection);
+        await admin.OpenAsync();
+        await using (var create = new Npgsql.NpgsqlCommand($"CREATE SCHEMA \"{schema}\"", admin))
+        {
+            await create.ExecuteNonQueryAsync();
+        }
+        try
+        {
+            await using var factory = new FinyteApiFactory(new Npgsql.NpgsqlConnectionStringBuilder(connection) { SearchPath = schema }.ConnectionString);
+            using var client = factory.CreateClient();
+            using (var scope = factory.Services.CreateScope())
+            {
+                await scope.ServiceProvider.GetRequiredService<FinyteDbContext>().Database.MigrateAsync();
+            }
+            var seed = await Seed(factory, client);
+            var pair = Assert.Single((await GetReview(client)).Items);
+            (await Decide(client, pair, "confirm")).EnsureSuccessStatusCode();
+            using (var scope = factory.Services.CreateScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<FinyteDbContext>();
+                foreach (var index in Enumerable.Range(0, 55))
+                {
+                    var debit = Transaction(seed.TenantId, seed.DebitAccountId, -index - 200, 2);
+                    var credit = Transaction(seed.TenantId, seed.CreditAccountId, index + 200, 2);
+                    debit.Status = "Posted";
+                    credit.Status = "pOsTeD";
+                    db.Transactions.AddRange(debit, credit);
+                    db.InternalTransfers.Add(new InternalTransfer { TenantId = seed.TenantId, DebitTransactionId = debit.Id, CreditTransactionId = credit.Id,
+                        DebitAccountId = debit.AccountId, CreditAccountId = credit.AccountId, Amount = credit.Amount, Currency = "AUD", Status = "confirmed",
+                        DebitPostedAt = debit.PostedAt!.Value, CreditPostedAt = credit.PostedAt!.Value, ReviewedByUserId = "dev-user" });
+                }
+                await db.SaveChangesAsync();
+            }
+            var first = await GetReview(client, "confirmed");
+            var second = (await client.GetFromJsonAsync<TransferReviewPage>("/api/internal-transfers?from=2026-08-01&to=2026-09-30&status=confirmed&page=2"))!;
+            Assert.Equal(56, first.TotalCount);
+            Assert.Equal(50, first.Items.Count);
+            Assert.Equal(6, second.Items.Count);
+            Assert.Empty(first.Items.Select(x => x.Debit.Id).Intersect(second.Items.Select(x => x.Debit.Id)));
+            Assert.Empty((await GetReview(client)).Items);
+            using (var scope = factory.Services.CreateScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<FinyteDbContext>();
+                (await db.Transactions.SingleAsync(x => x.Id == pair.Debit.Id)).Amount = -101;
+                await db.SaveChangesAsync();
+            }
+            var stale = (await client.GetFromJsonAsync<TransferReviewPage>("/api/internal-transfers?from=2025-01-01&to=2025-02-01&status=needs-review"))!;
+            Assert.Single(stale.Items);
+            Assert.Equal(55, (await GetReview(client, "confirmed")).TotalCount);
+        }
+        finally
+        {
+            await using var drop = new Npgsql.NpgsqlCommand($"DROP SCHEMA \"{schema}\" CASCADE", admin);
+            await drop.ExecuteNonQueryAsync();
+        }
+    }
+
+    [Fact]
     public void DetectionKeepsEveryAmbiguousCandidateWithoutGreedyPairing()
     {
         var tenantId = Guid.NewGuid();

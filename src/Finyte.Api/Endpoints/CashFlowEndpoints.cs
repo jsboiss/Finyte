@@ -63,7 +63,7 @@ public static class CashFlowEndpoints
                 && accountIds.Contains(x.AccountId)
                 && x.PostedAt >= fromTimestamp
                 && x.PostedAt < toTimestamp
-                && (x.Status == null || x.Status == "" || x.Status == "posted" || x.Status == "POSTED"));
+                && (x.Status == null || x.Status == "" || x.Status.ToLower() == "posted"));
         if (includeInternalTransfers != true)
         {
             transactionQuery = transactionQuery.ExcludeInternalTransfers(dbContext, currentTenant.TenantId);
