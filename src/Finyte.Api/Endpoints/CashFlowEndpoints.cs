@@ -2,6 +2,7 @@ using Finyte.Api.Tenancy;
 using Finyte.Core.Analytics;
 using Finyte.Data;
 using Finyte.Data.Billing;
+using Finyte.Data.Transfers;
 using Microsoft.EntityFrameworkCore;
 
 namespace Finyte.Api.Endpoints;
@@ -21,6 +22,7 @@ public static class CashFlowEndpoints
         DateOnly from,
         DateOnly to,
         Guid? accountId,
+        bool? includeInternalTransfers,
         TenantResolver tenantResolver,
         HttpContext httpContext,
         IBillingAccess billingAccess,
@@ -52,13 +54,18 @@ public static class CashFlowEndpoints
             .Where(x => x.TenantId == currentTenant.TenantId && (accountId == null || x.Id == accountId))
             .Select(x => x.Currency)
             .FirstOrDefaultAsync(cancellationToken) ?? "AUD";
-        var dailyTotals = await dbContext.Transactions
+        var transactionQuery = dbContext.Transactions
             .AsNoTracking()
             .Where(x => x.TenantId == currentTenant.TenantId
                 && (accountId == null || x.AccountId == accountId)
                 && x.PostedAt >= fromTimestamp
                 && x.PostedAt < toTimestamp
-                && (x.Status == null || x.Status == "" || x.Status == "posted" || x.Status == "POSTED"))
+                && (x.Status == null || x.Status == "" || x.Status.ToLower() == "posted"));
+        if (includeInternalTransfers != true)
+        {
+            transactionQuery = transactionQuery.ExcludeInternalTransfers(dbContext, currentTenant.TenantId);
+        }
+        var dailyTotals = await transactionQuery
             .GroupBy(x => x.PostedAt!.Value.Date)
             .Select(x => new
             {

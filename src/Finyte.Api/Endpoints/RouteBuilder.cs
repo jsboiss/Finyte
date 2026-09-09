@@ -14,6 +14,7 @@ public static class RouteBuilder
         app.MapProviderConnectionEndpoints();
         app.MapBankingAccountEndpoints();
         app.MapImportEndpoints();
+        app.MapInternalTransferEndpoints();
         app.MapTransactionEndpoints();
         app.MapOverviewEndpoints();
         app.MapCashFlowEndpoints();

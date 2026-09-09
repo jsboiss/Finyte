@@ -8,23 +8,34 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Finyte.IntegrationTests;
 
-public sealed class FinyteApiFactory : WebApplicationFactory<Program>
+public sealed class FinyteApiFactory(string? postgresConnectionString = null) : WebApplicationFactory<Program>
 {
-    private readonly string databaseName = Guid.NewGuid().ToString("N");
+    private string DatabaseName { get; } = Guid.NewGuid().ToString("N");
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Development");
-        builder.UseSetting("ConnectionStrings:Finyte", "Host=localhost;Port=5433;Database=finyte_test;Username=finyte;Password=finyte_dev_password");
+        builder.UseSetting("ConnectionStrings:Finyte", postgresConnectionString ?? "Host=localhost;Port=5433;Database=finyte_test;Username=finyte;Password=finyte_dev_password");
         builder.UseSetting("DevAuth:Enabled", "true");
         builder.UseSetting("DevData:SeedOnStartup", "false");
         builder.UseSetting("Temporal:Enabled", "false");
+        builder.UseSetting("Database:MigrateOnStartup", "false");
 
         builder.ConfigureServices(services =>
         {
             services.RemoveAll<DbContextOptions<FinyteDbContext>>();
             services.RemoveAll<IDbContextOptionsConfiguration<FinyteDbContext>>();
-            services.AddDbContext<FinyteDbContext>(x => x.UseInMemoryDatabase(databaseName));
+            services.AddDbContext<FinyteDbContext>(x =>
+            {
+                if (postgresConnectionString is null)
+                {
+                    x.UseInMemoryDatabase(DatabaseName);
+                }
+                else
+                {
+                    x.UseNpgsql(postgresConnectionString);
+                }
+            });
         });
     }
 }
