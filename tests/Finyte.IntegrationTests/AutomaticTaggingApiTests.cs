@@ -11,6 +11,31 @@ namespace Finyte.IntegrationTests;
 public sealed class AutomaticTaggingApiTests
 {
     [Fact]
+    public async Task LegacyMatchingWordsAreVisibleAndChangeOnlyWhenTheRuleIsEdited()
+    {
+        await using var factory = new FinyteApiFactory();
+        using var client = factory.CreateClient();
+        var setup = await Setup(factory, client);
+        var rule = await CreateRule(client, setup.TagId, "Coffee");
+        using (var scope = factory.Services.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<FinyteDbContext>();
+            var stored = await dbContext.MerchantTagRules.SingleAsync(x => x.Id == rule.Id);
+            stored.MerchantName = "Coffee Melbourne";
+            await dbContext.SaveChangesAsync();
+        }
+        var listed = Assert.Single((await client.GetFromJsonAsync<System.Text.Json.JsonElement[]>("/api/merchant-tags"))!);
+        Assert.True(listed.GetProperty("usesLegacyMatchingWords").GetBoolean());
+        Assert.Equal("coffee", listed.GetProperty("matchingWords").GetString());
+        (await client.PutAsJsonAsync($"/api/merchant-tags/{rule.Id}", new { merchantName = "Coffee Melbourne", tagId = setup.TagId })).EnsureSuccessStatusCode();
+        listed = Assert.Single((await client.GetFromJsonAsync<System.Text.Json.JsonElement[]>("/api/merchant-tags"))!);
+        Assert.False(listed.GetProperty("usesLegacyMatchingWords").GetBoolean());
+        Assert.Equal("coffee melbourne", listed.GetProperty("matchingWords").GetString());
+        using var verification = factory.Services.CreateScope();
+        Assert.Empty(await verification.ServiceProvider.GetRequiredService<FinyteDbContext>().TransactionTagAssignments.ToListAsync());
+    }
+
+    [Fact]
     public async Task OverlappingRulesUseRemainingSupportAndManualPromotionIsExplicit()
     {
         await using var factory = new FinyteApiFactory();

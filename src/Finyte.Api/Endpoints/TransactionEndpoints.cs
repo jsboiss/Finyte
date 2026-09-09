@@ -283,7 +283,8 @@ public static partial class TransactionEndpoints
             .Select(x => new MerchantTagRuleResponse(
                 x.Id,
                 x.MerchantName,
-                new TransactionTagResponse(x.TagId, x.Tag == null ? "" : x.Tag.Name, x.Tag == null ? "#64748b" : x.Tag.Color)))
+                new TransactionTagResponse(x.TagId, x.Tag == null ? "" : x.Tag.Name, x.Tag == null ? "#64748b" : x.Tag.Color),
+                x.MerchantKey, x.MerchantKey != MerchantTagMatcher.Normalize(x.MerchantName)))
             .ToListAsync(cancellationToken);
 
         return TypedResults.Ok<IReadOnlyList<MerchantTagRuleResponse>>(rules);
@@ -474,7 +475,8 @@ public static partial class TransactionEndpoints
 
     private sealed record SetTransactionTagsRequest(IReadOnlyList<Guid>? TagIds, IReadOnlyList<Guid>? ManualTagIds = null);
 
-    private sealed record MerchantTagRuleResponse(Guid Id, string MerchantName, TransactionTagResponse Tag);
+    private sealed record MerchantTagRuleResponse(Guid Id, string MerchantName, TransactionTagResponse Tag,
+        string? MatchingWords = null, bool UsesLegacyMatchingWords = false);
 
     private sealed record CreateMerchantTagRuleRequest(string MerchantName, Guid TagId);
 }

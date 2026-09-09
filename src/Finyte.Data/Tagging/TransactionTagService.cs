@@ -42,10 +42,7 @@ public sealed class TransactionTagService(FinyteDbContext dbContext)
             .LoadAsync(cancellationToken);
         // Include an added/edited rule and exclude a deleted rule before the atomic save.
         var rules = dbContext.MerchantTagRules.Local.Where(x => x.TenantId == tenantId).ToList();
-        foreach (var rule in rules)
-        {
-            rule.MerchantKey = MerchantTagMatcher.Normalize(rule.MerchantName);
-        }
+        // Stored matching words are user-owned semantics. Only an explicit rule edit changes them.
         return rules.OrderByDescending(x => x.MerchantKey.Length).ThenBy(x => x.Id).ToList();
     }
 

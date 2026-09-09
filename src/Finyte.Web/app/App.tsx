@@ -22,6 +22,8 @@ type MerchantTagRule = {
   id: string
   merchantName: string
   tag: TransactionTag
+  matchingWords?: string
+  usesLegacyMatchingWords?: boolean
 }
 
 type DateFilter = {
@@ -625,6 +627,7 @@ function TransactionsPage() {
               {(merchantRulesQuery.data ?? []).map(x => (
                 <span className="merchant-rule-pill" key={x.id}>
                   {x.merchantName}
+                  {x.usesLegacyMatchingWords && <small>Saved matching words: “{x.matchingWords}”. Edit and save to use all words in the rule name.</small>}
                   <TagPill tag={x.tag} />
                   <button aria-label={`Edit rule for ${x.merchantName}`} onClick={() => { setEditingMerchantRuleId(x.id); setMerchantName(x.merchantName); setMerchantTagId(x.tag.id) }} type="button">Edit</button>
                   <button aria-label={`Delete rule for ${x.merchantName}`} disabled={deleteMerchantRuleMutation.isPending} onClick={() => deleteMerchantRuleMutation.mutate(x.id)} type="button">

@@ -118,6 +118,30 @@ public sealed class AutomaticTaggingTests
         Assert.False((await service.SyncTransactions(syncRun, CancellationToken.None)).HasChanges);
     }
 
+    [Fact]
+    public async Task ReadingAndReconcilingLegacyRulesPreservesTheirSavedMatchingWords()
+    {
+        await using var dbContext = CreateDbContext();
+        var tenantId = Guid.NewGuid();
+        var tag = new TransactionTag { TenantId = tenantId, Name = "Groceries", Color = "#aaaaaa" };
+        var rule = CreateRule(tenantId, tag.Id, "Coles Melbourne");
+        rule.MerchantKey = "coles";
+        dbContext.TransactionTags.Add(tag);
+        dbContext.MerchantTagRules.Add(rule);
+        await dbContext.SaveChangesAsync();
+        var service = new TransactionTagService(dbContext);
+        var rules = await service.GetRules(tenantId, CancellationToken.None);
+        Assert.False(dbContext.ChangeTracker.HasChanges());
+        var transaction = new Transaction { TenantId = tenantId, FiskilTransactionId = "legacy-test", MerchantName = "Coles Brisbane" };
+        Assert.True(service.Reconcile(transaction, rules));
+        Assert.Single(transaction.TagAssignments);
+        Assert.Equal("coles", rule.MerchantKey);
+        // An explicit edit opts into the new matching words and reconciles automatic assignments.
+        rule.MerchantKey = MerchantTagMatcher.Normalize(rule.MerchantName);
+        Assert.True(service.Reconcile(transaction, rules));
+        Assert.Empty(transaction.TagAssignments);
+    }
+
     private static FinyteDbContext CreateDbContext()
     {
         return new FinyteDbContext(new DbContextOptionsBuilder<FinyteDbContext>()
