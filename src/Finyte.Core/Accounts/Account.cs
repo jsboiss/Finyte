@@ -9,6 +9,11 @@ public sealed class Account
     public string? AccountNumber { get; set; }
     public string? Bsb { get; set; }
     public required string Name { get; set; }
+    public string? CustomName { get; set; }
+    public string? AccountTypeOverride { get; set; }
+    public bool? IncludeInAnalyticsOverride { get; set; }
+    public int PreferencesVersion { get; set; }
+    public int ManualBalanceVersion { get; set; }
     public string? ProductName { get; set; }
     public string? ProductCategory { get; set; }
     public string? InstitutionId { get; set; }

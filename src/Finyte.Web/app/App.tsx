@@ -1,11 +1,12 @@
 import { CreateOrganization, OrganizationSwitcher, SignIn, UserButton, useAuth, useOrganization } from '@clerk/react'
 import { link, type LinkError } from '@fiskil/link'
-import { keepPreviousData, QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createRootRoute, createRoute, createRouter, Link, Outlet, RouterProvider, useRouterState } from '@tanstack/react-router'
-import { createColumnHelper, flexRender, getCoreRowModel, getFilteredRowModel, type ColumnFiltersState, useReactTable } from '@tanstack/react-table'
+import { createColumnHelper, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table'
 import { Activity, Banknote, CreditCard, Home, Mail, Menu, Plus, ReceiptText, Settings, Shield, SlidersHorizontal, Tags, Trash2, UserPlus, Users, X } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { getAccounts, getAppStatus } from './api/generated/finyteApi'
+import { AccountsPage } from './accounts/AccountsPage'
 import { getDevIdentity, httpClient, setDevIdentity } from './api/httpClient'
 import { AuthTokenProvider } from './auth/AuthTokenProvider'
 import { BillingPage } from './billing/BillingAccessPanel'
@@ -15,6 +16,8 @@ import { TransfersPage } from './transfers/TransfersPage'
 import { TransactionAccountChip, TransactionAmount } from './transactions/TransactionCard'
 import { TransactionCardList } from './transactions/TransactionCardList'
 import { TransactionPagination } from './transactions/TransactionPagination'
+import { TransactionFilterForm } from './transactions/TransactionFilters'
+import { defaultTransactionFilters, transactionSearchParams, type TransactionFilters } from './transactions/transactionSearch'
 import type { Transaction, TransactionPage, TransactionTag } from './transactions/types'
 import './App.css'
 
@@ -24,16 +27,6 @@ type MerchantTagRule = {
   tag: TransactionTag
   matchingWords?: string
   usesLegacyMatchingWords?: boolean
-}
-
-type DateFilter = {
-  from?: string
-  to?: string
-}
-
-type AmountFilter = {
-  min?: string
-  max?: string
 }
 
 type CreateTagInput = {
@@ -231,6 +224,10 @@ function AppNavLinks({ onNavigate }: { onNavigate?: () => void }) {
         <Activity aria-hidden="true" />
         Connections
       </Link>
+      <Link to="/accounts" activeProps={{ className: 'active' }} onClick={onNavigate}>
+        <Banknote aria-hidden="true" />
+        Accounts
+      </Link>
       <Link to="/billing" activeProps={{ className: 'active' }} onClick={onNavigate}>
         <CreditCard aria-hidden="true" />
         Billing
@@ -252,6 +249,9 @@ function AppNavLinks({ onNavigate }: { onNavigate?: () => void }) {
 }
 
 function getPageTitle(pathname: string) {
+  if (pathname.startsWith('/accounts')) {
+    return 'Accounts'
+  }
   if (pathname.startsWith('/transfers')) {
     return 'Transfers'
   }
@@ -328,7 +328,7 @@ async function provisionFamily(name: string) {
 }
 
 function TransactionsPage() {
-  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
+  const [transactionSearch, setTransactionSearch] = useState({ page: 1, filters: defaultTransactionFilters })
   const [showFilters, setShowFilters] = useState(false)
   const [showTagManagement, setShowTagManagement] = useState(false)
   const [tagName, setTagName] = useState('')
@@ -336,12 +336,11 @@ function TransactionsPage() {
   const [merchantName, setMerchantName] = useState('')
   const [merchantTagId, setMerchantTagId] = useState('')
   const [editingMerchantRuleId, setEditingMerchantRuleId] = useState<string>()
-  const [transactionPage, setTransactionPage] = useState(1)
+  const { page: transactionPage, filters } = transactionSearch
   const queryClient = useQueryClient()
   const transactionsQuery = useQuery({
-    queryKey: ['transactions', transactionPage],
-    queryFn: () => getTransactions(transactionPage, transactionsPageSize),
-    placeholderData: keepPreviousData,
+    queryKey: ['transactions', transactionSearch],
+    queryFn: ({ signal }) => getTransactions(transactionPage, transactionsPageSize, filters, signal),
   })
   const accountsQuery = useQuery({
     queryKey: ['accounts'],
@@ -381,41 +380,30 @@ function TransactionsPage() {
       await queryClient.cancelQueries({ queryKey: ['transactions'] })
       await queryClient.cancelQueries({ queryKey: ['merchant-tags'] })
       const previousTags = queryClient.getQueryData<TransactionTag[]>(['tags'])
-      const previousTransactions = queryClient.getQueryData<TransactionPage>(['transactions', transactionPage])
       const previousMerchantRules = queryClient.getQueryData<MerchantTagRule[]>(['merchant-tags'])
       queryClient.setQueryData<TransactionTag[]>(['tags'], x => (x ?? []).filter(y => y.id !== tagId))
-      queryClient.setQueryData<TransactionPage>(['transactions', transactionPage], x => x ? { ...x, items: x.items.map(y => ({ ...y, tags: y.tags.filter(z => z.id !== tagId) })) } : x)
       queryClient.setQueryData<MerchantTagRule[]>(['merchant-tags'], x => (x ?? []).filter(y => y.tag.id !== tagId))
-      return { previousTags, previousTransactions, previousMerchantRules }
+      return { previousTags, previousMerchantRules }
     },
     onError: (_error, _tagId, context) => {
       queryClient.setQueryData(['tags'], context?.previousTags)
-      queryClient.setQueryData(['transactions', transactionPage], context?.previousTransactions)
       queryClient.setQueryData(['merchant-tags'], context?.previousMerchantRules)
+    },
+    onSuccess: async (_data, tagId) => {
+      setTransactionSearch(x => ({ page: 1, filters: { ...x.filters, tagIds: x.filters.tagIds.filter(y => y !== tagId) } }))
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['transactions'] }),
+        queryClient.invalidateQueries({ queryKey: ['overview'] }),
+      ])
     },
   })
   const updateTransactionTagsMutation = useMutation({
     mutationFn: (input: SetTransactionTagsInput) => setTransactionTags(input),
-    onMutate: async input => {
-      await queryClient.cancelQueries({ queryKey: ['transactions'] })
-      const previousTransactions = queryClient.getQueryData<TransactionPage>(['transactions', transactionPage])
-      const allTags = queryClient.getQueryData<TransactionTag[]>(['tags']) ?? []
-      const transaction = previousTransactions?.items.find(x => x.id === input.transactionId)
-      const nextTags = allTags.filter(x => input.tagIds.includes(x.id)).map(x => {
-        const previous = transaction?.tags.find(y => y.id === x.id)
-        return input.manualTagIds?.includes(x.id) || !previous ? { ...x, source: 'manual' as const } : previous
-      })
-      queryClient.setQueryData<TransactionPage>(['transactions', transactionPage], x => x ? { ...x, items: x.items.map(y => y.id === input.transactionId ? { ...y, tags: nextTags } : y) } : x)
-      return { previousTransactions }
-    },
-    onError: (_error, _input, context) => {
-      queryClient.setQueryData(['transactions', transactionPage], context?.previousTransactions)
-    },
-    onSuccess: async (nextTags, input) => {
-      queryClient.setQueryData<TransactionPage>(['transactions', transactionPage], x => x ? { ...x, items: x.items.map(y => y.id === input.transactionId ? { ...y, tags: nextTags } : y) } : x)
+    onSuccess: async () => {
+      setTransactionSearch(x => ({ ...x, page: 1 }))
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['overview'] }),
         queryClient.invalidateQueries({ queryKey: ['transactions'] }),
+        queryClient.invalidateQueries({ queryKey: ['overview'] }),
       ])
     },
   })
@@ -466,17 +454,12 @@ function TransactionsPage() {
   const columns = useMemo(() => [
     transactionColumnHelper.accessor('postedDate', {
       header: 'Date',
-      filterFn: (x, y, z: DateFilter) => {
-        const value = x.getValue<string>(y)
-        return (!z.from || value >= z.from) && (!z.to || value <= z.to)
-      },
     }),
     transactionColumnHelper.accessor('accountId', {
       header: 'Account',
       cell: x => (
         <TransactionAccountChip accountId={x.getValue()}>{x.row.original.accountDisplayName}</TransactionAccountChip>
       ),
-      filterFn: (x, y, z: string) => x.getValue<string>(y) === z,
     }),
     transactionColumnHelper.accessor('description', {
       header: 'Description',
@@ -487,11 +470,9 @@ function TransactionsPage() {
           <span>{x.row.original.merchantName ?? ''}</span>
         </div>
       ),
-      filterFn: 'includesString',
     }),
     transactionColumnHelper.accessor('category', {
       header: 'Category',
-      filterFn: 'includesString',
     }),
     transactionColumnHelper.accessor('tags', {
       header: 'Tags',
@@ -505,17 +486,10 @@ function TransactionsPage() {
           disabled={updateTransactionTagsMutation.isPending || restoreAutomaticTagsMutation.isPending}
         />
       ),
-      filterFn: (x, y, z: string) => x.getValue<TransactionTag[]>(y).some(a => a.name.toLowerCase().includes(z.toLowerCase())),
     }),
     transactionColumnHelper.accessor('amountMinorUnits', {
       header: 'Amount',
       cell: x => <TransactionAmount amountMinorUnits={x.getValue()} currencyCode={x.row.original.currency} />,
-      filterFn: (x, y, z: AmountFilter) => {
-        const value = x.getValue<number>(y) / 100
-        const min = z.min ? Number(z.min) : null
-        const max = z.max ? Number(z.max) : null
-        return (min == null || value >= min) && (max == null || value <= max)
-      },
     }),
   ], [setTransactionTagIds, tagsQuery.data, restoreAutomaticTagsMutation, updateTransactionTagsMutation.isPending])
   // TanStack Table intentionally returns stateful functions that React Compiler cannot memoize.
@@ -523,16 +497,19 @@ function TransactionsPage() {
   const table = useReactTable({
     data: transactionsQuery.data?.items ?? [],
     columns,
-    state: { columnFilters, columnVisibility: { category: false } },
-    onColumnFiltersChange: setColumnFilters,
+    state: { columnVisibility: { category: false } },
+    manualFiltering: true,
+    manualSorting: true,
+    manualPagination: true,
+    getRowId: x => x.id,
     getCoreRowModel: getCoreRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
   })
-  const hasFilters = columnFilters.length > 0
+  const hasFilters = JSON.stringify(filters) !== JSON.stringify(defaultTransactionFilters)
   const isLoading = transactionsQuery.isLoading || transactionsQuery.isFetching
   const totalTransactions = transactionsQuery.data?.totalCount ?? 0
   const totalPages = Math.max(Math.ceil(totalTransactions / transactionsPageSize), 1)
   const visibleTransactions = table.getRowModel().rows.map(x => x.original)
+  const emptyMessage = transactionsQuery.isError ? 'Transactions are unavailable.' : isLoading ? 'Loading transactions…' : hasFilters ? 'No transactions match the current filters.' : 'No transactions imported yet.'
 
   return (
     <section className="page transactions-page">
@@ -550,7 +527,7 @@ function TransactionsPage() {
             <SlidersHorizontal aria-hidden="true" />
             Filters
           </button>
-          <button className="secondary-button" disabled={!hasFilters} onClick={() => table.resetColumnFilters()} type="button">
+          <button className="secondary-button" disabled={!hasFilters} onClick={() => setTransactionSearch({ page: 1, filters: defaultTransactionFilters })} type="button">
             <X aria-hidden="true" />
             Clear
           </button>
@@ -642,55 +619,22 @@ function TransactionsPage() {
       )}
 
       {showFilters && (
-        <section className="panel transaction-filters-panel">
-          <FilterField className="date-filter-field" label="Date">
-            <DateRangeFilter
-              value={(table.getColumn('postedDate')?.getFilterValue() as DateFilter | undefined) ?? {}}
-              onChange={x => table.getColumn('postedDate')?.setFilterValue(x.from || x.to ? x : undefined)}
-            />
-          </FilterField>
-          <FilterField label="Account">
-            <select
-              disabled={accountsQuery.isLoading}
-              onChange={x => table.getColumn('accountId')?.setFilterValue(x.target.value || undefined)}
-              value={(table.getColumn('accountId')?.getFilterValue() as string | undefined) ?? ''}
-            >
-              <option value="">All accounts</option>
-              {(accountsQuery.data ?? []).map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
-            </select>
-          </FilterField>
-          <FilterField label="Description">
-            <DebouncedFilterInput
-              onChange={x => table.getColumn('description')?.setFilterValue(x)}
-              placeholder="Search descriptions"
-              value={(table.getColumn('description')?.getFilterValue() as string | undefined) ?? ''}
-            />
-          </FilterField>
-          <FilterField label="Category">
-            <DebouncedFilterInput
-              onChange={x => table.getColumn('category')?.setFilterValue(x)}
-              placeholder="Search categories"
-              value={(table.getColumn('category')?.getFilterValue() as string | undefined) ?? ''}
-            />
-          </FilterField>
-          <FilterField label="Tags">
-            <DebouncedFilterInput
-              onChange={x => table.getColumn('tags')?.setFilterValue(x)}
-              placeholder="Search tags"
-              value={(table.getColumn('tags')?.getFilterValue() as string | undefined) ?? ''}
-            />
-          </FilterField>
-          <FilterField className="amount-filter-field" label="Amount">
-            <AmountRangeFilter
-              value={(table.getColumn('amountMinorUnits')?.getFilterValue() as AmountFilter | undefined) ?? {}}
-              onChange={x => table.getColumn('amountMinorUnits')?.setFilterValue(x.min || x.max ? x : undefined)}
-            />
-          </FilterField>
-        </section>
+        <TransactionFilterForm
+          key={JSON.stringify(filters)}
+          filters={filters}
+          accounts={accountsQuery.data ?? []}
+          tags={tagsQuery.data ?? []}
+          onApply={nextFilters => setTransactionSearch({ page: 1, filters: nextFilters })}
+        />
       )}
+      {hasFilters && <p className="transaction-search-summary">Filters applied across all transaction history.</p>}
+      {transactionsQuery.isError && (
+        <p role="alert">Transactions could not be loaded. Check your filters and <button className="secondary-button" type="button" onClick={() => transactionsQuery.refetch()}>Try again</button>.</p>
+      )}
+      {(updateTransactionTagsMutation.isError || deleteTagMutation.isError || createMerchantRuleMutation.isError) && <p role="alert">The tag change could not be saved. Please try again.</p>}
 
       <TransactionCardList
-        emptyMessage={hasFilters ? 'No transactions match the current filters.' : 'No transactions imported yet.'}
+        emptyMessage={emptyMessage}
         isLoading={isLoading}
         renderTags={x => (
           <TagEditor
@@ -705,7 +649,7 @@ function TransactionsPage() {
         transactions={visibleTransactions}
       />
 
-      <section className="transaction-table-section">
+      <section aria-busy={isLoading} className="transaction-table-section">
         <div className={isLoading ? 'table-progress is-visible' : 'table-progress'} />
         <table>
           <thead>
@@ -719,7 +663,7 @@ function TransactionsPage() {
             ))}
             {table.getRowModel().rows.length === 0 && (
               <tr>
-                <td className="empty-table-cell" colSpan={5}>{hasFilters ? 'No transactions match the current filters.' : 'No transactions imported yet.'}</td>
+                <td className="empty-table-cell" colSpan={5}>{emptyMessage}</td>
               </tr>
             )}
           </tbody>
@@ -728,65 +672,14 @@ function TransactionsPage() {
 
       <TransactionPagination
         isLoading={isLoading}
-        onNext={() => setTransactionPage(x => x + 1)}
-        onPrevious={() => setTransactionPage(x => Math.max(1, x - 1))}
+        onNext={() => setTransactionSearch(x => ({ ...x, page: x.page + 1 }))}
+        onPrevious={() => setTransactionSearch(x => ({ ...x, page: Math.max(1, Math.min(x.page - 1, totalPages)) }))}
         page={transactionPage}
         totalCount={totalTransactions}
         totalPages={totalPages}
         visibleCount={visibleTransactions.length}
       />
     </section>
-  )
-}
-
-function FilterField({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
-  return (
-    <label className={className ? `filter-field ${className}` : 'filter-field'}>
-      <span>{label}</span>
-      {children}
-    </label>
-  )
-}
-
-function DebouncedFilterInput({ value, onChange, placeholder }: { value: string; onChange: (value: string) => void; placeholder: string }) {
-  return <DebouncedFilterInputDraft initialValue={value} key={value} onChange={onChange} placeholder={placeholder} />
-}
-
-function DebouncedFilterInputDraft({ initialValue, onChange, placeholder }: { initialValue: string; onChange: (value: string) => void; placeholder: string }) {
-  const [draftValue, setDraftValue] = useState(initialValue)
-  const onChangeRef = useRef(onChange)
-
-  useEffect(() => {
-    onChangeRef.current = onChange
-  }, [onChange])
-
-  useEffect(() => {
-    if (draftValue === initialValue) {
-      return
-    }
-
-    const timeout = window.setTimeout(() => onChangeRef.current(draftValue), 150)
-    return () => window.clearTimeout(timeout)
-  }, [draftValue, initialValue])
-
-  return <input onChange={x => setDraftValue(x.target.value)} placeholder={placeholder} value={draftValue} />
-}
-
-function DateRangeFilter({ value, onChange }: { value: DateFilter; onChange: (value: DateFilter) => void }) {
-  return (
-    <div className="range-filter">
-      <input onChange={x => onChange({ ...value, from: x.target.value })} type="date" value={value.from ?? ''} />
-      <input onChange={x => onChange({ ...value, to: x.target.value })} type="date" value={value.to ?? ''} />
-    </div>
-  )
-}
-
-function AmountRangeFilter({ value, onChange }: { value: AmountFilter; onChange: (value: AmountFilter) => void }) {
-  return (
-    <div className="range-filter">
-      <input onChange={x => onChange({ ...value, min: x.target.value })} placeholder="Min" type="number" value={value.min ?? ''} />
-      <input onChange={x => onChange({ ...value, max: x.target.value })} placeholder="Max" type="number" value={value.max ?? ''} />
-    </div>
   )
 }
 
@@ -1188,10 +1081,11 @@ async function removeFamilyMember(memberId: string) {
   return httpClient<void>({ method: 'DELETE', url: `/api/family/members/${memberId}` })
 }
 
-async function getTransactions(page: number, pageSize: number) {
+async function getTransactions(page: number, pageSize: number, filters: TransactionFilters, signal: AbortSignal) {
   return httpClient<TransactionPage>({
     method: 'GET',
-    url: `/api/transactions?page=${page}&pageSize=${pageSize}`,
+    url: `/api/transactions?${transactionSearchParams(page, pageSize, filters)}`,
+    signal,
   })
 }
 
@@ -1274,13 +1168,14 @@ const transactionsRoute = createRoute({ getParentRoute: () => rootRoute, path: '
 const billingRoute = createRoute({ getParentRoute: () => rootRoute, path: '/billing', component: BillingPage })
 const settingsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings', component: SettingsPage })
 const importsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/imports', component: ImportsPage })
+const accountsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/accounts', component: AccountsPage })
 const transfersRoute = createRoute({
   getParentRoute: () => rootRoute, path: '/transfers', component: TransfersPage,
   validateSearch: (search: Record<string, unknown>): { view?: string } => ({
     view: typeof search.view === 'string' && ['suggested', 'confirmed', 'dismissed', 'needs-review'].includes(search.view) ? search.view : undefined,
   }),
 })
-const routeTree = rootRoute.addChildren([indexRoute, connectionsRoute, transactionsRoute, billingRoute, settingsRoute, importsRoute, transfersRoute])
+const routeTree = rootRoute.addChildren([indexRoute, connectionsRoute, transactionsRoute, billingRoute, settingsRoute, importsRoute, transfersRoute, accountsRoute])
 const router = createRouter({ routeTree })
 
 declare module '@tanstack/react-router' {

@@ -6,7 +6,9 @@ using Finyte.Data.Analytics;
 using Finyte.Data.Billing;
 using Finyte.Data.Transfers;
 using Finyte.Data.Tagging;
+using Finyte.Data.Transactions;
 using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace Finyte.Api.Endpoints;
@@ -37,6 +39,18 @@ public static partial class TransactionEndpoints
     private static async Task<IResult> GetTransactions(
         int? page,
         int? pageSize,
+        Guid? accountId,
+        DateOnly? from,
+        DateOnly? to,
+        string? search,
+        string? category,
+        [FromQuery] Guid[]? tagIds,
+        string? tagMatch,
+        bool? untagged,
+        decimal? minAmount,
+        decimal? maxAmount,
+        string? currency,
+        string? sort,
         TenantResolver tenantResolver,
         HttpContext httpContext,
         IBillingAccess billingAccess,
@@ -50,23 +64,43 @@ public static partial class TransactionEndpoints
             return TypedResults.Problem("An active subscription is required to view transactions.", statusCode: StatusCodes.Status402PaymentRequired);
         }
 
-        var currentPage = Math.Max(page ?? 1, 1);
-        var take = Math.Clamp(pageSize ?? 25, 1, 250);
+        var filters = new TransactionSearch
+        {
+            Page = page ?? 1,
+            PageSize = pageSize ?? 25,
+            AccountId = accountId,
+            From = from,
+            To = to,
+            Search = search?.Trim(),
+            Category = category?.Trim(),
+            TagIds = tagIds ?? [],
+            TagMatch = tagMatch ?? "any",
+            Untagged = untagged ?? false,
+            MinAmount = minAmount,
+            MaxAmount = maxAmount,
+            Currency = string.IsNullOrWhiteSpace(currency) ? null : currency.Trim().ToUpperInvariant(),
+            Sort = sort ?? "-date"
+        };
+        var errors = filters.Validate();
+
+        if (errors.Count > 0)
+        {
+            return TypedResults.ValidationProblem(errors);
+        }
+
+        var currentPage = filters.Page;
+        var take = filters.PageSize;
         var transfers = dbContext.ValidConfirmedTransfers(currentTenant.TenantId);
-        var query = dbContext.Transactions
-            .AsNoTracking()
-            .Where(x => x.TenantId == currentTenant.TenantId);
+        var query = filters.Apply(dbContext.Transactions.AsNoTracking(), currentTenant.TenantId);
         var totalCount = await query.CountAsync(cancellationToken);
-        var transactions = await query
-            .OrderByDescending(x => x.PostedAt ?? x.CreatedAt)
-            .ThenByDescending(x => x.CreatedAt)
+        var transactions = await filters.Order(query)
             .Skip((currentPage - 1) * take)
             .Take(take)
             .Select(x => new TransactionResponse(
                 x.Id,
                 x.AccountId,
-                x.Account == null ? "Account" : x.Account.Name,
-                x.PostedAt == null ? x.CreatedAt.ToString("yyyy-MM-dd") : x.PostedAt.Value.ToString("yyyy-MM-dd"),
+                x.Account == null ? "Account" : x.Account.CustomName ?? x.Account.Name,
+                GetPostedDate(x.PostedAt ?? x.CreatedAt),
                 x.Description ?? "",
                 x.MerchantName,
                 GetCategory(x.PrimaryCategory, x.SecondaryCategory),
@@ -74,6 +108,7 @@ public static partial class TransactionEndpoints
                 x.Currency,
                 transfers.Any(y => y.DebitTransactionId == x.Id || y.CreditTransactionId == x.Id),
                 x.TagAssignments
+                    .Where(y => y.Tag != null && y.Tag.TenantId == currentTenant.TenantId)
                     .OrderBy(y => y.Tag == null ? "" : y.Tag.Name)
                     .Select(y => new TransactionTagResponse(y.TagId, y.Tag == null ? "" : y.Tag.Name, y.Tag == null ? "#64748b" : y.Tag.Color,
                         y.Source, y.MerchantRuleId, y.MerchantRule == null ? null : y.MerchantRule.MerchantName))
@@ -443,6 +478,11 @@ public static partial class TransactionEndpoints
     private static long ToMinorUnits(decimal amount)
     {
         return (long)Math.Round(amount * 100, MidpointRounding.AwayFromZero);
+    }
+
+    private static string GetPostedDate(DateTimeOffset postedAt)
+    {
+        return postedAt.UtcDateTime.ToString("yyyy-MM-dd");
     }
 
     [GeneratedRegex("^#[0-9a-fA-F]{6}$")]
