@@ -14,8 +14,8 @@ public static class InternalTransferQueries
             && x.DebitTransaction.Amount == -x.Amount && x.CreditTransaction.Amount == x.Amount
             && x.DebitTransaction.Currency == x.Currency && x.CreditTransaction.Currency == x.Currency
             && x.DebitTransaction.PostedAt == x.DebitPostedAt && x.CreditTransaction.PostedAt == x.CreditPostedAt
-            && (x.DebitTransaction.Status == null || x.DebitTransaction.Status == "" || x.DebitTransaction.Status == "posted" || x.DebitTransaction.Status == "POSTED")
-            && (x.CreditTransaction.Status == null || x.CreditTransaction.Status == "" || x.CreditTransaction.Status == "posted" || x.CreditTransaction.Status == "POSTED"));
+            && (x.DebitTransaction.Status == null || x.DebitTransaction.Status == "" || x.DebitTransaction.Status.ToLower() == "posted")
+            && (x.CreditTransaction.Status == null || x.CreditTransaction.Status == "" || x.CreditTransaction.Status.ToLower() == "posted"));
     }
 
     public static IQueryable<Transaction> ExcludeInternalTransfers(this IQueryable<Transaction> transactions, FinyteDbContext dbContext, Guid tenantId)

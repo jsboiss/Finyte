@@ -51,7 +51,7 @@ public sealed class OverviewProjector(FinyteDbContext dbContext) : IOverviewProj
 
         // Account preferences control all-account income/spending, never balances or direct inspection.
         var accountIds = accountRows.Where(x => scope.AccountId != null || AccountPreferences.IncludeInAnalytics(x)).Select(x => x.Id).ToList();
-        var currency = accountRows.Select(x => x.Currency).FirstOrDefault() ?? "AUD";
+        var currency = AccountPreferences.AnalyticsCurrency(accountRows, scope.AccountId);
         var accountBalanceMinorUnits = accountRows.Sum(x => ToMinorUnits(x.CurrentBalance));
         var accountLabel = scope.AccountId is null
             ? "All accounts"
@@ -63,7 +63,7 @@ public sealed class OverviewProjector(FinyteDbContext dbContext) : IOverviewProj
                 && accountIds.Contains(x.AccountId)
                 && x.PostedAt >= monthStart
                 && x.PostedAt < nextMonthStart
-                && (x.Status == null || x.Status == "" || x.Status == "posted" || x.Status == "POSTED"))
+                && (x.Status == null || x.Status == "" || x.Status.ToLower() == "posted"))
             .ExcludeInternalTransfers(dbContext, scope.TenantId);
         var totals = await transactionQuery
             .GroupBy(x => 1)

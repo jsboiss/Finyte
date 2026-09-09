@@ -17,6 +17,46 @@ namespace Finyte.IntegrationTests;
 public sealed class AccountPreferencesApiTests
 {
     [Fact]
+    public async Task ExcludedForeignAccountDoesNotChooseTheSpendingCurrency()
+    {
+        await using var factory = new FinyteApiFactory();
+        using var client = factory.CreateClient();
+        var seed = await Seed(factory, client);
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<FinyteDbContext>();
+        var account = await dbContext.Accounts.SingleAsync(x => x.Id == seed.AccountId);
+        account.CustomName = "A foreign loan";
+        account.Currency = "USD";
+        account.IncludeInAnalyticsOverride = false;
+        await dbContext.SaveChangesAsync();
+        var projector = new OverviewProjector(dbContext);
+        var pending = await new ProjectionDispatcher(dbContext, projector).GetOrRebuildOverview(
+            new OverviewProjectionScope(seed.TenantId, null, "2026-09"), CancellationToken.None);
+        Assert.Equal("AUD", pending.Currency);
+        var combined = await projector.Rebuild(new OverviewProjectionScope(seed.TenantId, null, "2026-09"), CancellationToken.None);
+        Assert.Equal("AUD", combined.Currency);
+        Assert.Equal(5000, combined.CurrentMonthSpendMinorUnits);
+        var cashFlow = (await client.GetFromJsonAsync<CashFlowRangeResponse>("/api/cash-flow?from=2026-09-01&to=2026-09-30"))!;
+        Assert.Equal("AUD", cashFlow.Currency);
+    }
+
+    [Fact]
+    public async Task ManualBalanceAcceptsDecimalStringsUsedByTheForm()
+    {
+        await using var factory = new FinyteApiFactory();
+        using var client = factory.CreateClient();
+        var seed = await Seed(factory, client);
+        (await client.PutAsJsonAsync($"/api/accounts/{seed.AccountId}/balance", new
+        {
+            currentBalance = "-999.25", availableBalance = "25.10", expectedVersion = 0
+        })).EnsureSuccessStatusCode();
+        using var scope = factory.Services.CreateScope();
+        var account = await scope.ServiceProvider.GetRequiredService<FinyteDbContext>().Accounts.SingleAsync(x => x.Id == seed.AccountId);
+        Assert.Equal(-999.25m, account.CurrentBalance);
+        Assert.Equal(25.10m, account.AvailableBalance);
+    }
+
+    [Fact]
     public async Task PreferencesSurviveBankSyncAndCanBeResetToUpdatedProviderDefaults()
     {
         await using var factory = new FinyteApiFactory();
