@@ -20,6 +20,7 @@ public static class DependencyInjection
         services.AddScoped<IProjectionInvalidator, ProjectionInvalidator>();
         services.AddScoped<IBillingAccess, BillingAccess>();
         services.AddScoped<Imports.TransactionFileImportService>();
+        services.AddScoped<Tagging.TransactionTagService>();
         services.AddScoped<Transfers.InternalTransferService>();
         services.AddScoped<IFiskilBankingSyncService, FiskilBankingSyncService>();
         services.AddScoped<IProviderSyncRunner, ProviderSyncRunner>();

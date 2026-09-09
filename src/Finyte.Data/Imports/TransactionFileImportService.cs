@@ -5,11 +5,12 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using Finyte.Core.Accounts;
 using Finyte.Data.Analytics;
+using Finyte.Data.Tagging;
 using Microsoft.EntityFrameworkCore;
 
 namespace Finyte.Data.Imports;
 
-public sealed class TransactionFileImportService(FinyteDbContext dbContext, IProjectionInvalidator projectionInvalidator)
+public sealed class TransactionFileImportService(FinyteDbContext dbContext, IProjectionInvalidator projectionInvalidator, TransactionTagService tagService)
 {
     public async Task<TransactionFileImport> Import(Guid tenantId, Guid accountId, string fileName, Stream stream, CancellationToken cancellationToken)
     {
@@ -33,6 +34,7 @@ public sealed class TransactionFileImportService(FinyteDbContext dbContext, IPro
             // Serialize uploads for this account; identities and projections commit with the transactions.
             await using var databaseTransaction = dbContext.Database.IsRelational()
                 ? await dbContext.Database.BeginTransactionAsync(cancellationToken) : null;
+            await tagService.Lock(tenantId, cancellationToken);
             if (dbContext.Database.IsNpgsql())
             {
                 await dbContext.Database.ExecuteSqlInterpolatedAsync(
@@ -60,7 +62,7 @@ public sealed class TransactionFileImportService(FinyteDbContext dbContext, IPro
                 .ToDictionaryAsync(x => x.ExternalId, x => x.TransactionId, cancellationToken);
             var used = known.Values.ToHashSet();
             var seen = new HashSet<string>();
-            var rules = await dbContext.MerchantTagRules.Where(x => x.TenantId == tenantId).ToListAsync(cancellationToken);
+            var rules = await tagService.GetRules(tenantId, cancellationToken);
 
             foreach (var row in rows)
             {
@@ -96,11 +98,7 @@ public sealed class TransactionFileImportService(FinyteDbContext dbContext, IPro
                     CreatedAt = DateTimeOffset.UtcNow,
                     RawJson = JsonSerializer.Serialize(new { source = "file-import", fileName = run.FileName, transaction.BankId })
                 };
-                var merchantKey = MerchantKey(entity.MerchantName);
-                foreach (var tagId in rules.Where(x => merchantKey == x.MerchantKey || merchantKey.StartsWith($"{x.MerchantKey} ", StringComparison.Ordinal)).Select(x => x.TagId).Distinct())
-                {
-                    entity.TagAssignments.Add(new TransactionTagAssignment { TransactionId = entity.Id, TagId = tagId, CreatedAt = DateTimeOffset.UtcNow });
-                }
+                tagService.Reconcile(entity, rules);
 
                 dbContext.Transactions.Add(entity);
                 AddIdentity(tenantId, entity.Id, row.ExternalId);
@@ -141,13 +139,6 @@ public sealed class TransactionFileImportService(FinyteDbContext dbContext, IPro
     private static string MatchKey(DateOnly date, decimal amount, string description)
     {
         return $"{date:yyyy-MM-dd}|{amount.ToString("F2", CultureInfo.InvariantCulture)}|{string.Join(' ', description.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)).ToUpperInvariant()}";
-    }
-
-    private static string MerchantKey(string description)
-    {
-        var ignoredTokens = new HashSet<string>(["au", "aus", "vi", "pty", "ltd", "limited", "australia", "melbourne", "sydney", "brisbane", "card", "com"]);
-        return string.Join(' ', Regex.Replace(description.Trim().ToLowerInvariant(), "[^a-z0-9]+", " ")
-            .Split(' ', StringSplitOptions.RemoveEmptyEntries).Where(x => !ignoredTokens.Contains(x)));
     }
 
     private sealed record ImportRow(ImportedTransaction Transaction, string MatchKey, string ExternalId);

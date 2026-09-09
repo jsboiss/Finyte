@@ -3,6 +3,7 @@ using System;
 using Finyte.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Finyte.Data.Migrations
 {
     [DbContext(typeof(FinyteDbContext))]
-    partial class FinyteDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260907232101_AddTagProvenanceAndExclusions")]
+    partial class AddTagProvenanceAndExclusions
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -31,10 +34,6 @@ namespace Finyte.Data.Migrations
                     b.Property<string>("AccountNumber")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
-
-                    b.Property<string>("AccountTypeOverride")
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
 
                     b.Property<decimal?>("AvailableBalance")
                         .HasPrecision(18, 2)
@@ -70,16 +69,9 @@ namespace Finyte.Data.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
 
-                    b.Property<string>("CustomName")
-                        .HasMaxLength(120)
-                        .HasColumnType("character varying(120)");
-
                     b.Property<string>("FiskilAccountId")
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)");
-
-                    b.Property<bool?>("IncludeInAnalyticsOverride")
-                        .HasColumnType("boolean");
 
                     b.Property<string>("InstitutionId")
                         .HasMaxLength(128)
@@ -87,10 +79,6 @@ namespace Finyte.Data.Migrations
 
                     b.Property<bool?>("IsOwned")
                         .HasColumnType("boolean");
-
-                    b.Property<int>("ManualBalanceVersion")
-                        .IsConcurrencyToken()
-                        .HasColumnType("integer");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -100,10 +88,6 @@ namespace Finyte.Data.Migrations
                     b.Property<string>("OpenStatus")
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
-
-                    b.Property<int>("PreferencesVersion")
-                        .IsConcurrencyToken()
-                        .HasColumnType("integer");
 
                     b.Property<string>("ProductCategory")
                         .HasMaxLength(128)

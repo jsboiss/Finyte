@@ -20,4 +20,5 @@ public sealed class Transaction
     public string? RawJson { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public ICollection<TransactionTagAssignment> TagAssignments { get; set; } = [];
+    public ICollection<TransactionTagExclusion> TagExclusions { get; set; } = [];
 }
