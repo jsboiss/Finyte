@@ -27,13 +27,13 @@ public sealed class FinyteApiFactory(string? postgresConnectionString = null) : 
             services.RemoveAll<IDbContextOptionsConfiguration<FinyteDbContext>>();
             services.AddDbContext<FinyteDbContext>(x =>
             {
-                if (postgresConnectionString is not null)
+                if (postgresConnectionString is null)
                 {
-                    x.UseNpgsql(postgresConnectionString);
+                    x.UseInMemoryDatabase(DatabaseName);
                 }
                 else
                 {
-                    x.UseInMemoryDatabase(DatabaseName);
+                    x.UseNpgsql(postgresConnectionString);
                 }
             });
         });
