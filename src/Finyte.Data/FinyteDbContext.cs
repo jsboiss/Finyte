@@ -10,6 +10,7 @@ namespace Finyte.Data;
 
 public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbContext(options)
 {
+    public DbSet<Finyte.Core.PayCycles.PayCycleProfile> PayCycleProfiles => Set<Finyte.Core.PayCycles.PayCycleProfile>();
     public DbSet<Budget> Budgets => Set<Budget>();
 
     public DbSet<Account> Accounts => Set<Account>();
@@ -55,6 +56,19 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<Finyte.Core.PayCycles.PayCycleProfile>(x =>
+        {
+            x.ToTable("pay_cycle_profiles");
+            x.HasKey(y => y.Id);
+            x.Property(y => y.Name).HasMaxLength(120).IsRequired();
+            x.Property(y => y.Frequency).HasMaxLength(16).IsRequired();
+            x.Property(y => y.Currency).HasMaxLength(3).IsRequired();
+            x.Property(y => y.ExpectedIncome).HasPrecision(18, 2);
+            x.Property(y => y.AccountIds).HasColumnType("uuid[]");
+            x.Property(y => y.SavingsAccountIds).HasColumnType("uuid[]");
+            x.Property(y => y.Version).IsConcurrencyToken();
+            x.HasIndex(y => new { y.TenantId, y.Name });
+        });
         modelBuilder.Entity<Budget>(x =>
         {
             x.ToTable("budgets");

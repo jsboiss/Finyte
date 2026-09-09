@@ -15,7 +15,7 @@ export function AccountsPage() {
   const onSaved = async (account: Account) => {
     setEditor(null)
     setSaved(`${account.name} updated.`)
-    await Promise.all(['accounts', 'transactions', 'internal-transfers', 'overview', 'cash-flow', 'budgets'].map(x => queryClient.invalidateQueries({ queryKey: [x] })))
+    await Promise.all(['accounts', 'transactions', 'internal-transfers', 'overview', 'cash-flow', 'budgets', 'pay-cycles'].map(x => queryClient.invalidateQueries({ queryKey: [x] })))
   }
 
   return (

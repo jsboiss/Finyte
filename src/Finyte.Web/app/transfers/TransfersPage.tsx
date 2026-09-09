@@ -53,7 +53,7 @@ export function TransfersPage() {
         : action === 'dismiss' ? 'Pair dismissed. Both transactions remain included in spending and income.'
         : 'Decision undone. These transactions count normally again and can be reviewed for a new match.')
       setPage(1)
-      await Promise.all(['internal-transfers', 'transactions', 'overview', 'cash-flow', 'budgets'].map(x => queryClient.invalidateQueries({ queryKey: [x] })))
+      await Promise.all(['internal-transfers', 'transactions', 'overview', 'cash-flow', 'budgets', 'pay-cycles'].map(x => queryClient.invalidateQueries({ queryKey: [x] })))
     },
     onError: () => { void queryClient.invalidateQueries({ queryKey: ['internal-transfers'] }) },
   })

@@ -1,0 +1,35 @@
+.pay-cycles-page, .pay-cycle-breakdown { display: grid; gap: 20px; min-width: 0; }
+.pay-cycles-page h2 { font-size: 18px; margin: 0 0 12px; }
+.pay-cycle-intro { padding: 20px; }
+.pay-cycles-page p { color: #b8bfbb; line-height: 1.6; margin: 8px 0; }
+.pay-cycles-page a { color: #a2e0c1; text-decoration: underline; }
+.pay-cycle-toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
+.pay-cycles-page label { display: grid; gap: 7px; min-width: 0; }
+.pay-cycles-page input, .pay-cycles-page select { min-width: 0; width: 100%; padding: 10px; border: 1px solid #535b56; border-radius: 6px; background: #202623; color: #eef5f0; color-scheme: dark; }
+.pay-cycle-editor { padding: 20px; }
+.pay-cycle-editor fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.pay-cycle-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; }
+.pay-cycle-selections { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; margin: 24px 0; }
+.pay-cycle-selections legend { font-weight: 650; }
+.pay-cycle-selections .pay-cycle-checkbox { display: flex; align-items: center; gap: 10px; margin: 10px 0; overflow-wrap: anywhere; }
+.pay-cycle-checkbox input { width: 18px; height: 18px; flex: 0 0 18px; }
+.pay-cycle-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.pay-cycle-metrics article { display: grid; align-content: start; gap: 12px; padding: 20px; }
+.pay-cycle-metrics strong { font-size: clamp(20px, 2vw, 28px); overflow-wrap: anywhere; }
+.pay-cycle-categories, .pay-cycle-transactions { padding: 0; list-style: none; margin: 16px 0; }
+.pay-cycle-categories li, .pay-cycle-transactions li { display: flex; gap: 16px; justify-content: space-between; border-bottom: 1px solid #424a45; padding: 14px 0; }
+.pay-cycle-transactions li > div { display: grid; gap: 6px; min-width: 0; overflow-wrap: anywhere; }
+.pay-cycle-transactions span { color: #b8bfbb; font-size: 13px; }
+.pay-cycle-transactions li > strong, .pay-cycle-categories strong { flex-shrink: 0; }
+.pay-cycles-page button { min-height: 42px; }
+.pay-cycles-page button:disabled { opacity: .5; cursor: not-allowed; }
+.pay-cycles-page .pay-cycle-secondary { background: #2d3730; color: #d9e9df; border: 1px solid #536259; }
+.pay-cycles-page summary { cursor: pointer; }
+@media (max-width: 1000px) { .pay-cycle-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 650px) {
+  .pay-cycle-metrics, .pay-cycle-selections { grid-template-columns: minmax(0, 1fr); }
+  .pay-cycle-toolbar > label { flex: 1 1 200px; }
+  .pay-cycle-toolbar button { flex: 1 1 130px; }
+  .pay-cycle-transactions li { flex-wrap: wrap; }
+  .pay-cycles-page .page-header { flex-wrap: wrap; gap: 16px; }
+}
