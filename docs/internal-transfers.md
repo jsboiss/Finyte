@@ -35,6 +35,6 @@ Apply the `AddInternalTransferReview` EF migration before using the feature. Kee
 
 ## Review follow-up
 
-Saved decisions are filtered, counted and paged in SQL; suggestions fetch only decision keys relevant to the candidate window. Stale confirmations remain visible across all dates. Dismissals, empty resets and repeated confirmations do not invalidate projections when the valid exclusion set is unchanged. Actual exclusion changes retain family-wide invalidation because projections also contain rolling-year spend-by-tag summaries; invalidating only the posting month would leave those summaries stale.
+Saved decisions are filtered, counted and paged in SQL; suggestions fetch only decision keys relevant to the candidate window. Stale confirmations remain visible across all dates. Dismissals, empty resets and repeated confirmations do not invalidate projections when the valid exclusion set is unchanged. Actual exclusion changes retain conservative family-wide invalidation. Narrowing those rebuilds to affected accounts and months is a separate optimization, not required to eliminate work caused by dismissals.
 
 Posted-status comparisons accept mixed casing in both database and in-memory paths, including existing provider records. The date/account predicates remain unchanged. No status backfill or provider-contract change is required. PostgreSQL regressions cover mixed casing, SQL pagination and out-of-range stale confirmations. The earlier ancestry/rebase comment was already addressed by the content-preserving merge from main.
