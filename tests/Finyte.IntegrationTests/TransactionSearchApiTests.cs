@@ -257,7 +257,7 @@ public sealed class TransactionSearchApiTests
 
         Assert.Contains("ORDER BY", sql);
         Assert.Contains("LIMIT", sql);
-        Assert.Contains("EXISTS", sql);
+        Assert.Contains("count(*)", sql);
         Assert.Contains("COALESCE", sql);
         Assert.Contains("TenantId", sql);
     }

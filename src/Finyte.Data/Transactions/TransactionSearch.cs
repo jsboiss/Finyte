@@ -116,10 +116,9 @@ public sealed record TransactionSearch
 
         if (tagIds.Length > 0 && TagMatch == "all")
         {
-            foreach (var tagId in tagIds)
-            {
-                query = query.Where(x => x.TagAssignments.Any(y => y.TagId == tagId && y.Tag != null && y.Tag.TenantId == tenantId));
-            }
+            // The assignment key guarantees one row per transaction/tag, so one count can match the whole set.
+            query = query.Where(x => x.TagAssignments.Count(y => tagIds.Contains(y.TagId)
+                && y.Tag != null && y.Tag.TenantId == tenantId) == tagIds.Length);
         }
         else if (tagIds.Length > 0)
         {
