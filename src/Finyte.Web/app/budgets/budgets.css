@@ -1,0 +1,29 @@
+.budgets-page { display: grid; gap: 1.25rem; }
+.budget-help p, .budget-editor p, .budget-detail p { color: var(--text-muted, #94a3b8); line-height: 1.6; }
+.budget-layout { display: grid; grid-template-columns: minmax(180px, 260px) minmax(0, 1fr); gap: 1.25rem; align-items: start; }
+.budget-list { display: grid; gap: .65rem; }
+.budget-list button { display: grid; gap: .35rem; padding: 1rem; text-align: left; white-space: normal; }
+.budget-list button[aria-current] { border-color: #a3e635; }
+.budget-list span, .budget-metrics span { color: var(--text-muted, #94a3b8); font-size: .85rem; }
+.budget-editor fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+.budget-form-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
+.budget-editor label, .budget-detail > label { display: grid; gap: .5rem; margin: .6rem 0; }
+.budget-editor input, .budget-editor select, .budget-editor textarea, .budget-detail > label input { width: 100%; box-sizing: border-box; border: 1px solid #334155; border-radius: 8px; background: #101b2e; color: #f1f5f9; padding: .7rem; font: inherit; min-width: 0; }
+.budget-editor .budget-choices { border: 1px solid #334155; padding: .75rem; border-radius: 8px; margin: 1rem 0; }
+.budget-choices label { display: flex; align-items: center; gap: .65rem; }
+.budget-choices input { width: auto; }
+.budget-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .65rem; margin: .75rem 0; }
+.budget-detail { min-width: 0; }
+.budget-detail > label { max-width: 320px; }
+.budget-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem; margin: 1rem 0; }
+.budget-metrics > div { display: grid; gap: .5rem; padding: 1rem; border: 1px solid #334155; border-radius: 8px; }
+.budget-metrics strong { font-size: 1.25rem; overflow-wrap: anywhere; }
+.budget-over { color: #fb7185; }
+.budget-detail progress { width: 100%; height: 1rem; accent-color: #a3e635; }
+.budget-history { display: grid; gap: .65rem; }
+.budget-history button { display: grid; gap: .35rem; text-align: left; padding: .85rem; white-space: normal; }
+.budget-audit { border-top: 1px solid #334155; margin-top: 1.5rem; padding-top: .75rem; }
+.budget-audit article { display: flex; align-items: center; justify-content: space-between; gap: 1rem; border-bottom: 1px solid #334155; padding: .7rem 0; overflow-wrap: anywhere; }
+.budget-audit article > div { min-width: 0; }
+@media (max-width: 900px) { .budget-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .budget-layout { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 520px) { .budget-form-grid, .budget-metrics { grid-template-columns: minmax(0, 1fr); } .budget-audit article { align-items: start; } }

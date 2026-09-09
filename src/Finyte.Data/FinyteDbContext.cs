@@ -1,6 +1,7 @@
 using Finyte.Core.Accounts;
 using Finyte.Core.Analytics;
 using Finyte.Core.Billing;
+using Finyte.Core.Budgets;
 using Finyte.Core.ProviderSync;
 using Finyte.Core.Tenancy;
 using Microsoft.EntityFrameworkCore;
@@ -9,6 +10,8 @@ namespace Finyte.Data;
 
 public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbContext(options)
 {
+    public DbSet<Budget> Budgets => Set<Budget>();
+
     public DbSet<Account> Accounts => Set<Account>();
 
     public DbSet<Transaction> Transactions => Set<Transaction>();
@@ -52,6 +55,35 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<Budget>(x =>
+        {
+            x.ToTable("budgets");
+            x.HasKey(y => y.Id);
+            x.Property(y => y.Name).HasMaxLength(120).IsRequired();
+            x.Property(y => y.Limit).HasPrecision(18, 2);
+            x.Property(y => y.Currency).HasMaxLength(3).IsRequired();
+            x.Property(y => y.Frequency).HasMaxLength(16).IsRequired();
+            x.Property(y => y.MatchMode).HasMaxLength(16).IsRequired();
+            x.Property(y => y.AccountScope).HasMaxLength(16).IsRequired();
+            x.Property(y => y.Categories).HasColumnType("text[]");
+            x.Property(y => y.Version).IsConcurrencyToken();
+            x.HasIndex(y => new { y.TenantId, y.Name });
+        });
+        modelBuilder.Entity<BudgetTag>(x =>
+        {
+            x.ToTable("budget_tags");
+            x.HasKey(y => new { y.BudgetId, y.TagId });
+            x.HasOne(y => y.Budget).WithMany(y => y.Tags).HasForeignKey(y => y.BudgetId).OnDelete(DeleteBehavior.Cascade);
+            x.HasOne(y => y.Tag).WithMany().HasForeignKey(y => y.TagId).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<BudgetAccount>(x =>
+        {
+            x.ToTable("budget_accounts");
+            x.HasKey(y => new { y.BudgetId, y.AccountId });
+            x.HasOne(y => y.Budget).WithMany(y => y.Accounts).HasForeignKey(y => y.BudgetId).OnDelete(DeleteBehavior.Cascade);
+            x.HasOne(y => y.Account).WithMany().HasForeignKey(y => y.AccountId).OnDelete(DeleteBehavior.Cascade);
+        });
+
         modelBuilder.Entity<InternalTransfer>(x =>
         {
             x.ToTable("internal_transfers");
