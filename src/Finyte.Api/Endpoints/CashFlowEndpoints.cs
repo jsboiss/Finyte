@@ -55,7 +55,7 @@ public static class CashFlowEndpoints
             .Where(x => x.TenantId == currentTenant.TenantId && (accountId == null || x.Id == accountId))
             .OrderBy(x => x.CustomName ?? x.Name).ThenBy(x => x.Id)
             .ToListAsync(cancellationToken);
-        var currency = accounts.Select(x => x.Currency).FirstOrDefault() ?? "AUD";
+        var currency = AccountPreferences.AnalyticsCurrency(accounts, accountId);
         var accountIds = accounts.Where(x => accountId != null || AccountPreferences.IncludeInAnalytics(x)).Select(x => x.Id).ToList();
         var transactionQuery = dbContext.Transactions
             .AsNoTracking()

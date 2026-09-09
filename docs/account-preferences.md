@@ -52,3 +52,5 @@ The placeholder `/accounts` page exposes current defaults, explicit overrides, r
 `dotnet test tests/Finyte.IntegrationTests/Finyte.IntegrationTests.csproj` covers source preservation under real sync-service upserts, reset-to-provider behavior, tenant boundaries, stale edits, combined versus direct analytics, balance preservation, projection invalidation, manual balance validation and provider balance protection. Existing transfer tests remain relevant to the unchanged transfer-exclusion pipeline.
 
 Run `npm run build` and `npm run lint` in `src/Finyte.Web`. The migration is `AddAccountPreferences` and requires the preceding internal-transfer migration.
+
+Review follow-up: spending currency selection now uses analytics-eligible accounts consistently for pending and rebuilt overviews and cash-flow. Manual balance decimal strings are covered by a real HTTP regression test. Balances deliberately include all accounts; this is already explained beside the dashboard totals. Multi-currency balance aggregation and FX conversion remain a separate limitation of the existing overview contract.

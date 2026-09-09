@@ -51,7 +51,7 @@ public sealed class OverviewProjector(FinyteDbContext dbContext) : IOverviewProj
 
         // Account preferences control all-account income/spending, never balances or direct inspection.
         var accountIds = accountRows.Where(x => scope.AccountId != null || AccountPreferences.IncludeInAnalytics(x)).Select(x => x.Id).ToList();
-        var currency = accountRows.Select(x => x.Currency).FirstOrDefault() ?? "AUD";
+        var currency = AccountPreferences.AnalyticsCurrency(accountRows, scope.AccountId);
         var accountBalanceMinorUnits = accountRows.Sum(x => ToMinorUnits(x.CurrentBalance));
         var accountLabel = scope.AccountId is null
             ? "All accounts"
