@@ -2276,3 +2276,19 @@ td {
   .transfer-views button { flex: 1 1 140px; }
   .transfer-actions button { flex: 1 1 160px; }
 }
+
+.accounts-page .account-scope-help { padding: 1.5rem; margin-bottom: 1.5rem; }
+.account-list { display: grid; gap: 1rem; }
+.account-card { padding: 1.5rem; }
+.account-card h2 { margin: 0 0 .35rem; }
+.account-card p, .account-scope-help p { color: var(--text-muted, #64748b); line-height: 1.6; }
+.account-actions { display: flex; flex-wrap: wrap; gap: .75rem; }
+.account-actions button, .account-editor button { padding: .6rem 1rem; }
+.account-editor { display: grid; gap: .7rem; border-top: 1px solid #e2e8f0; margin-top: 1rem; padding-top: 1rem; }
+.account-editor p { margin: 0; }
+.account-editor label { display: grid; gap: .4rem; max-width: 38rem; }
+.account-editor input, .account-editor select { width: 100%; padding: .7rem; border: 1px solid #cbd5e1; border-radius: .5rem; background: white; color: #0f172a; }
+@media (max-width: 600px) {
+  .account-card, .accounts-page .account-scope-help { padding: 1rem; }
+  .accounts-page .page-header { gap: 1rem; flex-wrap: wrap; }
+}

@@ -96,7 +96,7 @@ public static partial class TransactionEndpoints
             .Select(x => new TransactionResponse(
                 x.Id,
                 x.AccountId,
-                x.Account == null ? "Account" : x.Account.Name,
+                x.Account == null ? "Account" : x.Account.CustomName ?? x.Account.Name,
                 GetPostedDate(x.PostedAt ?? x.CreatedAt),
                 x.Description ?? "",
                 x.MerchantName,

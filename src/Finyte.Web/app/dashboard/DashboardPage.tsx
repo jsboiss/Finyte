@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { RefreshCcw } from 'lucide-react'
 import { useMemo, useState } from 'react'
-import { getAccounts, type AccountResponse } from '../api/generated/finyteApi'
+import { getAccounts, type Account as AccountResponse } from '../accounts/accountsApi'
 import { BillingAccessPanel } from '../billing/BillingAccessPanel'
 import { getBillingAccess } from '../billing/billingApi'
 import { AppSelect } from '../shared/AppSelect'
@@ -86,6 +86,12 @@ export function DashboardPage() {
 
       <DashboardMetricGrid metrics={metrics} />
       <p className="transfer-dashboard-note">Spending and income exclude confirmed internal transfers. Balances include all account movements. <Link to="/transfers">Review transfers</Link>.</p>
+      <p className="transfer-dashboard-note">
+        {accountId === null
+          ? `${accountsQuery.data?.filter(x => !x.includeInAnalytics).length ?? 0} accounts excluded from combined spending and income. Total balance includes every account.`
+          : 'Viewing this account directly includes its activity regardless of its combined spending preference.'}
+        {' '}<Link to="/accounts">Manage account preferences</Link>.
+      </p>
 
       <CashFlowRaceModule overview={overview} />
 

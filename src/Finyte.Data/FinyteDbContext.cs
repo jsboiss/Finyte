@@ -113,6 +113,11 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
             x.Property(y => y.ProductName)
                 .HasMaxLength(256);
 
+            x.Property(y => y.CustomName).HasMaxLength(120);
+            x.Property(y => y.AccountTypeOverride).HasMaxLength(32);
+            x.Property(y => y.PreferencesVersion).IsConcurrencyToken();
+            x.Property(y => y.ManualBalanceVersion).IsConcurrencyToken();
+
             x.Property(y => y.ProductCategory)
                 .HasMaxLength(128);
 

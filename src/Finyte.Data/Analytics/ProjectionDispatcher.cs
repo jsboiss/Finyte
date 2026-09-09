@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Finyte.Core.Accounts;
 using Finyte.Core.Analytics;
 using Microsoft.EntityFrameworkCore;
 
@@ -72,12 +73,12 @@ public sealed class ProjectionDispatcher(FinyteDbContext dbContext, IOverviewPro
             ? "All accounts"
             : await dbContext.Accounts
                 .Where(x => x.TenantId == scope.TenantId && x.Id == scope.AccountId)
-                .Select(x => x.Name)
+                .Select(x => x.CustomName ?? x.Name)
                 .FirstOrDefaultAsync(cancellationToken) ?? "Selected account";
-        var currency = await dbContext.Accounts
+        var accounts = await dbContext.Accounts.AsNoTracking()
             .Where(x => x.TenantId == scope.TenantId && (scope.AccountId == null || x.Id == scope.AccountId))
-            .Select(x => x.Currency)
-            .FirstOrDefaultAsync(cancellationToken) ?? "AUD";
+            .ToListAsync(cancellationToken);
+        var currency = AccountPreferences.AnalyticsCurrency(accounts, scope.AccountId);
         var response = new OverviewResponse(
             new OverviewScopeResponse(scope.AccountId, label),
             scope.MonthKey,
