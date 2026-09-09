@@ -7,7 +7,7 @@ namespace Finyte.Data.Budgets;
 
 public static class BudgetQueries
 {
-    public static async Task<IQueryable<Transaction>> Transactions(FinyteDbContext dbContext, Budget budget, CancellationToken cancellationToken)
+    public static async Task<IQueryable<Transaction>> Transactions(FinyteDbContext dbContext, Budget budget, CancellationToken cancellationToken, bool includeOtherCurrencies = false)
     {
         var selectedIds = budget.Accounts.Select(x => x.AccountId).ToArray();
         var accounts = await dbContext.Accounts.AsNoTracking()
@@ -17,8 +17,8 @@ public static class BudgetQueries
         var observedUntil = new DateTimeOffset(DateTime.UtcNow.Date.AddDays(1), TimeSpan.Zero);
         var query = dbContext.Transactions.AsNoTracking()
             .Where(x => x.TenantId == budget.TenantId && accountIds.Contains(x.AccountId)
-                && x.Currency == budget.Currency && x.Amount < 0 && x.PostedAt != null && x.PostedAt < observedUntil
-                && (x.Status == null || x.Status == "" || x.Status == "posted" || x.Status == "POSTED"))
+                && (includeOtherCurrencies || x.Currency == budget.Currency) && x.Amount < 0 && x.PostedAt != null && x.PostedAt < observedUntil
+                && (x.Status == null || x.Status == "" || x.Status.ToLower() == "posted"))
             .ExcludeInternalTransfers(dbContext, budget.TenantId);
         if (budget.MatchMode == "selected")
         {

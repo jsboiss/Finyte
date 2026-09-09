@@ -144,17 +144,27 @@ public static class BudgetEndpoints
         {
             return Results.NotFound();
         }
-        var query = await BudgetQueries.Transactions(dbContext, budget, cancellationToken);
+        var query = await BudgetQueries.Transactions(dbContext, budget, cancellationToken, includeOtherCurrencies: true);
+        var history = BudgetPeriods.History(budget.Frequency, budget.AnchorDate, selectedDate, periodCount).ToList();
+        var from = new DateTimeOffset(history.Min(x => x.From).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+        var to = new DateTimeOffset(history.Max(x => x.EndExclusive).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+        // One SQL aggregation across the bounded history, never a materialized transaction ledger.
+        var daily = await query.Where(x => x.PostedAt >= from && x.PostedAt < to)
+            .GroupBy(x => new { x.PostedAt!.Value.Year, x.PostedAt.Value.Month, x.PostedAt.Value.Day, x.Currency })
+            .Select(x => new { x.Key.Year, x.Key.Month, x.Key.Day, x.Key.Currency, Spent = x.Sum(y => -y.Amount), Count = x.Count() })
+            .ToListAsync(cancellationToken);
         var periods = new List<PeriodResponse>();
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        foreach (var period in BudgetPeriods.History(budget.Frequency, budget.AnchorDate, selectedDate, periodCount))
+        foreach (var period in history)
         {
-            var total = await query.InPeriod(period).GroupBy(x => 1)
-                .Select(x => new { Spent = x.Sum(y => -y.Amount), Count = x.Count() }).SingleOrDefaultAsync(cancellationToken);
-            var spent = total?.Spent ?? 0;
+            var days = daily.Where(x => new DateOnly(x.Year, x.Month, x.Day) >= period.From && new DateOnly(x.Year, x.Month, x.Day) <= period.To).ToList();
+            var included = days.Where(x => x.Currency == budget.Currency).ToList();
+            var spent = included.Sum(x => x.Spent);
+            var excluded = days.Where(x => x.Currency != budget.Currency).GroupBy(x => x.Currency)
+                .Select(x => new ExcludedCurrencyResponse(x.Key, x.Sum(y => y.Count))).OrderBy(x => x.Currency).ToList();
             periods.Add(new PeriodResponse(period.From, period.To, budget.Limit, spent, budget.Limit - spent,
-                Math.Round(spent / budget.Limit * 100, 1), total?.Count ?? 0,
-                period.From > today ? null : period.To < today ? period.To : today));
+                Math.Round(spent / budget.Limit * 100, 1), included.Sum(x => x.Count),
+                period.From > today ? null : period.To < today ? period.To : today, excluded));
         }
         return Results.Ok(new { budgetId, budget.Version, budget.Currency, date = selectedDate, periods });
     }
@@ -287,5 +297,6 @@ public static class BudgetEndpoints
 
     public sealed record BudgetRequest(string? Name, decimal Limit, string? Currency, string? Frequency, DateOnly AnchorDate,
         string? MatchMode, string[]? Categories, Guid[]? TagIds, string? AccountScope, Guid[]? AccountIds, int? ExpectedVersion);
-    private sealed record PeriodResponse(DateOnly From, DateOnly To, decimal Limit, decimal Spent, decimal Remaining, decimal UsedPercent, int TransactionCount, DateOnly? ObservedThrough);
+    private sealed record ExcludedCurrencyResponse(string Currency, int TransactionCount);
+    private sealed record PeriodResponse(DateOnly From, DateOnly To, decimal Limit, decimal Spent, decimal Remaining, decimal UsedPercent, int TransactionCount, DateOnly? ObservedThrough, IReadOnlyList<ExcludedCurrencyResponse> ExcludedCurrencies);
 }

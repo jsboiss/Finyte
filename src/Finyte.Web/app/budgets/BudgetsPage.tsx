@@ -10,7 +10,7 @@ type Budget = {
   id: string; name: string; limit: number; currency: string; frequency: string; anchorDate: string
   matchMode: string; categories: string[]; tagIds: string[]; accountScope: string; accountIds: string[]; version: number
 }
-type Period = { from: string; to: string; limit: number; spent: number; remaining: number; usedPercent: number; transactionCount: number; observedThrough: string | null }
+type Period = { from: string; to: string; limit: number; spent: number; remaining: number; usedPercent: number; transactionCount: number; observedThrough: string | null; excludedCurrencies: { currency: string; transactionCount: number }[] }
 type Periods = { budgetId: string; version: number; currency: string; periods: Period[] }
 type TransactionPage = { totalCount: number; items: { id: string; accountName: string; description: string | null; merchantName: string | null; postedAt: string; amount: number; currency: string }[] }
 const today = () => new Date().toISOString().slice(0, 10)
@@ -129,9 +129,10 @@ function BudgetDetail({ budget, onEdit, onDelete, busy }: { budget: Budget; onEd
       <div className="budget-metrics"><div><span>Limit</span><strong>{money(current.limit, budget.currency)}</strong></div><div><span>Spent</span><strong>{money(current.spent, budget.currency)}</strong></div><div><span>{current.remaining < 0 ? 'Over budget' : 'Remaining'}</span><strong className={current.remaining < 0 ? 'budget-over' : ''}>{money(Math.abs(current.remaining), budget.currency)}</strong></div></div>
       <progress max={100} value={Math.min(100, current.usedPercent)} aria-label={`${current.usedPercent}% of budget used`} />
       <p>{current.usedPercent}% used · {current.transactionCount} transactions</p>
+      {current.excludedCurrencies.length > 0 && <p role="status">Excluded from this budget: {current.excludedCurrencies.map(x => `${x.transactionCount} ${x.currency} transactions`).join(', ')}. No currency conversion is performed.</p>}
       <button type="button" onClick={() => setAuditDate(current.from)}>Review counted transactions</button>
       <h3>Period history</h3><p>Recalculated using this budget’s current settings. Unused amounts do not roll over.</p>
-      <div className="budget-history">{periods.data!.periods.map(period => <button key={period.from} type="button" onClick={() => setAuditDate(period.from)}><span>{dateLabel(period.from)} – {dateLabel(period.to)}</span><strong>{money(period.spent, budget.currency)} spent</strong><span>{period.transactionCount} transactions · {money(period.remaining, budget.currency)} remaining</span></button>)}</div>
+      <div className="budget-history">{periods.data!.periods.map(period => <button key={period.from} type="button" onClick={() => setAuditDate(period.from)}><span>{dateLabel(period.from)} – {dateLabel(period.to)}</span><strong>{money(period.spent, budget.currency)} spent</strong><span>{period.transactionCount} transactions · {money(period.remaining, budget.currency)} remaining</span>{period.excludedCurrencies.length > 0 && <span>Excluded: {period.excludedCurrencies.map(x => `${x.transactionCount} ${x.currency} transactions`).join(', ')}</span>}</button>)}</div>
     </>}
     {auditDate && <BudgetAudit key={`${budget.id}-${budget.version}-${auditDate}`} budget={budget} date={auditDate} onClose={() => setAuditDate(null)} />}
   </section>

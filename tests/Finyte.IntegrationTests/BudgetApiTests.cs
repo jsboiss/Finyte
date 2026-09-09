@@ -196,6 +196,13 @@ public sealed class BudgetApiTests
         Assert.Equal(-90, period.Remaining);
         Assert.Equal(190, period.UsedPercent);
         Assert.Equal(20, period.TransactionCount);
+        var excluded = Assert.Single(period.ExcludedCurrencies);
+        Assert.Equal("USD", excluded.Currency);
+        Assert.Equal(1, excluded.TransactionCount);
+        var history = (await client.GetFromJsonAsync<PeriodsResponse>($"/api/budgets/{budget.Id}/periods?date=2025-09-09&count=12"))!;
+        Assert.Equal(12, history.Periods.Length);
+        Assert.Equal(period.Spent, history.Periods[0].Spent);
+        Assert.All(history.Periods.Skip(2), x => Assert.Empty(x.ExcludedCurrencies));
         var all = new List<ItemResponse>();
         for (var page = 1; page <= 3; page++)
         {
@@ -223,8 +230,12 @@ public sealed class BudgetApiTests
         return (await response.Content.ReadFromJsonAsync<BudgetResponse>())!;
     }
 
-    private static async Task<PeriodResponse> Period(HttpClient client, Guid id) =>
-        (await client.GetFromJsonAsync<PeriodsResponse>($"/api/budgets/{id}/periods?date=2025-09-09&count=1"))!.Periods[0];
+    private static async Task<PeriodResponse> Period(HttpClient client, Guid id)
+    {
+        var response = await client.GetAsync($"/api/budgets/{id}/periods?date=2025-09-09&count=1");
+        Assert.True(response.IsSuccessStatusCode, await response.Content.ReadAsStringAsync());
+        return (await response.Content.ReadFromJsonAsync<PeriodsResponse>())!.Periods[0];
+    }
 
     private static BudgetInput Request() => new("Spending", 100, "AUD", "monthly", new DateOnly(2025, 9, 1), "all", [], [], "analytics", [], null);
 
@@ -294,7 +305,8 @@ public sealed class BudgetApiTests
     private sealed record SeedResult(Guid TenantId, Guid TagId, Guid SecondTagId, Guid LoanAccountId, Guid TransferDebitId);
     private sealed record BudgetResponse(Guid Id, string Name, string MatchMode, Guid[] TagIds);
     private sealed record PeriodsResponse(PeriodResponse[] Periods);
-    private sealed record PeriodResponse(decimal Spent, decimal Remaining, decimal UsedPercent, int TransactionCount, DateOnly? ObservedThrough);
+    private sealed record ExcludedCurrencyResponse(string Currency, int TransactionCount);
+    private sealed record PeriodResponse(decimal Spent, decimal Remaining, decimal UsedPercent, int TransactionCount, DateOnly? ObservedThrough, ExcludedCurrencyResponse[] ExcludedCurrencies);
     private sealed record PageResponse(int TotalCount, ItemResponse[] Items);
     private sealed record ItemResponse(Guid Id, decimal Amount);
 }
