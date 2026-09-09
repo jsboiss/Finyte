@@ -24,5 +24,10 @@ public static class AccountPreferences
 
     public static string DisplayName(Account account) => account.CustomName ?? account.Name;
 
+    public static string AnalyticsCurrency(IEnumerable<Account> accounts, Guid? accountId) => accounts
+        .Where(x => accountId != null || IncludeInAnalytics(x))
+        .OrderBy(x => DisplayName(x)).ThenBy(x => x.Id)
+        .Select(x => x.Currency).FirstOrDefault() ?? "AUD";
+
     public static bool IsProviderManaged(Account account) => account.ProviderConnectionId.HasValue || !string.IsNullOrWhiteSpace(account.FiskilAccountId);
 }
