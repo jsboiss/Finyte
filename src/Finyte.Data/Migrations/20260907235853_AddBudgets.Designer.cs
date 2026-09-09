@@ -3,6 +3,7 @@ using System;
 using Finyte.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Finyte.Data.Migrations
 {
     [DbContext(typeof(FinyteDbContext))]
-    partial class FinyteDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260907235853_AddBudgets")]
+    partial class AddBudgets
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -427,41 +430,11 @@ namespace Finyte.Data.Migrations
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<Guid?>("MerchantRuleId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Source")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(24)
-                        .HasColumnType("character varying(24)")
-                        .HasDefaultValue("legacy");
-
                     b.HasKey("TransactionId", "TagId");
-
-                    b.HasIndex("MerchantRuleId");
 
                     b.HasIndex("TagId");
 
                     b.ToTable("transaction_tag_assignments", (string)null);
-                });
-
-            modelBuilder.Entity("Finyte.Core.Accounts.TransactionTagExclusion", b =>
-                {
-                    b.Property<Guid>("TransactionId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("TagId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("TransactionId", "TagId");
-
-                    b.HasIndex("TagId");
-
-                    b.ToTable("transaction_tag_exclusions", (string)null);
                 });
 
             modelBuilder.Entity("Finyte.Core.Analytics.OverviewProjection", b =>
@@ -761,62 +734,6 @@ namespace Finyte.Data.Migrations
                     b.HasIndex("TagId");
 
                     b.ToTable("budget_tags", (string)null);
-                });
-
-            modelBuilder.Entity("Finyte.Core.PayCycles.PayCycleProfile", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.PrimitiveCollection<Guid[]>("AccountIds")
-                        .IsRequired()
-                        .HasColumnType("uuid[]");
-
-                    b.Property<DateOnly>("AnchorDate")
-                        .HasColumnType("date");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Currency")
-                        .IsRequired()
-                        .HasMaxLength(3)
-                        .HasColumnType("character varying(3)");
-
-                    b.Property<decimal?>("ExpectedIncome")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<string>("Frequency")
-                        .IsRequired()
-                        .HasMaxLength(16)
-                        .HasColumnType("character varying(16)");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(120)
-                        .HasColumnType("character varying(120)");
-
-                    b.PrimitiveCollection<Guid[]>("SavingsAccountIds")
-                        .IsRequired()
-                        .HasColumnType("uuid[]");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("Version")
-                        .IsConcurrencyToken()
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("TenantId", "Name");
-
-                    b.ToTable("pay_cycle_profiles", (string)null);
                 });
 
             modelBuilder.Entity("Finyte.Core.ProviderSync.ProviderAuthSession", b =>
@@ -1281,11 +1198,6 @@ namespace Finyte.Data.Migrations
 
             modelBuilder.Entity("Finyte.Core.Accounts.TransactionTagAssignment", b =>
                 {
-                    b.HasOne("Finyte.Core.Accounts.MerchantTagRule", "MerchantRule")
-                        .WithMany()
-                        .HasForeignKey("MerchantRuleId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.HasOne("Finyte.Core.Accounts.TransactionTag", "Tag")
                         .WithMany("TransactionAssignments")
                         .HasForeignKey("TagId")
@@ -1294,27 +1206,6 @@ namespace Finyte.Data.Migrations
 
                     b.HasOne("Finyte.Core.Accounts.Transaction", "Transaction")
                         .WithMany("TagAssignments")
-                        .HasForeignKey("TransactionId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("MerchantRule");
-
-                    b.Navigation("Tag");
-
-                    b.Navigation("Transaction");
-                });
-
-            modelBuilder.Entity("Finyte.Core.Accounts.TransactionTagExclusion", b =>
-                {
-                    b.HasOne("Finyte.Core.Accounts.TransactionTag", "Tag")
-                        .WithMany()
-                        .HasForeignKey("TagId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Finyte.Core.Accounts.Transaction", "Transaction")
-                        .WithMany("TagExclusions")
                         .HasForeignKey("TransactionId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -1440,8 +1331,6 @@ namespace Finyte.Data.Migrations
             modelBuilder.Entity("Finyte.Core.Accounts.Transaction", b =>
                 {
                     b.Navigation("TagAssignments");
-
-                    b.Navigation("TagExclusions");
                 });
 
             modelBuilder.Entity("Finyte.Core.Accounts.TransactionTag", b =>

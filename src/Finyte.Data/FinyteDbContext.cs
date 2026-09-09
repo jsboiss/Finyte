@@ -1,6 +1,7 @@
 using Finyte.Core.Accounts;
 using Finyte.Core.Analytics;
 using Finyte.Core.Billing;
+using Finyte.Core.Budgets;
 using Finyte.Core.ProviderSync;
 using Finyte.Core.Tenancy;
 using Microsoft.EntityFrameworkCore;
@@ -10,6 +11,7 @@ namespace Finyte.Data;
 public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbContext(options)
 {
     public DbSet<Finyte.Core.PayCycles.PayCycleProfile> PayCycleProfiles => Set<Finyte.Core.PayCycles.PayCycleProfile>();
+    public DbSet<Budget> Budgets => Set<Budget>();
 
     public DbSet<Account> Accounts => Set<Account>();
 
@@ -24,6 +26,7 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
     public DbSet<TransactionTag> TransactionTags => Set<TransactionTag>();
 
     public DbSet<TransactionTagAssignment> TransactionTagAssignments => Set<TransactionTagAssignment>();
+    public DbSet<TransactionTagExclusion> TransactionTagExclusions => Set<TransactionTagExclusion>();
 
     public DbSet<MerchantTagRule> MerchantTagRules => Set<MerchantTagRule>();
 
@@ -65,6 +68,34 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
             x.Property(y => y.SavingsAccountIds).HasColumnType("uuid[]");
             x.Property(y => y.Version).IsConcurrencyToken();
             x.HasIndex(y => new { y.TenantId, y.Name });
+        });
+        modelBuilder.Entity<Budget>(x =>
+        {
+            x.ToTable("budgets");
+            x.HasKey(y => y.Id);
+            x.Property(y => y.Name).HasMaxLength(120).IsRequired();
+            x.Property(y => y.Limit).HasPrecision(18, 2);
+            x.Property(y => y.Currency).HasMaxLength(3).IsRequired();
+            x.Property(y => y.Frequency).HasMaxLength(16).IsRequired();
+            x.Property(y => y.MatchMode).HasMaxLength(16).IsRequired();
+            x.Property(y => y.AccountScope).HasMaxLength(16).IsRequired();
+            x.Property(y => y.Categories).HasColumnType("text[]");
+            x.Property(y => y.Version).IsConcurrencyToken();
+            x.HasIndex(y => new { y.TenantId, y.Name });
+        });
+        modelBuilder.Entity<BudgetTag>(x =>
+        {
+            x.ToTable("budget_tags");
+            x.HasKey(y => new { y.BudgetId, y.TagId });
+            x.HasOne(y => y.Budget).WithMany(y => y.Tags).HasForeignKey(y => y.BudgetId).OnDelete(DeleteBehavior.Cascade);
+            x.HasOne(y => y.Tag).WithMany().HasForeignKey(y => y.TagId).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<BudgetAccount>(x =>
+        {
+            x.ToTable("budget_accounts");
+            x.HasKey(y => new { y.BudgetId, y.AccountId });
+            x.HasOne(y => y.Budget).WithMany(y => y.Accounts).HasForeignKey(y => y.BudgetId).OnDelete(DeleteBehavior.Cascade);
+            x.HasOne(y => y.Account).WithMany().HasForeignKey(y => y.AccountId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<InternalTransfer>(x =>
@@ -265,6 +296,16 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
             x.Property(y => y.CreatedAt)
                 .IsRequired();
 
+            x.Property(y => y.Source)
+                .HasMaxLength(24)
+                .HasDefaultValue(TransactionTagSource.Legacy)
+                .IsRequired();
+
+            x.HasOne(y => y.MerchantRule)
+                .WithMany()
+                .HasForeignKey(y => y.MerchantRuleId)
+                .OnDelete(DeleteBehavior.SetNull);
+
             x.HasOne(y => y.Transaction)
                 .WithMany(y => y.TagAssignments)
                 .HasForeignKey(y => y.TransactionId)
@@ -276,6 +317,20 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
                 .OnDelete(DeleteBehavior.Cascade);
 
             x.HasIndex(y => y.TagId);
+        });
+
+        modelBuilder.Entity<TransactionTagExclusion>(x =>
+        {
+            x.ToTable("transaction_tag_exclusions");
+            x.HasKey(y => new { y.TransactionId, y.TagId });
+            x.HasOne(y => y.Transaction)
+                .WithMany(y => y.TagExclusions)
+                .HasForeignKey(y => y.TransactionId)
+                .OnDelete(DeleteBehavior.Cascade);
+            x.HasOne(y => y.Tag)
+                .WithMany()
+                .HasForeignKey(y => y.TagId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<MerchantTagRule>(x =>

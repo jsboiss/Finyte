@@ -40,7 +40,7 @@ export function ImportsPage() {
       return httpClient<ImportResult>({ method: 'POST', url: '/api/imports/ofx', data })
     },
     onSuccess: async () => {
-      await Promise.all(['accounts', 'transactions', 'overview', 'cash-flow', 'tags'].map(x => queryClient.invalidateQueries({ queryKey: [x] })))
+      await Promise.all(['accounts', 'transactions', 'overview', 'cash-flow', 'tags', 'budgets'].map(x => queryClient.invalidateQueries({ queryKey: [x] })))
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: ['imports'] }),
   })
