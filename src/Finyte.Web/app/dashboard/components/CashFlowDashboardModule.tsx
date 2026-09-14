@@ -18,9 +18,9 @@ export function CashFlowDashboardModule({
   return (
     <TimeframedDashboardModule
       createEmptySource={x => createEmptyCashFlow(x, overview.currency)}
-      getQueryKey={x => getCashFlowQueryKey(overview.scope.accountId, x)}
+      getQueryKey={x => getCashFlowQueryKey(overview.scope.accountId, x, overview.includeInternalTransfers)}
       icon={icon}
-      load={x => getCashFlow(overview.scope.accountId, x)}
+      load={x => getCashFlow(overview.scope.accountId, x, overview.includeInternalTransfers)}
       pickerVariant="compact"
       timeframes={cashFlowTimeframes}
       title={title}

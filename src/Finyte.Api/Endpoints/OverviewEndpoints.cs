@@ -1,5 +1,6 @@
 using Finyte.Api.Tenancy;
 using Finyte.Core.Analytics;
+using Finyte.Data;
 using Finyte.Data.Analytics;
 using Finyte.Data.Billing;
 
@@ -20,10 +21,12 @@ public static class OverviewEndpoints
 
     private static async Task<IResult> GetOverview(
         Guid? accountId,
+        bool? includeInternalTransfers,
         TenantResolver tenantResolver,
         HttpContext httpContext,
         IBillingAccess billingAccess,
         IProjectionDispatcher projectionDispatcher,
+        FinyteDbContext dbContext,
         CancellationToken cancellationToken)
     {
         var currentTenant = await tenantResolver.Resolve(httpContext.User, cancellationToken);
@@ -33,6 +36,11 @@ public static class OverviewEndpoints
             return Results.Problem("An active subscription is required to view the financial overview.", statusCode: StatusCodes.Status402PaymentRequired);
         }
 
+        if (includeInternalTransfers == true)
+        {
+            return Results.Ok(await new OverviewProjector(dbContext).ReadIncludingTransfers(
+                new OverviewProjectionScope(currentTenant.TenantId, accountId, GetCurrentMonthKey()), cancellationToken));
+        }
         var response = await projectionDispatcher.GetOrRebuildOverview(
             new OverviewProjectionScope(currentTenant.TenantId, accountId, GetCurrentMonthKey()),
             cancellationToken);
@@ -42,11 +50,13 @@ public static class OverviewEndpoints
 
     private static async Task<IResult> RefreshOverview(
         Guid? accountId,
+        bool? includeInternalTransfers,
         TenantResolver tenantResolver,
         HttpContext httpContext,
         IBillingAccess billingAccess,
         IProjectionInvalidator projectionInvalidator,
         IProjectionDispatcher projectionDispatcher,
+        FinyteDbContext dbContext,
         CancellationToken cancellationToken)
     {
         var currentTenant = await tenantResolver.Resolve(httpContext.User, cancellationToken);
@@ -57,6 +67,11 @@ public static class OverviewEndpoints
         }
 
         var monthKey = GetCurrentMonthKey();
+        if (includeInternalTransfers == true)
+        {
+            return Results.Ok(await new OverviewProjector(dbContext).ReadIncludingTransfers(
+                new OverviewProjectionScope(currentTenant.TenantId, accountId, monthKey), cancellationToken));
+        }
         await projectionInvalidator.OverviewRequested(currentTenant.TenantId, accountId, monthKey, cancellationToken);
         var response = await projectionDispatcher.GetOrRebuildOverview(
             new OverviewProjectionScope(currentTenant.TenantId, accountId, monthKey), cancellationToken);

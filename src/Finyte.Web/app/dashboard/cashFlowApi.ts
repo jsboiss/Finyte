@@ -1,12 +1,12 @@
 import { httpClient } from '../api/httpClient'
 import type { CashFlowRangeResponse, DashboardDateRange } from './types'
 
-export function getCashFlowQueryKey(accountId: string | null, range: DashboardDateRange) {
-  return ['cash-flow', accountId ?? 'all', range.from, range.to] as const
+export function getCashFlowQueryKey(accountId: string | null, range: DashboardDateRange, includeInternalTransfers = false) {
+  return ['cash-flow', accountId ?? 'all', range.from, range.to, includeInternalTransfers] as const
 }
 
-export async function getCashFlow(accountId: string | null, range: DashboardDateRange) {
-  const params = new URLSearchParams({ from: range.from, to: range.to })
+export async function getCashFlow(accountId: string | null, range: DashboardDateRange, includeInternalTransfers = false) {
+  const params = new URLSearchParams({ from: range.from, to: range.to, includeInternalTransfers: String(includeInternalTransfers) })
   if (accountId) {
     params.set('accountId', accountId)
   }

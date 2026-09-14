@@ -314,6 +314,92 @@ public sealed class InternalTransferTests
         Assert.Equal(HttpStatusCode.BadRequest, (await client.GetAsync($"/api/internal-transfers?{query}")).StatusCode);
     }
 
+    [Fact]
+    public async Task DashboardComparisonAndLedgerUseTheSameScopeWithoutOverwritingTheDefaultCache()
+    {
+        await using var factory = new FinyteApiFactory();
+        await VerifyDashboardDrilldown(factory);
+    }
+
+    [PostgreSqlFact]
+    public async Task PostgreSqlDashboardComparisonAndLedgerUseTheSameScope()
+    {
+        var connection = Environment.GetEnvironmentVariable("FINYTE_TEST_POSTGRES")!;
+        var schema = $"dashboard_test_{Guid.NewGuid():N}";
+        await using var admin = new Npgsql.NpgsqlConnection(connection);
+        await admin.OpenAsync();
+        await using (var create = new Npgsql.NpgsqlCommand($"CREATE SCHEMA \"{schema}\"", admin))
+        {
+            await create.ExecuteNonQueryAsync();
+        }
+        try
+        {
+            await using var factory = new FinyteApiFactory(new Npgsql.NpgsqlConnectionStringBuilder(connection) { SearchPath = schema }.ConnectionString);
+            using (var scope = factory.Services.CreateScope())
+            {
+                await scope.ServiceProvider.GetRequiredService<FinyteDbContext>().Database.MigrateAsync();
+            }
+            await VerifyDashboardDrilldown(factory);
+        }
+        finally
+        {
+            await using var drop = new Npgsql.NpgsqlCommand($"DROP SCHEMA \"{schema}\" CASCADE", admin);
+            await drop.ExecuteNonQueryAsync();
+        }
+    }
+
+    private static async Task VerifyDashboardDrilldown(FinyteApiFactory factory)
+    {
+        using var client = factory.CreateClient();
+        var seed = await Seed(factory, client);
+        (await Decide(client, Assert.Single((await GetReview(client)).Items), "confirm")).EnsureSuccessStatusCode();
+        var tagId = Guid.NewGuid();
+        using (var scope = factory.Services.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<FinyteDbContext>();
+            var tag = new TransactionTag { Id = tagId, TenantId = seed.TenantId, Name = "Transfers", Color = "#aaaaaa" };
+            dbContext.TransactionTags.Add(tag);
+            var expense = await dbContext.Transactions.SingleAsync(x => x.TenantId == seed.TenantId && x.Amount == -25);
+            expense.TagAssignments.Add(new TransactionTagAssignment { TransactionId = expense.Id, TagId = tagId });
+            var pending = Transaction(seed.TenantId, seed.DebitAccountId, -55, 10);
+            pending.Status = "pending";
+            var undated = Transaction(seed.TenantId, seed.DebitAccountId, -75, 10);
+            undated.PostedAt = null;
+            undated.CreatedAt = new DateTimeOffset(2026, 8, 10, 0, 0, 0, TimeSpan.Zero);
+            var excludedAccount = new Account { TenantId = seed.TenantId, Name = "Excluded", IncludeInAnalyticsOverride = false };
+            dbContext.Accounts.Add(excludedAccount);
+            dbContext.Transactions.AddRange(pending, undated, Transaction(seed.TenantId, excludedAccount.Id, -200, 10));
+            await dbContext.SaveChangesAsync();
+            var projector = new OverviewProjector(dbContext);
+            var projectionScope = new OverviewProjectionScope(seed.TenantId, null, "2026-08");
+            var normal = await projector.Rebuild(projectionScope, CancellationToken.None);
+            var comparison = await projector.ReadIncludingTransfers(projectionScope, CancellationToken.None);
+            Assert.Equal(2500, normal.CurrentMonthSpendMinorUnits);
+            Assert.Equal(12500, comparison.CurrentMonthSpendMinorUnits);
+            Assert.Equal(normal.AccountBalanceMinorUnits, comparison.AccountBalanceMinorUnits);
+            var persisted = await dbContext.OverviewProjections.SingleAsync(x => x.MonthKey == "2026-08");
+            Assert.Equal(2500, JsonDocument.Parse(persisted.PayloadJson).RootElement.GetProperty("currentMonthSpendMinorUnits").GetInt64());
+        }
+        const string filters = "from=2026-08-01&to=2026-08-31&postedOnly=true&analyticsOnly=true&direction=debit";
+        var normalPage = await client.GetFromJsonAsync<JsonElement>($"/api/transactions?{filters}&internalTransfers=exclude");
+        Assert.Equal(1, normalPage.GetProperty("totalCount").GetInt32());
+        Assert.Equal(-2500, normalPage.GetProperty("items")[0].GetProperty("amountMinorUnits").GetInt64());
+        var comparisonPage = await client.GetFromJsonAsync<JsonElement>($"/api/transactions?{filters}&internalTransfers=include");
+        Assert.Equal(2, comparisonPage.GetProperty("totalCount").GetInt32());
+        var tagged = await client.GetFromJsonAsync<JsonElement>($"/api/transactions?{filters}&internalTransfers=exclude&tagIds={tagId}");
+        Assert.Equal(1, tagged.GetProperty("totalCount").GetInt32());
+        var untagged = await client.GetFromJsonAsync<JsonElement>($"/api/transactions?{filters}&internalTransfers=exclude&untagged=true");
+        Assert.Equal(0, untagged.GetProperty("totalCount").GetInt32());
+        var only = await client.GetFromJsonAsync<JsonElement>($"/api/transactions?{filters}&internalTransfers=only");
+        Assert.Equal(1, only.GetProperty("totalCount").GetInt32());
+        Assert.True(only.GetProperty("items")[0].GetProperty("isInternalTransfer").GetBoolean());
+        var direct = await client.GetFromJsonAsync<JsonElement>($"/api/transactions?{filters}&internalTransfers=exclude&accountId={seed.DebitAccountId}");
+        Assert.Equal(1, direct.GetProperty("totalCount").GetInt32());
+        (await client.GetAsync("/api/overview?includeInternalTransfers=true")).EnsureSuccessStatusCode();
+        (await client.PostAsync("/api/overview/refresh?includeInternalTransfers=true", null)).EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.GetAsync("/api/transactions?internalTransfers=bogus")).StatusCode);
+    }
+
     private static async Task<TransferReviewPage> GetReview(HttpClient client, string status = "suggested") =>
         (await client.GetFromJsonAsync<TransferReviewPage>($"/api/internal-transfers?from=2026-08-01&to=2026-09-30&status={status}"))!;
 

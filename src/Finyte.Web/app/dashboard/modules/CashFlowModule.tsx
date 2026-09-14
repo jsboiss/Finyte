@@ -8,7 +8,7 @@ export function CashFlowModule({ overview }: { overview: OverviewResponse }) {
       overview={overview}
       title="Cash flow"
     >
-      {(data, timeframe) => <CashFlowChart chart={timeframe.chart} currencyCode={overview.currency} points={data.points} />}
+      {(data, timeframe) => <CashFlowChart overview={overview} chart={timeframe.chart} currencyCode={overview.currency} points={data.points} />}
     </CashFlowDashboardModule>
   )
 }
