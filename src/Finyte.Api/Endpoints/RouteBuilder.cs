@@ -20,6 +20,7 @@ public static class RouteBuilder
         app.MapCashFlowEndpoints();
         app.MapPayCycleEndpoints();
         app.MapBudgetEndpoints();
+        app.MapRecurringPaymentEndpoints();
 
         return app;
     }

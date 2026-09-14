@@ -3,6 +3,7 @@ using Finyte.Core.Analytics;
 using Finyte.Core.Billing;
 using Finyte.Core.Budgets;
 using Finyte.Core.ProviderSync;
+using Finyte.Core.Recurring;
 using Finyte.Core.Tenancy;
 using Microsoft.EntityFrameworkCore;
 
@@ -12,6 +13,15 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
 {
     public DbSet<Finyte.Core.PayCycles.PayCycleProfile> PayCycleProfiles => Set<Finyte.Core.PayCycles.PayCycleProfile>();
     public DbSet<Budget> Budgets => Set<Budget>();
+    public DbSet<RecurringPaymentSeries> RecurringPaymentSeries => Set<RecurringPaymentSeries>();
+
+    public DbSet<RecurringPaymentAlias> RecurringPaymentAliases => Set<RecurringPaymentAlias>();
+
+    public DbSet<RecurringPaymentDecision> RecurringPaymentDecisions => Set<RecurringPaymentDecision>();
+
+    public DbSet<RecurringPaymentReview> RecurringPaymentReviews => Set<RecurringPaymentReview>();
+
+    public DbSet<RecurringDiscoveryDecision> RecurringDiscoveryDecisions => Set<RecurringDiscoveryDecision>();
 
     public DbSet<Account> Accounts => Set<Account>();
 
@@ -98,6 +108,7 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
             x.HasOne(y => y.Account).WithMany().HasForeignKey(y => y.AccountId).OnDelete(DeleteBehavior.Cascade);
         });
 
+        Recurring.RecurringPaymentConfiguration.Configure(modelBuilder);
         modelBuilder.Entity<InternalTransfer>(x =>
         {
             x.ToTable("internal_transfers");

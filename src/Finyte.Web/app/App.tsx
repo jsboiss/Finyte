@@ -15,6 +15,7 @@ import { DashboardPage } from './dashboard/DashboardPage'
 import { ImportsPage } from './imports/ImportsPage'
 import { TransfersPage } from './transfers/TransfersPage'
 import { PayCyclesPage } from './pay-cycles/PayCyclesPage'
+import { RecurringPage } from './recurring/RecurringPage'
 import { TransactionAccountChip, TransactionAmount } from './transactions/TransactionCard'
 import { TransactionCardList } from './transactions/TransactionCardList'
 import { TransactionPagination } from './transactions/TransactionPagination'
@@ -251,6 +252,10 @@ function AppNavLinks({ onNavigate }: { onNavigate?: () => void }) {
         Settings
       </Link>
       <Link to="/budgets" activeProps={{ className: 'active' }} onClick={onNavigate}><Banknote aria-hidden="true" />Budgets</Link>
+      <Link to="/recurring" activeProps={{ className: 'active' }} onClick={onNavigate}>
+        <ReceiptText aria-hidden="true" />
+        Recurring payments
+      </Link>
     </>
   )
 }
@@ -261,6 +266,9 @@ function getPageTitle(pathname: string) {
   }
   if (pathname.startsWith('/budgets')) {
     return 'Budgets'
+  }
+  if (pathname.startsWith('/recurring')) {
+    return 'Recurring payments'
   }
   if (pathname.startsWith('/accounts')) {
     return 'Accounts'
@@ -1189,13 +1197,14 @@ const importsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/impo
 const accountsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/accounts', component: AccountsPage })
 const payCyclesRoute = createRoute({ getParentRoute: () => rootRoute, path: '/pay-cycles', component: PayCyclesPage })
 const budgetsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/budgets', component: BudgetsPage })
+const recurringRoute = createRoute({ getParentRoute: () => rootRoute, path: '/recurring', component: RecurringPage })
 const transfersRoute = createRoute({
   getParentRoute: () => rootRoute, path: '/transfers', component: TransfersPage,
   validateSearch: (search: Record<string, unknown>): { view?: string } => ({
     view: typeof search.view === 'string' && ['suggested', 'confirmed', 'dismissed', 'needs-review'].includes(search.view) ? search.view : undefined,
   }),
 })
-const routeTree = rootRoute.addChildren([indexRoute, connectionsRoute, transactionsRoute, billingRoute, settingsRoute, importsRoute, transfersRoute, accountsRoute, budgetsRoute, payCyclesRoute])
+const routeTree = rootRoute.addChildren([indexRoute, connectionsRoute, transactionsRoute, billingRoute, settingsRoute, importsRoute, transfersRoute, accountsRoute, budgetsRoute, payCyclesRoute, recurringRoute])
 const router = createRouter({ routeTree })
 
 declare module '@tanstack/react-router' {
