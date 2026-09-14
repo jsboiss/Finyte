@@ -51,6 +51,10 @@ public static partial class TransactionEndpoints
         decimal? maxAmount,
         string? currency,
         string? sort,
+        bool? postedOnly,
+        bool? analyticsOnly,
+        string? direction,
+        string? internalTransfers,
         TenantResolver tenantResolver,
         HttpContext httpContext,
         IBillingAccess billingAccess,
@@ -79,7 +83,11 @@ public static partial class TransactionEndpoints
             MinAmount = minAmount,
             MaxAmount = maxAmount,
             Currency = string.IsNullOrWhiteSpace(currency) ? null : currency.Trim().ToUpperInvariant(),
-            Sort = sort ?? "-date"
+            Sort = sort ?? "-date",
+            PostedOnly = postedOnly ?? false,
+            AnalyticsOnly = analyticsOnly ?? false,
+            Direction = direction ?? "all",
+            InternalTransfers = internalTransfers ?? "include"
         };
         var errors = filters.Validate();
 
@@ -92,6 +100,20 @@ public static partial class TransactionEndpoints
         var take = filters.PageSize;
         var transfers = dbContext.ValidConfirmedTransfers(currentTenant.TenantId);
         var query = filters.Apply(dbContext.Transactions.AsNoTracking(), currentTenant.TenantId);
+        if (filters.AnalyticsOnly && filters.AccountId == null)
+        {
+            var accounts = await dbContext.Accounts.AsNoTracking().Where(x => x.TenantId == currentTenant.TenantId).ToListAsync(cancellationToken);
+            var accountIds = accounts.Where(x => AccountPreferences.IncludeInAnalytics(x)).Select(x => x.Id).ToArray();
+            query = query.Where(x => accountIds.Contains(x.AccountId));
+        }
+        if (filters.InternalTransfers == "exclude")
+        {
+            query = query.ExcludeInternalTransfers(dbContext, currentTenant.TenantId);
+        }
+        else if (filters.InternalTransfers == "only")
+        {
+            query = query.Where(x => transfers.Any(y => y.DebitTransactionId == x.Id || y.CreditTransactionId == x.Id));
+        }
         var totalCount = await query.CountAsync(cancellationToken);
         var transactions = await filters.Order(query)
             .Skip((currentPage - 1) * take)

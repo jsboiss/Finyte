@@ -27,7 +27,12 @@ public sealed class OverviewProjector(FinyteDbContext dbContext) : IOverviewProj
         return await Rebuild(new OverviewProjectionScope(tenantId, accountId, monthKey), cancellationToken);
     }
 
-    public async Task<OverviewResponse> Rebuild(OverviewProjectionScope scope, CancellationToken cancellationToken)
+    public Task<OverviewResponse> Rebuild(OverviewProjectionScope scope, CancellationToken cancellationToken) => Build(scope, false, cancellationToken);
+
+    // The comparison view must never overwrite the default transfer-excluding projection.
+    public Task<OverviewResponse> ReadIncludingTransfers(OverviewProjectionScope scope, CancellationToken cancellationToken) => Build(scope, true, cancellationToken);
+
+    private async Task<OverviewResponse> Build(OverviewProjectionScope scope, bool includeInternalTransfers, CancellationToken cancellationToken)
     {
         var now = DateTimeOffset.UtcNow;
         var sourceVersion = await dbContext.Tenants
@@ -63,8 +68,11 @@ public sealed class OverviewProjector(FinyteDbContext dbContext) : IOverviewProj
                 && accountIds.Contains(x.AccountId)
                 && x.PostedAt >= monthStart
                 && x.PostedAt < nextMonthStart
-                && (x.Status == null || x.Status == "" || x.Status.ToLower() == "posted"))
-            .ExcludeInternalTransfers(dbContext, scope.TenantId);
+                && (x.Status == null || x.Status == "" || x.Status.ToLower() == "posted"));
+        if (!includeInternalTransfers)
+        {
+            transactionQuery = transactionQuery.ExcludeInternalTransfers(dbContext, scope.TenantId);
+        }
         var totals = await transactionQuery
             .GroupBy(x => 1)
             .Select(x => new TransactionTotals(
@@ -164,6 +172,10 @@ public sealed class OverviewProjector(FinyteDbContext dbContext) : IOverviewProj
             dailyCashFlow,
             monthlySpendByTag,
             new OverviewFreshnessResponse(now, sourceWatermark, IsRefreshing: false));
+        if (includeInternalTransfers)
+        {
+            return response;
+        }
         var payloadJson = JsonSerializer.Serialize(response, JsonOptions);
         var existingProjection = await dbContext.OverviewProjections
             .FirstOrDefaultAsync(x => x.TenantId == scope.TenantId && x.AccountId == scope.AccountId && x.MonthKey == scope.MonthKey, cancellationToken);

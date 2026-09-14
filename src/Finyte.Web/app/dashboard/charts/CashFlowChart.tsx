@@ -1,28 +1,31 @@
 import { memo } from 'react'
 import { currency, signedCurrency } from '../../shared/formatters'
-import type { CashFlowPoint, DashboardChart } from '../types'
+import { monthRange, transactionLink } from '../transactionLinks'
+import type { CashFlowPoint, DashboardChart, OverviewResponse } from '../types'
 
 export const CashFlowChart = memo(function CashFlowChart({
   chart,
+  overview,
   currencyCode,
   points,
 }: {
+  overview: OverviewResponse
   chart: DashboardChart
   currencyCode: string
   points: CashFlowPoint[]
 }) {
   if (chart === 'summary') {
-    return <CashFlowSummary points={points} currencyCode={currencyCode} />
+    return <CashFlowSummary points={points} currencyCode={currencyCode} overview={overview} />
   }
 
   if (chart === 'weekly-bars') {
-    return <CashFlowWeeklyBars points={points} currencyCode={currencyCode} />
+    return <CashFlowWeeklyBars points={points} currencyCode={currencyCode} overview={overview} />
   }
 
-  return <CashFlowDailyBars points={points} currencyCode={currencyCode} />
+  return <CashFlowDailyBars points={points} currencyCode={currencyCode} overview={overview} />
 })
 
-const CashFlowSummary = memo(function CashFlowSummary({ points, currencyCode }: { points: CashFlowPoint[]; currencyCode: string }) {
+const CashFlowSummary = memo(function CashFlowSummary({ points, currencyCode, overview }: { points: CashFlowPoint[]; currencyCode: string; overview: OverviewResponse }) {
   const income = points.reduce((x, y) => x + y.incomeMinorUnits, 0)
   const expenses = points.reduce((x, y) => x + y.expenseMinorUnits, 0)
   const net = income - expenses
@@ -34,6 +37,7 @@ const CashFlowSummary = memo(function CashFlowSummary({ points, currencyCode }: 
 
   return (
     <div className="cash-flow-summary">
+      <nav className="bucket-links" aria-label="Review cash flow"><a href={transactionLink(overview, 'credit', (points.length ? { from: points[0].from, to: points.at(-1)!.to } : monthRange(overview.monthKey)))}>Income transactions</a><a href={transactionLink(overview, 'debit', (points.length ? { from: points[0].from, to: points.at(-1)!.to } : monthRange(overview.monthKey)))}>Expense transactions</a></nav>
       <div className="cash-flow-summary-net">
         <span>Net cash flow</span>
         <strong className={net >= 0 ? 'amount-positive' : 'amount-negative'}>{signedCurrency(net, currencyCode)}</strong>
@@ -66,7 +70,7 @@ const CashFlowSummary = memo(function CashFlowSummary({ points, currencyCode }: 
   )
 })
 
-const CashFlowDailyBars = memo(function CashFlowDailyBars({ points, currencyCode }: { points: CashFlowPoint[]; currencyCode: string }) {
+const CashFlowDailyBars = memo(function CashFlowDailyBars({ points, currencyCode, overview }: { points: CashFlowPoint[]; currencyCode: string; overview: OverviewResponse }) {
   const max = Math.max(...points.map(x => x.incomeMinorUnits + x.expenseMinorUnits), 1)
 
   return (
@@ -83,10 +87,10 @@ const CashFlowDailyBars = memo(function CashFlowDailyBars({ points, currencyCode
                 <span>Expense {currency(x.expenseMinorUnits, currencyCode)}</span>
               </div>
               <div className="daily-bar-stack">
-                {x.incomeMinorUnits > 0 && <div className="daily-income" style={{ height: `${incomeHeight}%` }} />}
-                {x.expenseMinorUnits > 0 && <div className="daily-expense" style={{ height: `${expenseHeight}%` }} />}
+                {x.incomeMinorUnits > 0 && <a aria-label={`View income: ${x.tooltip}`} href={transactionLink(overview, 'credit', x)} className="daily-income" style={{ height: `${incomeHeight}%` }} />}
+                {x.expenseMinorUnits > 0 && <a aria-label={`View expenses: ${x.tooltip}`} href={transactionLink(overview, 'debit', x)} className="daily-expense" style={{ height: `${expenseHeight}%` }} />}
               </div>
-              <span>{x.label}</span>
+              <a href={transactionLink(overview, 'all', x)}>{x.label}</a>
             </div>
           )
         })}
@@ -96,7 +100,7 @@ const CashFlowDailyBars = memo(function CashFlowDailyBars({ points, currencyCode
   )
 })
 
-const CashFlowWeeklyBars = memo(function CashFlowWeeklyBars({ points, currencyCode }: { points: CashFlowPoint[]; currencyCode: string }) {
+const CashFlowWeeklyBars = memo(function CashFlowWeeklyBars({ points, currencyCode, overview }: { points: CashFlowPoint[]; currencyCode: string; overview: OverviewResponse }) {
   const max = Math.max(...points.map(x => x.incomeMinorUnits + x.expenseMinorUnits), 1)
 
   return (
@@ -115,11 +119,11 @@ const CashFlowWeeklyBars = memo(function CashFlowWeeklyBars({ points, currencyCo
                 <span>Net {signedCurrency(net, currencyCode)}</span>
               </div>
               <div className="weekly-bar-stack">
-                {x.incomeMinorUnits > 0 && <div className="daily-income" style={{ height: `${incomeHeight}%` }} />}
-                {x.expenseMinorUnits > 0 && <div className="daily-expense" style={{ height: `${expenseHeight}%` }} />}
+                {x.incomeMinorUnits > 0 && <a aria-label={`View income: ${x.tooltip}`} href={transactionLink(overview, 'credit', x)} className="daily-income" style={{ height: `${incomeHeight}%` }} />}
+                {x.expenseMinorUnits > 0 && <a aria-label={`View expenses: ${x.tooltip}`} href={transactionLink(overview, 'debit', x)} className="daily-expense" style={{ height: `${expenseHeight}%` }} />}
               </div>
               <div className="weekly-bar-footer">
-                <span>{x.label}</span>
+                <a href={transactionLink(overview, 'all', x)}>{x.label}</a>
                 <strong className={net >= 0 ? 'amount-positive' : 'amount-negative'}>{signedCurrency(net, currencyCode)}</strong>
               </div>
             </div>

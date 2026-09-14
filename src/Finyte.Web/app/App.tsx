@@ -22,7 +22,7 @@ import { TransactionAccountChip, TransactionAmount } from './transactions/Transa
 import { TransactionCardList } from './transactions/TransactionCardList'
 import { TransactionPagination } from './transactions/TransactionPagination'
 import { TransactionFilterForm } from './transactions/TransactionFilters'
-import { defaultTransactionFilters, transactionSearchParams, type TransactionFilters } from './transactions/transactionSearch'
+import { defaultTransactionFilters, readTransactionRouteSearch, transactionRouteSearch, transactionSearchParams, type TransactionFilters } from './transactions/transactionSearch'
 import type { Transaction, TransactionPage, TransactionTag } from './transactions/types'
 import './App.css'
 import './shared/ux.css'
@@ -317,9 +317,14 @@ async function provisionFamily(name: string) {
 }
 
 function TransactionsPage() {
-  const { transferView } = useSearch({ from: '/transactions' })
+  const routeSearch = useSearch({ from: '/transactions' })
+  const { transferView } = routeSearch
   const navigate = useNavigate({ from: '/transactions' })
-  const [transactionSearch, setTransactionSearch] = useState({ page: 1, filters: defaultTransactionFilters })
+  const transactionSearch = useMemo(() => readTransactionRouteSearch(routeSearch), [routeSearch])
+  const setTransactionSearch = useCallback((next: typeof transactionSearch | ((current: typeof transactionSearch) => typeof transactionSearch)) => {
+    const value = typeof next === 'function' ? next(transactionSearch) : next
+    void navigate({ search: transactionRouteSearch(value.page, value.filters, transferView) })
+  }, [navigate, transactionSearch, transferView])
   const [showFilters, setShowFilters] = useState(false)
   const [showTagManagement, setShowTagManagement] = useState(false)
   const [tagName, setTagName] = useState('')
@@ -462,7 +467,7 @@ function TransactionsPage() {
       cell: x => (
         <div className="transaction-description">
           <strong>{x.getValue()}</strong>
-          {x.row.original.isInternalTransfer && <Link className="transfer-badge" to="/transactions" search={{ transferView: 'confirmed' }}>Internal transfer · excluded from totals</Link>}
+          {x.row.original.isInternalTransfer && <Link className="transfer-badge" to="/transactions" search={previous => ({ ...previous, transferView: 'confirmed' })}>Internal transfer · excluded from totals</Link>}
           {x.row.original.merchantName && x.row.original.merchantName.toLowerCase() !== x.getValue()?.toLowerCase() && <span>{x.row.original.merchantName}</span>}
         </div>
       ),
@@ -513,7 +518,7 @@ function TransactionsPage() {
         <div>
           <h1>Transactions</h1>
         </div>
-        <div className="transactions-actions"><Help title="Transfer matching"><p>Transfers between your accounts are matched automatically.</p><button type="button" onClick={() => void navigate({ search: { transferView: 'confirmed' } })}>Correct a transfer match</button></Help>
+        <div className="transactions-actions"><Help title="Transfer matching"><p>Transfers between your accounts are matched automatically.</p><button type="button" onClick={() => void navigate({ search: previous => ({ ...previous, transferView: 'confirmed' }) })}>Correct a transfer match</button></Help>
           <button className={showTagManagement ? 'secondary-button is-active' : 'secondary-button'} onClick={() => setShowTagManagement(x => !x)} type="button">
             <Tags aria-hidden="true" />
             Tags
@@ -615,7 +620,7 @@ function TransactionsPage() {
       )}
 
 
-      {transferView && <Drawer title="Transfer matching" onClose={() => void navigate({ search: {} })}><TransferCorrections initialView={transferView} /></Drawer>}
+      {transferView && <Drawer title="Transfer matching" onClose={() => void navigate({ search: previous => ({ ...previous, transferView: undefined }) })}><TransferCorrections initialView={transferView} /></Drawer>}
       {showFilters && (
         <Drawer title="Transaction filters" onClose={() => setShowFilters(false)}><TransactionFilterForm
           key={JSON.stringify(filters)}
@@ -625,7 +630,16 @@ function TransactionsPage() {
           onApply={nextFilters => { setTransactionSearch({ page: 1, filters: nextFilters }); setShowFilters(false) }}
         /></Drawer>
       )}
-      {hasFilters && <p className="transaction-search-summary">Active filters: {Object.entries(filters).filter(([key, value]) => key !== 'sort' && key !== 'tagMatch' && (Array.isArray(value) ? value.length > 0 : Boolean(value))).map(([key, value]) => `${key}: ${key === 'accountId' ? accountsQuery.data?.find(x => x.id === value)?.name ?? 'Account' : Array.isArray(value) ? `${value.length} selected` : value}`).join(' · ')}</p>}
+      {hasFilters && <p className="transaction-search-summary">{[
+        filters.accountId && (accountsQuery.data?.find(x => x.id === filters.accountId)?.name ?? 'Selected account'),
+        (filters.from || filters.to) && `${filters.from || 'Start'} – ${filters.to || 'Today'}`,
+        filters.direction === 'debit' ? 'Expenses' : filters.direction === 'credit' ? 'Income' : '',
+        filters.internalTransfers === 'exclude' ? 'Transfers excluded' : filters.internalTransfers === 'only' ? 'Transfers only' : '',
+        filters.postedOnly && 'Posted only', filters.analyticsOnly && 'Dashboard accounts',
+        filters.tagIds.length > 0 && `${filters.tagIds.length} tag${filters.tagIds.length === 1 ? '' : 's'}`,
+        filters.untagged && 'Untagged', filters.search, filters.category, filters.currency,
+        filters.minAmount && `Minimum ${filters.minAmount}`, filters.maxAmount && `Maximum ${filters.maxAmount}`,
+      ].filter(Boolean).join(' · ')}</p>}
       {transactionsQuery.isError && (
         <p role="alert">Transactions could not be loaded. Check your filters and <button className="secondary-button" type="button" onClick={() => transactionsQuery.refetch()}>Try again</button>.</p>
       )}
@@ -1159,9 +1173,11 @@ const rootRoute = createRootRoute({ component: DashboardShell })
 const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', component: DashboardPage })
 const connectionsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/connections', component: ConnectionsPage })
 const transactionsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/transactions', component: TransactionsPage,
-  validateSearch: (search: Record<string, unknown>): { transferView?: string } => ({
-    transferView: typeof search.transferView === 'string' && ['suggested', 'confirmed', 'dismissed', 'needs-review'].includes(search.transferView) ? search.transferView : undefined,
-  }),
+  validateSearch: (search: Record<string, unknown>) => {
+    const { page, filters } = readTransactionRouteSearch(search)
+    const transferView = typeof search.transferView === 'string' && ['suggested', 'confirmed', 'dismissed', 'needs-review'].includes(search.transferView) ? search.transferView : undefined
+    return transactionRouteSearch(page, filters, transferView)
+  },
 })
 const billingRoute = createRoute({ getParentRoute: () => rootRoute, path: '/billing', component: BillingPage })
 const settingsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings', component: SettingsPage })

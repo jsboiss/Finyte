@@ -18,10 +18,18 @@ public sealed record TransactionSearch
     public decimal? MaxAmount { get; init; }
     public string? Currency { get; init; }
     public string Sort { get; init; } = "-date";
+    public bool PostedOnly { get; init; }
+    public bool AnalyticsOnly { get; init; }
+    public string Direction { get; init; } = "all";
+    public string InternalTransfers { get; init; } = "include";
 
     public Dictionary<string, string[]> Validate()
     {
         var errors = new Dictionary<string, string[]>();
+        if (Direction is not ("all" or "debit" or "credit") || InternalTransfers is not ("include" or "exclude" or "only"))
+        {
+            errors["scope"] = ["Choose all, debit or credit and include, exclude or only internal transfers."];
+        }
 
         if (Page < 1 || (long)(Page - 1) * PageSize > int.MaxValue)
         {
@@ -79,6 +87,18 @@ public sealed record TransactionSearch
     public IQueryable<Transaction> Apply(IQueryable<Transaction> transactions, Guid tenantId)
     {
         var query = transactions.Where(x => x.TenantId == tenantId);
+        if (PostedOnly)
+        {
+            query = query.Where(x => x.PostedAt != null && (x.Status == null || x.Status == "" || x.Status.ToLower() == "posted"));
+        }
+        if (Direction == "debit")
+        {
+            query = query.Where(x => x.Amount < 0);
+        }
+        else if (Direction == "credit")
+        {
+            query = query.Where(x => x.Amount > 0);
+        }
 
         if (AccountId is { } accountId)
         {

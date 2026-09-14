@@ -31,6 +31,10 @@ export function TransactionFilterForm({ filters, accounts, tags, onApply }: Tran
       }
       onApply({ ...draft, search: draft.search.trim(), category: draft.category.trim() })
     }}>
+      <label className="filter-field"><span>Money movement</span><select value={draft.direction} onChange={x => change('direction', x.target.value)}><option value="all">Money in and out</option><option value="debit">Money out only</option><option value="credit">Money in only</option></select></label>
+      <label className="filter-field"><span>Confirmed internal transfers</span><select value={draft.internalTransfers} onChange={x => change('internalTransfers', x.target.value)}><option value="include">Include</option><option value="exclude">Exclude</option><option value="only">Only internal transfers</option></select></label>
+      <label className="transaction-filter-checkbox"><input type="checkbox" checked={draft.postedOnly} onChange={x => change('postedOnly', x.target.checked)} /><span>Posted transactions only</span></label>
+      <label className="transaction-filter-checkbox"><input type="checkbox" checked={draft.analyticsOnly} onChange={x => change('analyticsOnly', x.target.checked)} /><span>Use dashboard account preferences (when all accounts are selected)</span></label>
       <label className="filter-field date-filter-field">
         <span>Date range</span>
         <div className="range-filter">

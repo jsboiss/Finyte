@@ -12,10 +12,11 @@ export function CashFlowRaceModule({ overview }: { overview: OverviewResponse })
     >
       {(data, _timeframe, state) => (
         <CashFlowRace
+          overview={overview}
           currencyCode={overview.currency}
           data={data}
           isLoading={state.isLoading}
-          key={overview.scope.accountId ?? 'all'}
+          key={`${overview.scope.accountId}-${overview.includeInternalTransfers}`}
         />
       )}
     </CashFlowDashboardModule>

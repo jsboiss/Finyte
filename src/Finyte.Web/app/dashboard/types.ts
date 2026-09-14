@@ -1,4 +1,5 @@
 export type OverviewResponse = {
+  includeInternalTransfers?: boolean
   scope: {
     accountId: string | null
     label: string
@@ -39,6 +40,7 @@ export type OverviewAccountOption = {
 }
 
 export type DashboardMetric = {
+  href?: string
   id: string
   label: string
   value: string
@@ -68,6 +70,8 @@ export type DashboardTimeframe<TData, TSource> = DashboardTimeframeOption & {
 }
 
 export type CashFlowPoint = {
+  from: string
+  to: string
   id: string
   label: string
   tooltip: string

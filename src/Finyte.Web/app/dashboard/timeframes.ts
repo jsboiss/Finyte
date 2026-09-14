@@ -41,6 +41,7 @@ function createDailyCashFlowData(response: CashFlowRangeResponse): CashFlowModul
   return {
     points: days.map(x => ({
       id: x.date,
+      from: x.date, to: x.date,
       label: x.day === 1 || x.day % 7 === 0 || days.length <= 10 ? x.day.toString() : '',
       tooltip: formatChartDate(x.date),
       incomeMinorUnits: x.incomeMinorUnits,
@@ -56,6 +57,7 @@ function createWeeklyCashFlowData(response: CashFlowRangeResponse): CashFlowModu
     const days = response.dailyCashFlow.slice(index, index + 7)
     points.push({
       id: `${response.from}-week-${points.length + 1}`,
+      from: days[0].date, to: days[days.length - 1].date,
       label: `W${points.length + 1}`,
       tooltip: formatRange(days[0].date, days[days.length - 1].date),
       incomeMinorUnits: days.reduce((x, y) => x + y.incomeMinorUnits, 0),

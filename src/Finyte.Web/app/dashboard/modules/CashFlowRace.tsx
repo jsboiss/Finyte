@@ -1,8 +1,9 @@
 import { memo, useEffect, useRef } from 'react'
 import { currency, signedCurrency } from '../../shared/formatters'
-import type { CashFlowModuleData } from '../types'
+import { transactionLink } from '../transactionLinks'
+import type { CashFlowModuleData, OverviewResponse } from '../types'
 
-export const CashFlowRace = memo(function CashFlowRace({ currencyCode, data, isLoading }: { currencyCode: string; data: CashFlowModuleData; isLoading: boolean }) {
+export const CashFlowRace = memo(function CashFlowRace({ currencyCode, data, isLoading, overview }: { overview: OverviewResponse; currencyCode: string; data: CashFlowModuleData; isLoading: boolean }) {
   const settledDataRef = useRef(data)
 
   useEffect(() => {
@@ -19,21 +20,22 @@ export const CashFlowRace = memo(function CashFlowRace({ currencyCode, data, isL
   const incomePercent = (income / total) * 100
   const expensePercent = (expenses / total) * 100
 
+  const range = { from: visibleData.points[0]?.from ?? overview.monthKey + '-01', to: visibleData.points.at(-1)?.to ?? overview.monthKey + '-01' }
   return (
     <div className="cash-flow-race">
       <div className="cash-flow-values">
-        <div className="cash-flow-value is-income">
+        <a href={transactionLink(overview, 'credit', range)} className="cash-flow-value is-income">
           <span>Income</span>
           <strong>{currency(income, currencyCode)}</strong>
-        </div>
-        <div className="cash-flow-value is-net">
+        </a>
+        <a href={transactionLink(overview, 'all', range)} className="cash-flow-value is-net">
           <span>Net</span>
           <strong>{signedCurrency(net, currencyCode)}</strong>
-        </div>
-        <div className="cash-flow-value is-expense">
+        </a>
+        <a href={transactionLink(overview, 'debit', range)} className="cash-flow-value is-expense">
           <span>Expenses</span>
           <strong>{currency(expenses, currencyCode)}</strong>
-        </div>
+        </a>
       </div>
       <div className="race-track" aria-label="Income vs expenses">
         <div className="race-income" style={{ width: `${incomePercent}%` }} />
