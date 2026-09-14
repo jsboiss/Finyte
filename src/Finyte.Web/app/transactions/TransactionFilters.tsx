@@ -31,7 +31,6 @@ export function TransactionFilterForm({ filters, accounts, tags, onApply }: Tran
       }
       onApply({ ...draft, search: draft.search.trim(), category: draft.category.trim() })
     }}>
-      <p className="transaction-filter-help">Filters search your full transaction history. Dates include both endpoints and use UTC.</p>
       <label className="filter-field date-filter-field">
         <span>Date range</span>
         <div className="range-filter">
@@ -84,7 +83,7 @@ export function TransactionFilterForm({ filters, accounts, tags, onApply }: Tran
         <legend>Tags</legend>
         <label className="transaction-filter-checkbox">
           <input type="checkbox" checked={draft.untagged} onChange={x => setDraft(y => ({ ...y, untagged: x.target.checked, tagIds: [] }))} />
-          Untagged only
+          <span>Untagged only</span>
         </label>
         <label className="filter-field">
           <span>Match selected tags</span>
@@ -97,7 +96,7 @@ export function TransactionFilterForm({ filters, accounts, tags, onApply }: Tran
           {tags.map(x => (
             <label className="transaction-filter-checkbox" key={x.id}>
               <input type="checkbox" disabled={draft.untagged} checked={draft.tagIds.includes(x.id)} onChange={y => change('tagIds', y.target.checked ? [...draft.tagIds, x.id] : draft.tagIds.filter(z => z !== x.id))} />
-              {x.name}
+              <span>{x.name}</span>
             </label>
           ))}
           {tags.length === 0 && <span className="empty-inline">No tags created yet.</span>}

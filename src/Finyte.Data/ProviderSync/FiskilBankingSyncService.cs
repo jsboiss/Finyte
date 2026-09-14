@@ -140,7 +140,7 @@ public sealed class FiskilBankingSyncService(FinyteDbContext dbContext, IFiskilB
         foreach (var fetchedTransaction in fetchedTransactions)
         {
             var transaction = fetchedTransaction.Transaction;
-            var changed = await UpsertTransaction(syncRun.TenantId, fetchedTransaction.AccountId, transaction, rules, cancellationToken);
+            var (changed, previousDate) = await UpsertTransaction(syncRun.TenantId, fetchedTransaction.AccountId, transaction, rules, cancellationToken);
             if (!changed)
             {
                 continue;
@@ -148,8 +148,8 @@ public sealed class FiskilBankingSyncService(FinyteDbContext dbContext, IFiskilB
 
             changedAccountIds.Add(fetchedTransaction.AccountId);
             var changedAt = transaction.PostedAt ?? transaction.ExecutedAt;
-            minChangedAt = Min(minChangedAt, changedAt);
-            maxChangedAt = Max(maxChangedAt, changedAt);
+            minChangedAt = Min(Min(minChangedAt, changedAt), previousDate);
+            maxChangedAt = Max(Max(maxChangedAt, changedAt), previousDate);
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -160,7 +160,7 @@ public sealed class FiskilBankingSyncService(FinyteDbContext dbContext, IFiskilB
         return CreateSummary(changedAccountIds, minChangedAt, maxChangedAt);
     }
 
-    private async Task<bool> UpsertTransaction(Guid tenantId, Guid accountId, FiskilTransactionData transaction, IReadOnlyList<MerchantTagRule> rules, CancellationToken cancellationToken)
+    private async Task<(bool Changed, DateTimeOffset? PreviousDate)> UpsertTransaction(Guid tenantId, Guid accountId, FiskilTransactionData transaction, IReadOnlyList<MerchantTagRule> rules, CancellationToken cancellationToken)
     {
         var localTransaction = dbContext.Transactions.Local.FirstOrDefault(x => x.TenantId == tenantId && x.FiskilTransactionId == transaction.Id)
             ?? await dbContext.Transactions
@@ -189,9 +189,10 @@ public sealed class FiskilBankingSyncService(FinyteDbContext dbContext, IFiskilB
             };
             tagService.Reconcile(localTransaction, rules);
             dbContext.Transactions.Add(localTransaction);
-            return true;
+            return (true, null);
         }
 
+        var previousDate = localTransaction.PostedAt ?? localTransaction.ExecutedAt;
         var changed = false;
         changed |= SetIfChanged(localTransaction.AccountId, accountId, x => localTransaction.AccountId = x);
         changed |= SetIfChanged(localTransaction.Amount, transaction.Amount, x => localTransaction.Amount = x);
@@ -206,7 +207,7 @@ public sealed class FiskilBankingSyncService(FinyteDbContext dbContext, IFiskilB
         changed |= SetIfChanged(localTransaction.Reference, transaction.Reference, x => localTransaction.Reference = x);
         changed |= SetIfChanged(localTransaction.RawJson, transaction.RawJson, x => localTransaction.RawJson = x);
         changed |= tagService.Reconcile(localTransaction, rules);
-        return changed;
+        return (changed, previousDate);
     }
 
     private async Task<List<string>> GetWebhookAccountIds(Guid syncRunId, CancellationToken cancellationToken)

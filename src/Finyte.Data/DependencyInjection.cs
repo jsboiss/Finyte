@@ -22,6 +22,7 @@ public static class DependencyInjection
         services.AddScoped<Imports.TransactionFileImportService>();
         services.AddScoped<Tagging.TransactionTagService>();
         services.AddScoped<Transfers.InternalTransferService>();
+        services.AddScoped<Transfers.AutomaticTransferService>();
         services.AddScoped<PayCycles.PayCycleQueries>();
         services.AddScoped<Recurring.RecurringPaymentService>();
         services.AddScoped<IFiskilBankingSyncService, FiskilBankingSyncService>();

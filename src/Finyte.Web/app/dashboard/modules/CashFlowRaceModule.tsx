@@ -1,4 +1,4 @@
-import { WalletCards } from 'lucide-react'
+import { WalletCards } from '../../shared/Icons'
 import { CashFlowDashboardModule } from '../components/CashFlowDashboardModule'
 import type { OverviewResponse } from '../types'
 import { CashFlowRace } from './CashFlowRace'

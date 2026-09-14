@@ -1,7 +1,8 @@
+import { Help } from '../shared/Help'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link, useNavigate, useSearch } from '@tanstack/react-router'
+import { Link } from '@tanstack/react-router'
 import { isAxiosError } from 'axios'
-import { ArrowRightLeft } from 'lucide-react'
+import { ArrowRightLeft } from '../shared/Icons'
 import { useState } from 'react'
 import { httpClient } from '../api/httpClient'
 import { currency } from '../shared/formatters'
@@ -18,17 +19,15 @@ type TransferReview = {
 type ReviewPage = { items: TransferReview[]; totalCount: number; page: number; pageSize: number }
 type ReviewAction = 'confirm' | 'dismiss' | 'reset'
 const views = [
-  { id: 'suggested', label: 'Suggested pairs' },
-  { id: 'confirmed', label: 'Confirmed transfers' },
-  { id: 'needs-review', label: 'Changed transactions' },
+  { id: 'suggested', label: 'Possible matches' },
+  { id: 'confirmed', label: 'Matched transfers' },
+  { id: 'needs-review', label: 'Changed or conflicting' },
   { id: 'dismissed', label: 'Dismissed pairs' },
 ]
 
-export function TransfersPage() {
+export function TransferCorrections({ initialView = 'confirmed' }: { initialView?: string }) {
   const queryClient = useQueryClient()
-  const { view } = useSearch({ from: '/transfers' })
-  const navigate = useNavigate({ from: '/transfers' })
-  const status = view ?? 'suggested'
+  const [status, setStatus] = useState(initialView)
   const [from, setFrom] = useState(() => new Date(Date.now() - 89 * 86400000).toISOString().slice(0, 10))
   const [to, setTo] = useState(() => new Date().toISOString().slice(0, 10))
   const [page, setPage] = useState(1)
@@ -51,7 +50,7 @@ export function TransfersPage() {
     onSuccess: async (_data, { action }) => {
       setNotice(action === 'confirm' ? 'Transfer confirmed. Both transactions are excluded from spending and income. Dashboard totals are refreshing.'
         : action === 'dismiss' ? 'Pair dismissed. Both transactions remain included in spending and income.'
-        : 'Decision undone. These transactions count normally again and can be reviewed for a new match.')
+        : 'Decision undone. These transactions count normally again. Automatic matches stay dismissed until returned to review.')
       setPage(1)
       await Promise.all(['internal-transfers', 'transactions', 'overview', 'cash-flow', 'budgets', 'pay-cycles'].map(x => queryClient.invalidateQueries({ queryKey: [x] })))
     },
@@ -64,16 +63,10 @@ export function TransfersPage() {
   }
 
   return (
-    <section className="page transfers-page">
-      <header className="page-header"><div><p>Money between your accounts</p><h1>Internal transfers</h1></div></header>
-      <section className="panel transfer-intro">
-        <h2>Moving money is not spending it</h2>
-        <p>Review money moving between family accounts. Confirmed pairs are excluded from spending and income. Balances and the <Link to="/transactions">original transactions</Link> stay unchanged.</p>
-        <p><strong>Suggestions do not change your totals.</strong> Check both transactions, then confirm or dismiss the pair. You can undo either decision.</p>
-        <details><summary>How matches and totals work</summary><p>Matches require equal amounts, the same currency, different accounts, and posting dates within three days. Refunds or unrelated payments can look similar. Fees, currency conversions, and transfers with only one side imported are not matched.</p><p>Confirmed pairs are excluded from spending, income, average daily spending, and spend-by-tag totals, including when viewing a single account.</p></details>
-      </section>
+    <section className="transfer-corrections">
+      <Help title="How transfers are matched"><p>Automatic matches need unique equal amounts in the same currency on different household accounts, within three days, plus transfer descriptions or a shared reference with transfer evidence. Imports and bank syncs trigger matching; existing history is checked by the worker.</p><p>Matched transfers are excluded from income and spending. Balances and <Link to="/transactions">original transactions</Link> stay unchanged. You can undo a match; it will stay dismissed until you return it to review.</p></Help>
       <div className="transfer-views" aria-label="Transfer review views">
-        {views.map(x => <button key={x.id} type="button" aria-pressed={status === x.id} onClick={() => { void navigate({ search: { view: x.id } }); setPage(1); setNotice(''); decision.reset() }}>{x.label}</button>)}
+        {views.map(x => <button key={x.id} type="button" aria-pressed={status === x.id} onClick={() => { setStatus(x.id); setPage(1); setNotice(''); decision.reset() }}>{x.label}</button>)}
       </div>
       <div className="transfer-filters">
         <label>Money-out date from<input type="date" value={from} disabled={status === 'needs-review'} onChange={x => { setFrom(x.target.value); setPage(1) }} /></label>
@@ -85,13 +78,13 @@ export function TransfersPage() {
       {decision.error && <p role="alert">{readError(decision.error)}</p>}
       {reviews.isError && <p role="alert">{readError(reviews.error)}</p>}
       {reviews.isLoading && <p>Looking for matching transactions…</p>}
-      {reviews.data?.totalCount === 0 && <section className="panel"><h2>{status === 'suggested' ? 'No suggested pairs in this date range' : 'No pairs in this view'}</h2><p>{status === 'suggested' ? 'Try another date range, or import the other account’s transactions. Nothing has been excluded automatically.' : 'Use Suggested pairs to review potential transfers.'}</p></section>}
+      {reviews.data?.totalCount === 0 && <section className="panel"><h2>{status === 'suggested' ? 'No suggested pairs in this date range' : 'No pairs in this view'}</h2><p>{status === 'suggested' ? 'Try another date range, or import the other account’s transactions. Clear transfers may already be in Matched transfers.' : 'Choose Possible matches to inspect uncertain pairs.'}</p></section>}
       <div className="transfer-list">
         {(reviews.data?.items ?? []).map(pair => (
           <article className="panel transfer-pair" key={`${pair.debit.id}:${pair.credit.id}`}>
-            <div className="transfer-pair-heading"><h2>{pair.status === 'confirmed' ? 'Confirmed transfer' : pair.status === 'needs-review' ? 'Confirmation needs review' : pair.status === 'dismissed' ? 'Dismissed pair' : 'Possible transfer'}</h2>{pair.isAmbiguous && <span className="transfer-ambiguous">Multiple possible matches</span>}</div>
+            <div className="transfer-pair-heading"><h2>{pair.status === 'confirmed' ? 'Matched transfer' : pair.status === 'needs-review' ? 'Confirmation needs review' : pair.status === 'dismissed' ? 'Dismissed pair' : 'Possible transfer'}</h2>{pair.isAmbiguous && <span className="transfer-ambiguous">Multiple possible matches</span>}</div>
             <div className="transfer-legs"><TransferTransaction leg={pair.debit} label="Money out" /><ArrowRightLeft aria-hidden="true" /><TransferTransaction leg={pair.credit} label="Money in" /></div>
-            <p>{pair.explanation}</p>
+            <Help title="Match details"><p>{pair.explanation}</p></Help>
             {pair.isAmbiguous && <p>At least one transaction has another possible match. Confirm only the correct pair; a transaction can belong to one confirmed transfer.</p>}
             {pair.reviewedAt && <p className="transfer-reviewed">Last reviewed {new Date(pair.reviewedAt).toLocaleString()}</p>}
             <div className="transfer-actions">

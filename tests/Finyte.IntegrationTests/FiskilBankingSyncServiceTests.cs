@@ -56,6 +56,14 @@ public sealed class FiskilBankingSyncServiceTests
         Assert.Equal([account.Id], summary.AccountIds);
         Assert.Equal(postedAt, summary.MinChangedAt);
         Assert.Equal(postedAt, summary.MaxChangedAt);
+        client.Transactions = [client.Transactions.Single() with { PostedAt = postedAt.AddMonths(2) }];
+        var correction = await service.SyncTransactions(syncRun, CancellationToken.None);
+        Assert.Equal(postedAt, correction.MinChangedAt);
+        Assert.Equal(postedAt.AddMonths(2), correction.MaxChangedAt);
+        client.Transactions = [client.Transactions.Single() with { PostedAt = null, Status = "pending" }];
+        var unposted = await service.SyncTransactions(syncRun, CancellationToken.None);
+        Assert.Equal(postedAt.AddMonths(2), unposted.MinChangedAt);
+        Assert.Equal(postedAt.AddMonths(2), unposted.MaxChangedAt);
     }
 
     [Fact]
@@ -118,7 +126,7 @@ public sealed class FiskilBankingSyncServiceTests
     {
         public IReadOnlyCollection<FiskilAccountData> Accounts { get; init; } = [];
         public IReadOnlyCollection<FiskilBalanceData> Balances { get; init; } = [];
-        public IReadOnlyCollection<FiskilTransactionData> Transactions { get; init; } = [];
+        public IReadOnlyCollection<FiskilTransactionData> Transactions { get; set; } = [];
 
         public Task<IReadOnlyCollection<FiskilAccountData>> GetAccounts(string endUserId, CancellationToken cancellationToken)
         {

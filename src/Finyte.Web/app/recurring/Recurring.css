@@ -36,3 +36,25 @@
   .recurring-page .recurring-actions button { flex: 1 1 145px; justify-content: center; }
   .recurring-page .recurring-tabs button { flex: 1 1 140px; justify-content: center; }
 }
+
+.recurring-page .discovery-row { gap: 8px; padding: 16px 20px; }
+.discovery-row h2 { font-size: 16px; }
+.discovery-row .recurring-actions { justify-content: flex-end; }
+.calendar-grid { display: grid; grid-template-columns: repeat(7,minmax(0,1fr)); gap: 6px; }
+.calendar-weekday { text-align: center; color: #aab4b0; }
+.calendar-day { min-height: 110px; border: 1px solid #3e4945; border-radius: 6px; padding: 8px; min-width: 0; }
+.calendar-day time { display: block; font-size: 13px; margin-bottom: 8px; }
+.calendar-day time[aria-current] { color: #a7deca; font-weight: bold; }
+.recurring-page .calendar-payment { display: grid; text-align: left; width: 100%; background: #253a30; color: #d9eee2; gap: 3px; padding: 8px; margin-top: 6px; min-width: 0; }
+.calendar-payment strong, .calendar-payment span { font-size: 12px; }
+.calendar-mobile-month { display: none; }
+@media(max-width:700px) {
+  .calendar-grid { grid-template-columns: minmax(0,1fr); }
+  .calendar-weekday, .calendar-spacer, .calendar-empty { display: none; }
+  .calendar-day { min-height: auto; }
+  .calendar-mobile-month { display: inline; }
+  .recurring-page .calendar-payment { grid-template-columns: minmax(0,1fr) auto; }
+  .recurring-page .calendar-payment small { grid-column: 1 / -1; }
+}
+
+@media(min-width:701px) { .calendar-payment strong { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; } }

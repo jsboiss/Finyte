@@ -789,6 +789,7 @@ main {
   width: 124px;
 }
 
+
 .pie-chart span {
   color: #a7aaa8;
   font-size: 12px;
@@ -805,14 +806,14 @@ main {
   width: 100%;
 }
 
-.tag-list div {
+.tag-list > .tag-bucket-link {
   align-items: center;
   display: flex;
   gap: 12px;
   justify-content: space-between;
 }
 
-.tag-list span {
+.tag-bucket-link > span {
   align-items: center;
   color: #eeeeec;
   display: inline-flex;
@@ -820,7 +821,7 @@ main {
   min-width: 0;
 }
 
-.tag-list strong {
+.tag-bucket-link > strong {
   color: #eeeeec;
   white-space: nowrap;
 }
@@ -1150,14 +1151,18 @@ main {
 }
 
 .transaction-filter-checkbox {
-  align-items: center;
+  align-items: flex-start;
   display: flex;
   font-size: 14px;
-  gap: 8px;
+  gap: 10px;
+  cursor: pointer;
 }
 
 .transaction-filter-checkbox input {
-  width: auto;
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin: 2px 0 0;
 }
 
 .transaction-filter-submit {
@@ -2204,9 +2209,9 @@ td {
 }
 
 .import-form {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: end;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
   gap: 16px;
 }
 
