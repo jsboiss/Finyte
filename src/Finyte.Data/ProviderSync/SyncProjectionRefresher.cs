@@ -59,6 +59,7 @@ public sealed class SyncProjectionRefresher(
             return;
         }
 
+        await new Transfers.AutomaticTransferService(dbContext, projectionInvalidator).Reconcile(syncRun.TenantId, cancellationToken);
         var summary = MergeSummaries(syncRuns);
 
         if (summary.HasChanges)

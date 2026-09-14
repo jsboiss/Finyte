@@ -1,4 +1,4 @@
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown } from './Icons'
 import type { SelectHTMLAttributes } from 'react'
 
 export function AppSelect(props: SelectHTMLAttributes<HTMLSelectElement>) {

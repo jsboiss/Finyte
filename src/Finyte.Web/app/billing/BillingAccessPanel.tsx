@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { CreditCard } from 'lucide-react'
+import { CreditCard } from '../shared/Icons'
 import { useState } from 'react'
 import { formatDate } from '../shared/formatters'
 import { createCheckoutSession, createPortalSession, getBillingAccess } from './billingApi'

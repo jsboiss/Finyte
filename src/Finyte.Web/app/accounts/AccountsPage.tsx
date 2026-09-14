@@ -1,3 +1,4 @@
+import { Help } from '../shared/Help'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { isAxiosError } from 'axios'
@@ -20,12 +21,8 @@ export function AccountsPage() {
 
   return (
     <section className="page accounts-page">
-      <header className="page-header"><div><p>Family preferences</p><h1>Accounts</h1></div><Link to="/imports">Add an account</Link></header>
-      <section className="panel account-scope-help">
-        <h2>Choose how accounts appear in your finances</h2>
-        <p>Names and preferences are shared with your family and preserved during bank syncs. Classification suggests a default; you can independently include or exclude any account from combined spending and income.</p>
-        <p>Account balances always remain visible. Selecting one account on the dashboard shows its activity regardless of this preference, with confirmed transfers still excluded. Transactions and transfer review always include every account.</p>
-      </section>
+      <header className="page-header"><div><h1>Accounts</h1></div><Link to="/imports">Add an account</Link></header>
+      <Help title="Account preferences"><p>Names and preferences are shared with your household. Choose which accounts count in combined spending and income. Balances always include every account; viewing an account directly includes its activity.</p></Help>
       {saved && <p role="status">{saved}</p>}
       {accounts.isLoading && <p>Loading accounts…</p>}
       {accounts.isError && <p role="alert">Unable to load accounts. <button type="button" onClick={() => void accounts.refetch()}>Retry</button></p>}

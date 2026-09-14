@@ -1,6 +1,7 @@
+import { Help } from '../shared/Help'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import { RefreshCcw } from 'lucide-react'
+import { RefreshCcw } from '../shared/Icons'
 import { useMemo, useState } from 'react'
 import { getAccounts, type Account as AccountResponse } from '../accounts/accountsApi'
 import { BillingAccessPanel } from '../billing/BillingAccessPanel'
@@ -85,13 +86,10 @@ export function DashboardPage() {
       </div>
 
       <DashboardMetricGrid metrics={metrics} />
-      <p className="transfer-dashboard-note">Spending and income exclude confirmed internal transfers. Balances include all account movements. <Link to="/transfers">Review transfers</Link>.</p>
-      <p className="transfer-dashboard-note">
-        {accountId === null
-          ? `${accountsQuery.data?.filter(x => !x.includeInAnalytics).length ?? 0} accounts excluded from combined spending and income. Total balance includes every account.`
-          : 'Viewing this account directly includes its activity regardless of its combined spending preference.'}
-        {' '}<Link to="/accounts">Manage account preferences</Link>.
-      </p>
+      <Help title="About these totals"><p>Spending and income exclude matched internal transfers. Balances include all account movements.</p>
+        {accountId === null && (accountsQuery.data?.filter(x => !x.includeInAnalytics).length ?? 0) > 0 && <p>{accountsQuery.data?.filter(x => !x.includeInAnalytics).length} accounts excluded from combined spending and income.</p>}
+        <Link to="/accounts">Account preferences</Link>
+      </Help>
 
       <CashFlowRaceModule overview={overview} />
 

@@ -105,6 +105,8 @@ public sealed class TransactionFileImportService(FinyteDbContext dbContext, IPro
                 run.ImportedCount++;
             }
 
+            await dbContext.SaveChangesAsync(cancellationToken);
+            await new Transfers.AutomaticTransferService(dbContext, projectionInvalidator).Reconcile(tenantId, cancellationToken);
             run.TotalCount = transactions.Count;
             run.Status = "completed";
             run.CompletedAt = DateTimeOffset.UtcNow;

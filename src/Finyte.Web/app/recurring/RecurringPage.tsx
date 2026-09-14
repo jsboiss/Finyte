@@ -1,3 +1,5 @@
+import { RecurringCalendarView } from './RecurringCalendarView'
+import { Help } from '../shared/Help'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { getAccounts, type Account } from '../accounts/accountsApi'
@@ -9,7 +11,12 @@ const day = (offset = 0) => new Date(Date.now() + offset * 86_400_000).toISOStri
 
 export function RecurringPage() {
   const client = useQueryClient()
+  const [accountId, setAccountId] = useState('')
+  const [search, setSearch] = useState('')
+  const [cadence, setCadence] = useState('')
+  const [sort, setSort] = useState('name')
   const [view, setView] = useState('tracked')
+  const [selectedDate, setSelectedDate] = useState<string | undefined>()
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const [notice, setNotice] = useState('')
@@ -21,38 +28,35 @@ export function RecurringPage() {
   const refresh = async (message = '') => { setNotice(message); await client.invalidateQueries({ queryKey: ['recurring'] }) }
 
   return <section className="page recurring-page">
-    <header className="page-header recurring-heading"><div><p>Patterns you can explain</p><h1>Recurring payments</h1></div><button type="button" onClick={() => { setCreating(true); setSelectedId(null); setView('tracked'); setNotice('') }}>Add recurring payment</button></header>
-    <section className="panel">
-      <h2>A payment can change its name or price and still belong to the same series</h2>
-      <p className="recurring-muted">Track subscriptions and regular bills with a schedule and the billing names you recognise. Review each payment before counting it. A new name or changed amount stays visible for you to check.</p>
-      <details><summary>How matching works</summary><p>Discovery looks for at least three consecutive scheduled payments on the same account and currency. Each payment must fit its own date window. Prices can change; suggestions show the actual history.</p><p>Tracked payments use dates within three days of the original schedule. You can confirm a new billing name and choose to remember it. A recognised name is evidence, and every match still requires your review. Shared billing services such as Apple or PayPal may charge for several different products.</p><p>No matching payment means it has not been recorded here. Check bank syncs and imported statements before deciding that a subscription has stopped. Only you change its active, paused or cancelled state.</p></details>
-    </section>
+    <header className="page-header recurring-heading"><div><h1>Recurring payments</h1></div><button type="button" onClick={() => { setCreating(true); setSelectedId(null); setView('tracked'); setNotice('') }}>Add recurring payment</button></header>
+    <Help title="How recurring payments work"><p>Discover patterns from at least three payments, review the history, then track a series. Add a payment manually if you have less history. Each match stays available for review when its name or price changes.</p></Help>
     {notice && <p role="status" className="recurring-notice">{notice}</p>}
     {series.isError && <p role="alert">{recurringError(series.error)}</p>}
     {accounts.isError && <p role="alert">Unable to load accounts. <button type="button" onClick={() => void accounts.refetch()}>Retry accounts</button></p>}
     <div className="recurring-tabs" aria-label="Recurring payment views">
-      {[['tracked', 'Tracked payments'], ['discover', 'Discover patterns'], ['dismissed', 'Dismissed patterns']].map(([id, name]) => <button key={id} type="button" aria-pressed={view === id} onClick={() => { setView(id); setSelectedId(null); setCreating(false); setNotice('') }}>{name}</button>)}
+      {[['tracked', 'Tracked payments'], ['discover', 'Discover patterns'], ['calendar', 'Calendar'], ['dismissed', 'Dismissed patterns']].map(([id, name]) => <button key={id} type="button" aria-pressed={view === id} onClick={() => { setView(id); setSelectedId(null); setSelectedDate(undefined); setCreating(false); setNotice('') }}>{name}</button>)}
       <button className="secondary" disabled={series.isFetching} onClick={() => void refresh()} type="button">Refresh</button>
     </div>
     {creating && <SeriesEditor accounts={accounts.data ?? []} onCancel={() => setCreating(false)} onSaved={async created => { setCreating(false); setSelectedId(created.id); await refresh('Recurring payment created. Review its payment history below.') }} />}
     {view === 'tracked' && <>
-      <p className="recurring-muted">Next unpaid scheduled dates are checked from {overviewRange.from} through {overviewRange.to}. Open a series to review a different period.</p>
+
       {!selected && <>
         {(series.data?.costs.length ?? 0) > 0 && <section aria-label="Expected recurring costs"><div className="recurring-costs">{series.data?.costs.map(cost => <div className="recurring-cost" key={cost.currency}><span>{cost.currency} · {cost.activeSeriesCount} active series</span><strong>{money(cost.monthlyEstimate, cost.currency)} / month</strong><p className="recurring-muted">{money(cost.annualEstimate, cost.currency)} / year · Estimated from your expected amounts{cost.variableSeriesCount > 0 && `, including ${cost.variableSeriesCount} variable bills`}</p></div>)}</div><p className="recurring-muted">These are schedule estimates, not payments due in a particular month. Paused and cancelled series are excluded. Currencies stay separate.</p></section>}
         {series.isLoading && <p>Loading recurring payments…</p>}
-        {series.data?.items.length === 0 && !creating && <section className="panel"><h2>Start with a pattern or a payment you know</h2><p className="recurring-muted">Discover patterns in your imported or connected accounts, or add a regular bill yourself. You can track a series even when there is not enough history to detect it.</p><div className="recurring-actions"><button onClick={() => setView('discover')} type="button">Discover patterns</button></div></section>}
+        {series.data?.items.length === 0 && !creating && <section className="panel"><h2>Find your regular payments</h2><p className="recurring-muted">1. Find patterns. 2. Review the payments. 3. Track the series.</p><div className="recurring-actions"><button onClick={() => setView('discover')} type="button">Discover patterns</button></div></section>}
         <div className="recurring-list">{series.data?.items.map(item => <article className="panel" key={item.id}>
           <div className="recurring-heading"><div><h2>{item.name}</h2><p className="recurring-muted">{item.accountName} · {label(item.cadence)} · {money(item.expectedAmount, item.currency)} expected {item.amountMode === 'variable' && '· Variable bill'}</p></div><span className="recurring-status">{label(item.state)}</span></div>
           <p>{item.nextDueDate ? `Scheduled ${item.nextDueDate} · ${label(item.nextDueStatus)}` : label(item.nextDueStatus)}</p>
           {item.needsReviewCount > 0 && <p className="recurring-warning">{item.needsReviewCount} previous confirmations changed and need review.</p>}
-          <div className="recurring-actions"><button onClick={() => { setSelectedId(item.id); setCreating(false); setNotice('') }} type="button">Review {item.name}</button></div>
+          <div className="recurring-actions"><button onClick={() => { setSelectedId(item.id); setSelectedDate(undefined); setCreating(false); setNotice('') }} type="button">Review {item.name}</button></div>
         </article>)}</div>
       </>}
-      {selected && <SeriesDetail key={selected.id} series={selected} accounts={accounts.data ?? []} onBack={() => setSelectedId(null)} onChanged={refresh} />}
+      {selected && <SeriesDetail key={`${selected.id}-${selectedDate ?? ""}`} series={selected} initialDate={selectedDate} accounts={accounts.data ?? []} onBack={() => setSelectedId(null)} onChanged={refresh} />}
     </>}
-    {view !== 'tracked' && <>
-      <section className="panel"><h2>Search your payment history</h2><p className="recurring-muted">By default, discovery uses accounts included in combined spending and income. Choose a range up to five years. Three years helps reveal annual payments; a shorter range makes a busy account easier to review.</p><RangeEditor range={range} onChange={setRange} /></section>
-      <DiscoveryList key={`${view}-${range.from}-${range.to}`} range={range} dismissed={view === 'dismissed'} accounts={accounts.data ?? []} onTracked={async item => { setView('tracked'); setSelectedId(item.id); await refresh('Series tracked with the payments you selected.') }} onChanged={refresh} />
+    {view === 'calendar' && <RecurringCalendarView series={series.data?.items ?? []} onSelect={(id, date) => { setSelectedId(id); setSelectedDate(date); setView('tracked') }} />}
+    {(view === 'discover' || view === 'dismissed') && <>
+      <section className="panel"><h2>Search your payment history</h2><Help><p className="recurring-muted">By default, discovery uses accounts included in combined spending and income. Choose a range up to five years. Three years helps reveal annual payments; a shorter range makes a busy account easier to review.</p></Help><div className="recurring-form-grid"><label>Account<select value={accountId} onChange={event => setAccountId(event.target.value)}><option value="">All included accounts</option>{accounts.data?.map(account => <option key={account.id} value={account.id}>{account.name}</option>)}</select></label><label>Find a pattern<input type="search" maxLength={120} value={search} onChange={event => setSearch(event.target.value)} placeholder="Billing name" /></label></div><details><summary>Dates, frequency and sort</summary><div className="recurring-form-grid"><label>Frequency<select value={cadence} onChange={event => setCadence(event.target.value)}><option value="">All frequencies</option>{cadences.map(item => <option key={item} value={item}>{label(item)}</option>)}</select></label><label>Sort<select value={sort} onChange={event => setSort(event.target.value)}><option value="name">Name</option><option value="amount">Amount within currency</option></select></label></div><RangeEditor range={range} onChange={setRange} /></details><small className="recurring-muted">{range.from} – {range.to}{cadence && ` · ${label(cadence)}`}</small></section>
+      <DiscoveryList key={`${view}-${range.from}-${range.to}-${accountId}-${search}-${cadence}-${sort}`} accountId={accountId} search={search} cadence={cadence} sort={sort} range={range} dismissed={view === 'dismissed'} accounts={accounts.data ?? []} onTracked={async item => { setView('tracked'); setSelectedId(item.id); await refresh('Series tracked with the payments you selected.') }} onChanged={refresh} />
     </>}
   </section>
 }
@@ -90,42 +94,40 @@ function SeriesEditor({ series, discovery, accounts, onCancel, onSaved }: { seri
       {series && <label>State<select value={state} onChange={event => setState(event.target.value)}>{['active', 'paused', 'cancelled'].map(item => <option key={item} value={item}>{item}</option>)}</select></label>}
       {!series && <><label>Recognise this field<select value={aliasField} onChange={event => setAliasField(event.target.value as AliasField)}><option value="merchant">Merchant name</option><option value="description">Full description</option></select></label><label>Approved billing name (optional)<input maxLength={512} value={alias} onChange={event => setAlias(event.target.value)} /></label></>}
     </fieldset>
-    <p className="recurring-muted">The anchor is the first scheduled date to track. An anchor on the last day of a month repeats at month end; other days return to their original day after a short month. Late postings do not move the schedule. Expected amounts remain under your control when prices change.</p>
-    {series && <p className="recurring-muted">Changing the schedule can make previous confirmations need review. Pausing or cancelling preserves payment history. To move accounts, create a separate series for the new account.</p>}
+    <Help><p className="recurring-muted">The anchor is the first scheduled date to track. An anchor on the last day of a month repeats at month end; other days return to their original day after a short month. Late postings do not move the schedule. Expected amounts remain under your control when prices change.</p></Help>
+    {series && <Help><p className="recurring-muted">Changing the schedule can make previous confirmations need review. Pausing or cancelling preserves payment history. To move accounts, create a separate series for the new account.</p></Help>}
     {discovery && <div className="recurring-ledger"><h3>Confirm the payments that belong together</h3>{discovery.transactions.map(item => <label className="recurring-payment" key={item.snapshot.id}><span className="recurring-check"><input type="checkbox" checked={historyIds.has(item.snapshot.id)} onChange={event => setHistoryIds(previous => { const next = new Set(previous); if (event.target.checked) { next.add(item.snapshot.id) } else { next.delete(item.snapshot.id) } return next })} />Include payment for {item.occurrenceDate}</span><SnapshotView snapshot={item.snapshot} /></label>)}</div>}
     {mutation.error && <p role="alert">{recurringError(mutation.error)}</p>}
     <div className="recurring-actions"><button disabled={mutation.isPending || (!series && !accountId)} type="submit">{mutation.isPending ? 'Saving…' : series ? 'Save changes' : discovery ? `Track and confirm ${historyIds.size} payments` : 'Create series'}</button><button type="button" className="secondary" disabled={mutation.isPending} onClick={onCancel}>Cancel</button></div>
   </form>
 }
 
-function DiscoveryList({ range, dismissed, accounts, onTracked, onChanged }: { range: Range; dismissed: boolean; accounts: Account[]; onTracked: (item: Series) => Promise<void>; onChanged: (message?: string) => Promise<void> }) {
+function DiscoveryList({ range, dismissed, accounts, onTracked, onChanged, accountId, search, cadence, sort }: { accountId: string; search: string; cadence: string; sort: string; range: Range; dismissed: boolean; accounts: Account[]; onTracked: (item: Series) => Promise<void>; onChanged: (message?: string) => Promise<void> }) {
   const [page, setPage] = useState(1)
   const [selected, setSelected] = useState<string | null>(null)
-  const discovery = useQuery({ queryKey: ['recurring', 'discovery', range, dismissed, page], queryFn: () => httpClient<Page<Discovery>>({ url: `${recurringUrl}/discovery`, params: { ...range, dismissed, page, pageSize: 10 } }), enabled: Boolean(range.from && range.to) })
+  const discovery = useQuery({ queryKey: ['recurring', 'discovery', range, dismissed, page, accountId, search, cadence, sort], queryFn: () => httpClient<Page<Discovery>>({ url: `${recurringUrl}/discovery`, params: { ...range, dismissed, page, pageSize: 10, accountId: accountId || undefined, search: search || undefined, cadence: cadence || undefined, sort } }), enabled: Boolean(range.from && range.to) })
   const decision = useMutation({ mutationFn: (candidateKey: string) => httpClient<void>({ method: 'POST', url: `${recurringUrl}/discovery/decisions`, data: { candidateKey, action: dismissed ? 'reset' : 'dismiss' } }), onSuccess: async () => { setPage(1); await onChanged(dismissed ? 'Pattern returned to discovery.' : 'Pattern dismissed. You can restore it from Dismissed patterns.') } })
   return <div className="recurring-list">
     {discovery.isLoading && <p>Looking for recurring patterns…</p>}
     {discovery.error && <p role="alert">{recurringError(discovery.error)}</p>}
     {decision.error && <p role="alert">{recurringError(decision.error)}</p>}
-    {discovery.data?.totalCount === 0 && <section className="panel"><h2>{dismissed ? 'No dismissed patterns in this range' : 'No recurring patterns found in this range'}</h2><p className="recurring-muted">A changing billing name, missing history or several charges on similar dates can prevent discovery. You can add a recurring payment yourself and review transactions around its schedule.</p></section>}
-    {discovery.data?.items.map(item => <article className="panel" key={`${item.key}-${item.transactions[0]?.snapshot.id}`}>
-      <div className="recurring-heading"><div><h2>{item.name}</h2><p className="recurring-muted">{item.accountName} · {label(item.cadence)} · Latest observed {money(item.expectedAmount, item.currency)}</p></div><span className="recurring-status">{dismissed ? 'Dismissed pattern' : 'Pattern for review'}</span></div>
-      <Evidence items={item.evidence} />
-      {selected === `${item.key}-${item.transactions[0]?.snapshot.id}` ? <SeriesEditor discovery={item} accounts={accounts} onCancel={() => setSelected(null)} onSaved={onTracked} /> : <>
-        <details><summary>View {item.transactions.length} payments</summary><div className="recurring-ledger">{item.transactions.map(payment => <div className="recurring-payment" key={payment.snapshot.id}><SnapshotView snapshot={payment.snapshot} /></div>)}</div></details>
-        <div className="recurring-actions">{!dismissed && <button type="button" onClick={() => setSelected(`${item.key}-${item.transactions[0]?.snapshot.id}`)}>Review and track</button>}<button type="button" className="secondary" disabled={decision.isPending} onClick={() => decision.mutate(item.key)}>{dismissed ? 'Return to discovery' : 'Dismiss pattern'}</button></div>
-      </>}
+    {discovery.data?.totalCount === 0 && <section className="panel"><h2>{dismissed ? 'No dismissed patterns in this range' : 'No recurring patterns found in this range'}</h2><Help><p className="recurring-muted">A changing billing name, missing history or several charges on similar dates can prevent discovery. You can add a recurring payment yourself and review transactions around its schedule.</p></Help></section>}
+    {discovery.data?.items.map(item => <article className="panel discovery-row" key={`${item.key}-${item.transactions[0]?.snapshot.id}`}>
+      <div className="recurring-heading"><div><h2>{item.name}</h2><p className="recurring-muted">{item.accountName} · {label(item.cadence)} · {money(item.expectedAmount, item.currency)}</p></div>
+        {selected !== `${item.key}-${item.transactions[0]?.snapshot.id}` && <div className="recurring-actions">{!dismissed && <button type="button" onClick={() => setSelected(`${item.key}-${item.transactions[0]?.snapshot.id}`)}>Review and track</button>}<button type="button" className="secondary" disabled={decision.isPending} onClick={() => decision.mutate(item.key)}>{dismissed ? 'Restore' : 'Dismiss'}</button></div>}
+      </div>
+      {selected === `${item.key}-${item.transactions[0]?.snapshot.id}` ? <SeriesEditor discovery={item} accounts={accounts} onCancel={() => setSelected(null)} onSaved={onTracked} /> : <details><summary>Evidence · {item.transactions.length} payments</summary><Evidence items={item.evidence} /><div className="recurring-ledger">{item.transactions.map(payment => <div className="recurring-payment" key={payment.snapshot.id}><SnapshotView snapshot={payment.snapshot} /></div>)}</div></details>}
     </article>)}
     <Pager data={discovery.data} loading={discovery.isFetching} onPage={setPage} />
   </div>
 }
 
-function SeriesDetail({ series, accounts, onBack, onChanged }: { series: Series; accounts: Account[]; onBack: () => void; onChanged: (message?: string) => Promise<void> }) {
+function SeriesDetail({ series, accounts, onBack, onChanged, initialDate }: { initialDate?: string; series: Series; accounts: Account[]; onBack: () => void; onChanged: (message?: string) => Promise<void> }) {
   const [editing, setEditing] = useState(false)
   const [view, setView] = useState('candidates')
-  const [range, setRange] = useState<Range>(() => ({ from: day(-100), to: day(35) }))
+  const [range, setRange] = useState<Range>(() => initialDate ? { from: new Date(Date.parse(initialDate) - 3 * 86400000).toISOString().slice(0, 10), to: new Date(Date.parse(initialDate) + 3 * 86400000).toISOString().slice(0, 10) } : { from: day(-100), to: day(35) })
   const [page, setPage] = useState(1)
-  const [occurrenceDate, setOccurrenceDate] = useState('')
+  const [occurrenceDate, setOccurrenceDate] = useState(initialDate ?? '')
   const occurrences = useQuery({ queryKey: ['recurring', series.id, 'occurrences', range], queryFn: () => httpClient<{ items: Occurrence[] }>({ url: `${recurringUrl}/${series.id}/occurrences`, params: range }), enabled: Boolean(range.from && range.to) })
   const candidates = useQuery({ queryKey: ['recurring', series.id, 'candidates', range, occurrenceDate, page], queryFn: () => httpClient<Page<Candidate>>({ url: `${recurringUrl}/${series.id}/transactions`, params: { ...range, occurrenceDate: occurrenceDate || undefined, page, pageSize: 10 } }), enabled: view === 'candidates' && Boolean(range.from && range.to) })
   const history = useQuery({ queryKey: ['recurring', series.id, 'history', page], queryFn: () => httpClient<Page<Review>>({ url: `${recurringUrl}/${series.id}/history`, params: { page, pageSize: 10 } }), enabled: view === 'history' })
@@ -142,11 +144,11 @@ function SeriesDetail({ series, accounts, onBack, onChanged }: { series: Series;
     <section className="panel"><div className="recurring-heading"><div><h2>{series.name}</h2><p className="recurring-muted">{series.accountName} · {money(series.expectedAmount, series.currency)} expected · {label(series.cadence)} · {series.state}</p></div><button type="button" className="secondary" onClick={() => setEditing(!editing)}>{editing ? 'Close editor' : 'Edit schedule and amount'}</button></div>
       {series.needsReviewCount > 0 && <p className="recurring-warning">{series.needsReviewCount} {series.needsReviewCount === 1 ? 'confirmation needs' : 'confirmations need'} review. Changed transactions are excluded from recorded payments until reviewed again.</p>}
       {editing && <SeriesEditor key={`${series.id}-${series.version}`} series={series} accounts={accounts} onCancel={() => setEditing(false)} onSaved={async () => { setEditing(false); await onChanged('Recurring payment updated.') }} />}
-      <details><summary>Recognised billing names ({series.aliases.length})</summary><p className="recurring-muted">Names are compared in their chosen field, ignoring punctuation and letter case. Confirm a payment and choose “remember” to add another name. Shared billing services still need careful review.</p><div className="recurring-ledger">{series.aliases.map(alias => <div className="recurring-heading recurring-payment" key={alias.id}><span>{alias.field}: {alias.value}</span><button type="button" className="secondary" disabled={busy} onClick={() => aliasRemoval.mutate(alias.id)}>Remove {alias.value}</button></div>)}</div></details>
+      <details><summary>Recognised billing names ({series.aliases.length})</summary><Help><p className="recurring-muted">Names are compared in their chosen field, ignoring punctuation and letter case. Confirm a payment and choose “remember” to add another name. Shared billing services still need careful review.</p></Help><div className="recurring-ledger">{series.aliases.map(alias => <div className="recurring-heading recurring-payment" key={alias.id}><span>{alias.field}: {alias.value}</span><button type="button" className="secondary" disabled={busy} onClick={() => aliasRemoval.mutate(alias.id)}>Remove {alias.value}</button></div>)}</div></details>
     </section>
     {action.error && <p role="alert">{recurringError(action.error)}</p>}
     {aliasRemoval.error && <p role="alert">{recurringError(aliasRemoval.error)}</p>}
-    <section className="panel"><h2>Scheduled payments</h2><RangeEditor range={range} onChange={value => { setRange(value); setPage(1); setOccurrenceDate('') }} /><p className="recurring-muted">Each window is three days either side of the scheduled date. “No payment found” may mean that account history is incomplete. Payment candidates require your confirmation.</p>
+    <section className="panel"><h2>Scheduled payments</h2><RangeEditor range={range} onChange={value => { setRange(value); setPage(1); setOccurrenceDate('') }} /><Help><p className="recurring-muted">Each window is three days either side of the scheduled date. “No payment found” may mean that account history is incomplete. Payment candidates require your confirmation.</p></Help>
       {occurrences.error && <p role="alert">{recurringError(occurrences.error)}</p>}
       {occurrences.isLoading && <p>Loading schedule…</p>}
       <div className="recurring-occurrences">{occurrences.data?.items.map(item => <div className="recurring-occurrence" key={item.date}><strong>{item.date}</strong><span className={`recurring-status ${item.status === 'needs-review' ? 'recurring-warning' : ''}`}>{label(item.status)}</span><p>{item.paidAmount !== null ? `${money(item.paidAmount, series.currency)} recorded` : `${money(item.expectedAmount, series.currency)} expected`}</p><small className="recurring-muted">{item.windowFrom} – {item.windowTo}</small><button type="button" className="secondary" onClick={() => { setOccurrenceDate(item.date); setView('candidates'); setPage(1) }}>Review this window</button></div>)}</div>
@@ -154,14 +156,14 @@ function SeriesDetail({ series, accounts, onBack, onChanged }: { series: Series;
     </section>
     <div className="recurring-tabs"><button type="button" aria-pressed={view === 'candidates'} onClick={() => { setView('candidates'); setPage(1) }}>Payment candidates</button><button type="button" aria-pressed={view === 'history'} onClick={() => { setView('history'); setPage(1) }}>Review history</button></div>
     {view === 'candidates' ? <>
-      <section className="panel"><h2>{occurrenceDate ? `Payments around ${occurrenceDate}` : 'Review account transactions'}</h2><p className="recurring-muted">Suggestions are ranked across the full selected period before paging. Stronger billing-name evidence appears first; possible name changes and competing matches are explained. Confidence is a review aid, not a guarantee. Every payment still needs your confirmation.</p>{occurrenceDate && <div className="recurring-actions"><button type="button" className="secondary" onClick={() => { setOccurrenceDate(''); setPage(1) }}>Show all account transactions in range</button></div>}</section>
+      <section className="panel"><h2>{occurrenceDate ? `Payments around ${occurrenceDate}` : 'Review account transactions'}</h2><Help><p className="recurring-muted">Suggestions are ranked across the full selected period before paging. Stronger billing-name evidence appears first; possible name changes and competing matches are explained. Confidence is a review aid, not a guarantee. Every payment still needs your confirmation.</p></Help>{occurrenceDate && <div className="recurring-actions"><button type="button" className="secondary" onClick={() => { setOccurrenceDate(''); setPage(1) }}>Show all account transactions in range</button></div>}</section>
       {candidates.error && <p role="alert">{recurringError(candidates.error)}</p>}
       {candidates.isLoading && <p>Loading payment candidates…</p>}
       {candidates.data?.totalCount === 0 && <p>No eligible payment candidates in this range. Import more history or check the scheduled date.</p>}
       {candidates.data?.items.map(item => <CandidateCard key={`${item.snapshot.id}-${item.decisionStatus}-${series.version}`} candidate={item} occurrences={occurrences.data?.items ?? []} busy={busy} seriesId={series.id} onReview={review} />)}
       <Pager data={candidates.data} loading={candidates.isFetching} onPage={setPage} />
     </> : <>
-      <p className="recurring-muted">All review events, across all dates. Past evidence is preserved alongside the current transaction. Reset or exclude a current confirmation to move a payment to another series.</p>
+      <Help><p className="recurring-muted">All review events, across all dates. Past evidence is preserved alongside the current transaction. Reset or exclude a current confirmation to move a payment to another series.</p></Help>
       {history.error && <p role="alert">{recurringError(history.error)}</p>}
       {history.isLoading && <p>Loading review history…</p>}
       {history.data?.totalCount === 0 && <p>No payments reviewed yet.</p>}

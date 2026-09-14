@@ -1,9 +1,11 @@
+import { Drawer } from './shared/Drawer'
+import { Help } from './shared/Help'
 import { CreateOrganization, OrganizationSwitcher, SignIn, UserButton, useAuth, useOrganization } from '@clerk/react'
 import { link, type LinkError } from '@fiskil/link'
 import { QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { createRootRoute, createRoute, createRouter, Link, Outlet, RouterProvider, useRouterState } from '@tanstack/react-router'
+import { createRootRoute, createRoute, createRouter, Link, Outlet, RouterProvider, redirect, useNavigate, useSearch, useRouterState } from '@tanstack/react-router'
 import { createColumnHelper, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table'
-import { Activity, Banknote, CreditCard, Home, Mail, Menu, Plus, ReceiptText, Settings, Shield, SlidersHorizontal, Tags, Trash2, UserPlus, Users, X } from 'lucide-react'
+import { CalendarDays, Upload, Activity, Banknote, CreditCard, Home, Mail, Menu, Plus, ReceiptText, Settings, Shield, SlidersHorizontal, Tags, Trash2, UserPlus, Users, X } from './shared/Icons'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { getAccounts, getAppStatus } from './api/generated/finyteApi'
 import { AccountsPage } from './accounts/AccountsPage'
@@ -13,7 +15,7 @@ import { AuthTokenProvider } from './auth/AuthTokenProvider'
 import { BillingPage } from './billing/BillingAccessPanel'
 import { DashboardPage } from './dashboard/DashboardPage'
 import { ImportsPage } from './imports/ImportsPage'
-import { TransfersPage } from './transfers/TransfersPage'
+import { TransferCorrections } from './transfers/TransferCorrections'
 import { PayCyclesPage } from './pay-cycles/PayCyclesPage'
 import { RecurringPage } from './recurring/RecurringPage'
 import { TransactionAccountChip, TransactionAmount } from './transactions/TransactionCard'
@@ -23,6 +25,7 @@ import { TransactionFilterForm } from './transactions/TransactionFilters'
 import { defaultTransactionFilters, transactionSearchParams, type TransactionFilters } from './transactions/transactionSearch'
 import type { Transaction, TransactionPage, TransactionTag } from './transactions/types'
 import './App.css'
+import './shared/ux.css'
 
 type MerchantTagRule = {
   id: string
@@ -180,20 +183,20 @@ function SignedInShell() {
           <span>{getPageTitle(pathname)}</span>
         </div>
         <button
-          aria-controls="app-sidebar"
+          aria-controls="mobile-navigation"
           aria-expanded={isMenuOpen}
           aria-label="Open navigation menu"
           className="mobile-menu-button"
           onClick={() => setIsMenuOpen(true)}
           type="button"
         >
-          <Menu aria-hidden="true" className="mobile-menu-icon" size={32} strokeWidth={2.6} />
+          <Menu aria-hidden="true" className="mobile-menu-icon" size={24} />
         </button>
       </header>
 
-      {isMenuOpen && <button aria-label="Close navigation menu" className="nav-backdrop" onClick={closeMenu} type="button" />}
+      {isMenuOpen && <Drawer title="Navigation" onClose={closeMenu}><nav id="mobile-navigation" className="mobile-nav-links"><AppNavLinks onNavigate={closeMenu} /></nav><AuthControls /></Drawer>}
 
-      <aside className={isMenuOpen ? 'sidebar is-open' : 'sidebar'} id="app-sidebar">
+      <aside className="sidebar" id="app-sidebar">
         <div className="sidebar-header">
           <div className="brand">
             <Banknote aria-hidden="true" />
@@ -213,51 +216,19 @@ function SignedInShell() {
 }
 
 function AppNavLinks({ onNavigate }: { onNavigate?: () => void }) {
-  return (
-    <>
-      <Link to="/" activeProps={{ className: 'active' }} onClick={onNavigate}>
-        <Home aria-hidden="true" />
-        Dashboard
-      </Link>
-      <Link to="/transactions" activeProps={{ className: 'active' }} onClick={onNavigate}>
-        <ReceiptText aria-hidden="true" />
-        Transactions
-      </Link>
-      <Link to="/connections" activeProps={{ className: 'active' }} onClick={onNavigate}>
-        <Activity aria-hidden="true" />
-        Connections
-      </Link>
-      <Link to="/accounts" activeProps={{ className: 'active' }} onClick={onNavigate}>
-        <Banknote aria-hidden="true" />
-        Accounts
-      </Link>
-      <Link to="/billing" activeProps={{ className: 'active' }} onClick={onNavigate}>
-        <CreditCard aria-hidden="true" />
-        Billing
-      </Link>
-      <Link to="/imports" activeProps={{ className: 'active' }} onClick={onNavigate}>
-        <ReceiptText aria-hidden="true" />
-        Imports
-      </Link>
-      <Link to="/transfers" activeProps={{ className: 'active' }} onClick={onNavigate}>
-        <Activity aria-hidden="true" />
-        Transfers
-      </Link>
-      <Link to="/pay-cycles" activeProps={{ className: 'active' }} onClick={onNavigate}>
-        <Banknote aria-hidden="true" />
-        Pay cycles
-      </Link>
-      <Link to="/settings" activeProps={{ className: 'active' }} onClick={onNavigate}>
-        <Settings aria-hidden="true" />
-        Settings
-      </Link>
-      <Link to="/budgets" activeProps={{ className: 'active' }} onClick={onNavigate}><Banknote aria-hidden="true" />Budgets</Link>
-      <Link to="/recurring" activeProps={{ className: 'active' }} onClick={onNavigate}>
-        <ReceiptText aria-hidden="true" />
-        Recurring payments
-      </Link>
-    </>
-  )
+  return <>
+    <span className="nav-group-label">Everyday</span>
+    <Link to="/" activeProps={{ className: 'active' }} onClick={onNavigate}><Home />Dashboard</Link>
+    <Link to="/transactions" activeProps={{ className: 'active' }} onClick={onNavigate}><ReceiptText />Transactions</Link>
+    <Link to="/accounts" activeProps={{ className: 'active' }} onClick={onNavigate}><Banknote />Accounts</Link>
+    <span className="nav-group-label">Planning</span>
+    <Link to="/budgets" activeProps={{ className: 'active' }} onClick={onNavigate}><Banknote />Budgets</Link>
+    <Link to="/pay-cycles" activeProps={{ className: 'active' }} onClick={onNavigate}><Banknote />Pay cycles</Link>
+    <Link to="/recurring" activeProps={{ className: 'active' }} onClick={onNavigate}><CalendarDays />Recurring payments</Link>
+    <span className="nav-group-label">Management</span>
+    <Link to="/imports" activeProps={{ className: 'active' }} onClick={onNavigate}><Upload />Imports</Link>
+    <Link to="/settings" activeProps={{ className: 'active' }} onClick={onNavigate}><Settings />Settings</Link>
+  </>
 }
 
 function getPageTitle(pathname: string) {
@@ -272,9 +243,6 @@ function getPageTitle(pathname: string) {
   }
   if (pathname.startsWith('/accounts')) {
     return 'Accounts'
-  }
-  if (pathname.startsWith('/transfers')) {
-    return 'Transfers'
   }
   if (pathname.startsWith('/imports')) {
     return 'Imports'
@@ -349,6 +317,8 @@ async function provisionFamily(name: string) {
 }
 
 function TransactionsPage() {
+  const { transferView } = useSearch({ from: '/transactions' })
+  const navigate = useNavigate({ from: '/transactions' })
   const [transactionSearch, setTransactionSearch] = useState({ page: 1, filters: defaultTransactionFilters })
   const [showFilters, setShowFilters] = useState(false)
   const [showTagManagement, setShowTagManagement] = useState(false)
@@ -492,7 +462,7 @@ function TransactionsPage() {
       cell: x => (
         <div className="transaction-description">
           <strong>{x.getValue()}</strong>
-          {x.row.original.isInternalTransfer && <Link className="transfer-badge" to="/transfers" search={{ view: 'confirmed' }}>Internal transfer · excluded from totals</Link>}
+          {x.row.original.isInternalTransfer && <Link className="transfer-badge" to="/transactions" search={{ transferView: 'confirmed' }}>Internal transfer · excluded from totals</Link>}
           <span>{x.row.original.merchantName ?? ''}</span>
         </div>
       ),
@@ -541,7 +511,6 @@ function TransactionsPage() {
     <section className="page transactions-page">
       <header className="page-header transactions-header">
         <div>
-          <p>Ledger</p>
           <h1>Transactions</h1>
         </div>
         <div className="transactions-actions">
@@ -612,8 +581,8 @@ function TransactionsPage() {
                 <h2>Merchant tag rules</h2>
               </div>
             </div>
-            <p className="tag-rule-help">Rules apply to existing and future transactions from every source. Matching ignores case and punctuation, and matches whole words at the start of the merchant name (or description when no merchant is supplied). For example, “Coles” includes “Coles 4568”.</p>
-            <p className="tag-rule-help">Editing or deleting a rule updates automatic tags. Manual tags and tags with an unknown original source stay. Removing a tag from one transaction prevents a rule from adding it back.</p>
+            <Help><p className="tag-rule-help">Rules apply to existing and future transactions from every source. Matching ignores case and punctuation, and matches whole words at the start of the merchant name (or description when no merchant is supplied). For example, “Coles” includes “Coles 4568”.</p></Help>
+            <Help><p className="tag-rule-help">Editing or deleting a rule updates automatic tags. Manual tags and tags with an unknown original source stay. Removing a tag from one transaction prevents a rule from adding it back.</p></Help>
             <div className="merchant-rule-form">
               <input aria-label="Merchant rule name" maxLength={256} onChange={x => setMerchantName(x.target.value)} placeholder="Merchant name" value={merchantName} />
               <select aria-label="Merchant rule tag" onChange={x => setMerchantTagId(x.target.value)} value={merchantTagId}>
@@ -644,16 +613,18 @@ function TransactionsPage() {
         </section>
       )}
 
+      <Help title="Transfer matching"><p>Transfers between your accounts are matched automatically.</p><button type="button" onClick={() => void navigate({ search: { transferView: 'confirmed' } })}>Correct a transfer match</button></Help>
+      {transferView && <Drawer title="Transfer matching" onClose={() => void navigate({ search: {} })}><TransferCorrections initialView={transferView} /></Drawer>}
       {showFilters && (
-        <TransactionFilterForm
+        <Drawer title="Transaction filters" onClose={() => setShowFilters(false)}><TransactionFilterForm
           key={JSON.stringify(filters)}
           filters={filters}
           accounts={accountsQuery.data ?? []}
           tags={tagsQuery.data ?? []}
-          onApply={nextFilters => setTransactionSearch({ page: 1, filters: nextFilters })}
-        />
+          onApply={nextFilters => { setTransactionSearch({ page: 1, filters: nextFilters }); setShowFilters(false) }}
+        /></Drawer>
       )}
-      {hasFilters && <p className="transaction-search-summary">Filters applied across all transaction history.</p>}
+      {hasFilters && <p className="transaction-search-summary">Active filters: {Object.entries(filters).filter(([key, value]) => key !== 'sort' && key !== 'tagMatch' && (Array.isArray(value) ? value.length > 0 : Boolean(value))).map(([key, value]) => `${key}: ${key === 'accountId' ? accountsQuery.data?.find(x => x.id === value)?.name ?? 'Account' : Array.isArray(value) ? `${value.length} selected` : value}`).join(' · ')}</p>}
       {transactionsQuery.isError && (
         <p role="alert">Transactions could not be loaded. Check your filters and <button className="secondary-button" type="button" onClick={() => transactionsQuery.refetch()}>Try again</button>.</p>
       )}
@@ -887,7 +858,6 @@ function ConnectionsPage() {
     <section className="page">
       <header className="page-header">
         <div>
-          <p>Provider access</p>
           <h1>Connections</h1>
         </div>
       </header>
@@ -1019,10 +989,10 @@ function SettingsPage() {
     <section className="page family-settings-page">
       <header className="page-header family-page-header">
         <div>
-          <p>Household</p>
           <h1>{family?.name ?? 'Family settings'}</h1>
         </div>
       </header>
+      <nav className="settings-links" aria-label="Account settings"><Link to="/billing"><CreditCard />Finyte billing</Link><Link to="/connections"><Activity />Bank connections</Link></nav>
       {familyQuery.isLoading && <section className="panel"><p>Loading family…</p></section>}
       {familyQuery.isError && <section className="panel"><p role="alert">Unable to load family settings.</p></section>}
       {family?.isDevelopment && (
@@ -1190,7 +1160,11 @@ function getReadableTextColor(backgroundColor: string) {
 const rootRoute = createRootRoute({ component: DashboardShell })
 const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', component: DashboardPage })
 const connectionsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/connections', component: ConnectionsPage })
-const transactionsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/transactions', component: TransactionsPage })
+const transactionsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/transactions', component: TransactionsPage,
+  validateSearch: (search: Record<string, unknown>): { transferView?: string } => ({
+    transferView: typeof search.transferView === 'string' && ['suggested', 'confirmed', 'dismissed', 'needs-review'].includes(search.transferView) ? search.transferView : undefined,
+  }),
+})
 const billingRoute = createRoute({ getParentRoute: () => rootRoute, path: '/billing', component: BillingPage })
 const settingsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings', component: SettingsPage })
 const importsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/imports', component: ImportsPage })
@@ -1199,7 +1173,8 @@ const payCyclesRoute = createRoute({ getParentRoute: () => rootRoute, path: '/pa
 const budgetsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/budgets', component: BudgetsPage })
 const recurringRoute = createRoute({ getParentRoute: () => rootRoute, path: '/recurring', component: RecurringPage })
 const transfersRoute = createRoute({
-  getParentRoute: () => rootRoute, path: '/transfers', component: TransfersPage,
+  getParentRoute: () => rootRoute, path: '/transfers',
+  beforeLoad: ({ search }) => { throw redirect({ to: '/transactions', search: { transferView: search.view ?? 'confirmed' }, replace: true }) },
   validateSearch: (search: Record<string, unknown>): { view?: string } => ({
     view: typeof search.view === 'string' && ['suggested', 'confirmed', 'dismissed', 'needs-review'].includes(search.view) ? search.view : undefined,
   }),

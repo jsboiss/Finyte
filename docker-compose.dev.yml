@@ -1,0 +1,50 @@
+name: finyte-sample-dev
+services:
+  api:
+    build:
+      context: .
+      dockerfile: src/Finyte.Api/Dockerfile
+      provenance: false
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__Finyte: Host=host.docker.internal;Port=5433;Database=finyte_recurring_samples;Username=finyte;Password=finyte_dev_password
+      Database__MigrateOnStartup: "true"
+      DevData__SeedOnStartup: "false"
+      Temporal__Enabled: "true"
+      Temporal__Address: host.docker.internal:7233
+      Temporal__Namespace: default
+      Temporal__TaskQueue: finyte-recurring-samples
+    ports:
+      - "127.0.0.1:5086:8080"
+    restart: unless-stopped
+  worker:
+    build:
+      context: .
+      dockerfile: src/Finyte.Worker/Dockerfile
+      provenance: false
+    environment:
+      ConnectionStrings__Finyte: Host=host.docker.internal;Port=5433;Database=finyte_recurring_samples;Username=finyte;Password=finyte_dev_password
+      Temporal__Enabled: "true"
+      Temporal__Address: host.docker.internal:7233
+      Temporal__Namespace: default
+      Temporal__TaskQueue: finyte-recurring-samples
+      Logging__LogLevel__Microsoft.EntityFrameworkCore.Database.Command: Warning
+    restart: unless-stopped
+  client:
+    build:
+      context: .
+      dockerfile: src/Finyte.Web/Dockerfile.dev
+      provenance: false
+    environment:
+      VITE_DEV_AUTH: "true"
+      FINYTE_API_PROXY_TARGET: http://api:8080
+      CHOKIDAR_USEPOLLING: "true"
+    volumes:
+      - ./src/Finyte.Web/app:/app/app:ro
+      - ./src/Finyte.Web/public:/app/public:ro
+      - ./src/Finyte.Web/config:/app/config:ro
+      - ./src/Finyte.Web/index.html:/app/index.html:ro
+    ports:
+      - "127.0.0.1:5186:5186"
+    restart: unless-stopped

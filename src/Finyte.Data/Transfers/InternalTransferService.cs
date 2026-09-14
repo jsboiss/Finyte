@@ -15,7 +15,7 @@ public sealed class InternalTransferService(FinyteDbContext dbContext, IProjecti
         if (status == "suggested")
         {
             // Keep confirmed legs reserved even when stale, until the user releases or reviews the pair.
-            var reserved = decisions.Where(x => x.Status == "confirmed");
+            var reserved = decisions.Where(x => x.Status == "confirmed" || x.Status == "needs-review");
             var transactions = await dbContext.Transactions.AsNoTracking().Include(x => x.Account)
                 .Where(x => x.TenantId == tenantId && x.PostedAt >= fromTimestamp.AddDays(-3)
                     && x.PostedAt < toTimestamp.AddDays(3) && x.Amount != 0
@@ -39,7 +39,7 @@ public sealed class InternalTransferService(FinyteDbContext dbContext, IProjecti
         {
             var valid = dbContext.ValidConfirmedTransfers(tenantId);
             var filtered = status == "needs-review"
-                ? decisions.Where(x => x.Status == "confirmed" && !valid.Any(y => y.Id == x.Id))
+                ? decisions.Where(x => x.Status == "needs-review" || (x.Status == "confirmed" && !valid.Any(y => y.Id == x.Id)))
                 : decisions.Where(x => x.Status == status && (status != "confirmed" || valid.Any(y => y.Id == x.Id))
                     && x.DebitPostedAt >= fromTimestamp && x.DebitPostedAt < toTimestamp);
             var count = await filtered.CountAsync(cancellationToken);
@@ -50,8 +50,8 @@ public sealed class InternalTransferService(FinyteDbContext dbContext, IProjecti
                 .Include(x => x.CreditTransaction).ThenInclude(x => x.Account).ToListAsync(cancellationToken);
             reviews = rows
                 .Select(x => new TransferReview(ToLeg(x.DebitTransaction), ToLeg(x.CreditTransaction), status, false,
-                    status == "needs-review" ? "A transaction changed after confirmation. Both transactions are included in totals again. Check the details before confirming again."
-                    : status == "confirmed" ? "Confirmed by a family member. Both transactions are excluded from spending and income; account balances are unchanged."
+                    status == "needs-review" ? "Transfer evidence changed or a competing payment appeared. Both transactions count in totals until reviewed."
+                    : status == "confirmed" ? x.ReviewedByUserId == AutomaticTransferService.Reviewer ? "Automatically matched: unique equal amounts between your accounts, within three days, with transfer evidence. Excluded from spending and income." : "Confirmed by a family member. Excluded from spending and income."
                     : "Dismissed by a family member. This pair will not be suggested again unless returned to review.",
                     x.UpdatedAt, x.ReviewedByUserId)).ToList();
             return new TransferReviewPage(reviews, count, page, 50);
@@ -86,7 +86,17 @@ public sealed class InternalTransferService(FinyteDbContext dbContext, IProjecti
         {
             if (decision is not null)
             {
-                dbContext.InternalTransfers.Remove(decision);
+                if (decision.ReviewedByUserId == AutomaticTransferService.Reviewer)
+                {
+                    // Undo is an explicit override, so later imports must not recreate the classification.
+                    decision.Status = "dismissed";
+                    decision.ReviewedByUserId = userId;
+                    decision.UpdatedAt = DateTimeOffset.UtcNow;
+                }
+                else
+                {
+                    dbContext.InternalTransfers.Remove(decision);
+                }
             }
         }
         else
@@ -102,7 +112,7 @@ public sealed class InternalTransferService(FinyteDbContext dbContext, IProjecti
             {
                 throw new InvalidOperationException("The transaction details changed. Refresh and review them again.");
             }
-            var occupied = await dbContext.InternalTransfers.AnyAsync(x => x.TenantId == tenantId && x.Status == "confirmed"
+            var occupied = await dbContext.InternalTransfers.AnyAsync(x => x.TenantId == tenantId && (x.Status == "confirmed" || x.Status == "needs-review")
                 && (decision == null || x.Id != decision.Id)
                 && (x.DebitTransactionId == debit.Id || x.CreditTransactionId == debit.Id
                     || x.DebitTransactionId == credit.Id || x.CreditTransactionId == credit.Id), cancellationToken);
@@ -142,15 +152,19 @@ public sealed class InternalTransferService(FinyteDbContext dbContext, IProjecti
 
     public static IReadOnlyList<TransferCandidate> FindCandidates(IReadOnlyList<Transaction> transactions)
     {
-        var credits = transactions.Where(x => x.Amount > 0 && IsPosted(x)).ToLookup(x => (x.TenantId, x.Amount, x.Currency));
+        var credits = transactions.Where(x => x.Amount > 0 && IsPosted(x)).ToLookup(x => (x.TenantId, x.Amount, x.Currency, DateOnly.FromDateTime(x.PostedAt!.Value.UtcDateTime).DayNumber));
         var candidates = new List<TransferCandidate>();
         foreach (var debit in transactions.Where(x => x.Amount < 0 && IsPosted(x)))
         {
-            foreach (var credit in credits[(debit.TenantId, -debit.Amount, debit.Currency)])
+            var dayNumber = DateOnly.FromDateTime(debit.PostedAt!.Value.UtcDateTime).DayNumber;
+            for (var offset = -3; offset <= 3; offset++)
             {
-                if (IsCandidate(debit, credit))
+                foreach (var credit in credits[(debit.TenantId, -debit.Amount, debit.Currency, dayNumber + offset)])
                 {
-                    candidates.Add(new TransferCandidate(debit, credit));
+                    if (IsCandidate(debit, credit))
+                    {
+                        candidates.Add(new TransferCandidate(debit, credit));
+                    }
                 }
             }
         }

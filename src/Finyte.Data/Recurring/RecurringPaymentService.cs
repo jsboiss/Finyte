@@ -35,13 +35,22 @@ public sealed class RecurringPaymentService(FinyteDbContext dbContext, TimeProvi
         return new RecurringSeriesList(items, costs, from, to);
     }
 
-    public async Task<RecurringDiscoveryPage> Discover(Guid tenantId, DateOnly from, DateOnly to, int page, int pageSize, bool dismissed, CancellationToken cancellationToken)
+    public async Task<RecurringDiscoveryPage> Discover(Guid tenantId, DateOnly from, DateOnly to, int page, int pageSize, bool dismissed, CancellationToken cancellationToken, Guid? accountId = null, string? search = null, string? cadence = null, string? sort = null)
     {
         ValidateRange(from, to);
         ValidatePage(page, pageSize);
         await using var snapshot = await ReadSnapshot(cancellationToken);
         var accounts = await dbContext.Accounts.AsNoTracking().Where(x => x.TenantId == tenantId).ToListAsync(cancellationToken);
-        var accountIds = accounts.Where(x => AccountPreferences.IncludeInAnalytics(x)).Select(x => x.Id).ToArray();
+        if (accountId.HasValue && !accounts.Any(x => x.Id == accountId.Value))
+        {
+            throw new KeyNotFoundException("Account not found.");
+        }
+        if (search?.Length > 120 || (sort is not null and not "name" and not "amount")
+            || (cadence is not null && !new[] { "weekly", "fortnightly", "monthly", "quarterly", "yearly" }.Contains(cadence)))
+        {
+            throw new ArgumentException("Choose a valid discovery filter.");
+        }
+        var accountIds = accounts.Where(x => accountId.HasValue ? x.Id == accountId.Value : AccountPreferences.IncludeInAnalytics(x)).Select(x => x.Id).ToArray();
         var query = Eligible(tenantId).Include(x => x.Account).Where(x => accountIds.Contains(x.AccountId) && x.PostedAt >= Timestamp(from) && x.PostedAt < Timestamp(to.AddDays(1))
             && !dbContext.RecurringPaymentDecisions.Any(y => y.TenantId == tenantId && y.TransactionId == x.Id && y.Status == "confirmed"));
         if (await query.CountAsync(cancellationToken) > 10000)
@@ -53,7 +62,12 @@ public sealed class RecurringPaymentService(FinyteDbContext dbContext, TimeProvi
             .Select(x => x.CandidateKey).ToHashSetAsync(cancellationToken);
         var patterns = RecurringPatternDetector.Detect(rows.Select(x => new RecurringPatternTransaction(x.Id, x.AccountId, x.Currency,
             x.Amount, DateOnly.FromDateTime(x.PostedAt!.Value.UtcDateTime), x.MerchantName, x.Description, x.Reference)).ToList());
-        var candidates = patterns.Where(x => decisions.Contains(x.Key) == dismissed).OrderBy(x => x.Name).ThenBy(x => x.Key).ToList();
+        var filtered = patterns.Where(x => decisions.Contains(x.Key) == dismissed
+            && (string.IsNullOrWhiteSpace(search) || x.Name.Contains(search.Trim(), StringComparison.OrdinalIgnoreCase))
+            && (cadence is null || x.Cadence == cadence));
+        var candidates = (sort == "amount"
+            ? filtered.OrderBy(x => x.Currency).ThenByDescending(x => x.ExpectedAmount).ThenBy(x => x.Key)
+            : filtered.OrderBy(x => x.Name).ThenBy(x => x.Key)).ToList();
         var byId = rows.ToDictionary(x => x.Id);
         var items = candidates.Skip((page - 1) * pageSize).Take(pageSize).Select(x => new RecurringDiscoveryResponse(x.Key,
             x.Name, x.AccountId, AccountName(byId[x.TransactionIds[0]]), x.Currency, x.Cadence, x.AnchorDate, x.ExpectedAmount,

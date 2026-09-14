@@ -14,5 +14,6 @@ builder.Services
 builder.Services.AddSingleton<ProviderSyncActivities>();
 builder.Services.AddSingleton<DashboardProjectionActivities>();
 builder.Services.AddHostedService<TemporalWorkerService>();
+builder.Services.AddHostedService<AutomaticTransferWorker>();
 
 await builder.Build().RunAsync();

@@ -1,0 +1,7 @@
+FROM node:24-bookworm-slim
+WORKDIR /app
+COPY src/Finyte.Web/package.json src/Finyte.Web/package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY src/Finyte.Web/ ./
+EXPOSE 5186
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "5186", "--strictPort"]

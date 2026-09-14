@@ -1,3 +1,4 @@
+import { Help } from '../shared/Help'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { isAxiosError } from 'axios'
@@ -23,11 +24,8 @@ export function PayCyclesPage() {
   })
 
   return <section className="page pay-cycles-page">
-    <header className="page-header"><div><p>Plan around your payday</p><h1>Pay cycles</h1></div><button type="button" disabled={!accounts.data?.length || editor !== null} onClick={() => { setEditor('new'); setMessage('') }}>New pay cycle</button></header>
-    <section className="panel pay-cycle-intro">
-      <p>Choose a payday schedule and the accounts you want to track. Each cycle shows recorded activity, spending and confirmed transfers to savings. Expected income is a comparison, never a guessed payday or an available balance.</p>
-      <p>Dates use UTC. A saved selection includes those accounts even if they are excluded from dashboard analytics. Only dated, posted transactions in the profile currency count.</p>
-    </section>
+    <header className="page-header"><div><h1>Pay cycles</h1></div><button type="button" disabled={!accounts.data?.length || editor !== null} onClick={() => { setEditor('new'); setMessage('') }}>New pay cycle</button></header>
+    <Help title="How pay cycles work"><p>Choose a known payday and accounts to track. Cycles show recorded activity and savings transfers. Expected income is a comparison, not a balance. Dates use UTC and only posted activity in the selected currency counts.</p></Help>
     {message && <p role="status">{message}</p>}
     {(accounts.isLoading || profiles.isLoading) && <p>Loading pay cycles…</p>}
     {(profiles.error || accounts.error) && <p role="alert">{errorMessage(profiles.error ?? accounts.error)} <button type="button" onClick={() => { void profiles.refetch(); void accounts.refetch() }}>Retry</button></p>}
@@ -81,7 +79,7 @@ function ProfileEditor({ profile, accounts, onCancel, onSaved, onReload }: {
         </select></label>
         <label>Expected income per cycle (optional)<input type="number" min="0" step="0.01" value={expectedIncome} onChange={event => setExpectedIncome(event.target.value)} placeholder="No target" /></label>
       </div>
-      <p>Each cycle starts on payday and ends the day before the next one. Monthly schedules use the same day of month, clamped to the last day in shorter months. No weekend or holiday adjustment is applied.</p>
+      <Help><p>Each cycle starts on payday and ends the day before the next one. Monthly schedules use the same day of month, clamped to the last day in shorter months. No weekend or holiday adjustment is applied.</p></Help>
       <div className="pay-cycle-selections">
         <fieldset><legend>Accounts to track</legend><p>Explicit selection. Dashboard preferences do not change this scope.</p>
           {accounts.filter(x => x.currency === currency).map(x => <label className="pay-cycle-checkbox" key={x.id}><input type="checkbox" checked={accountIds.includes(x.id)} onChange={() => { setAccountIds(toggle(accountIds, x.id)); setSavingsIds(savingsIds.filter(y => y !== x.id)) }} />{x.name}{!x.includeInAnalytics && ' · Excluded from dashboard'}</label>)}
@@ -124,15 +122,15 @@ function Breakdown({ profile }: { profile: PayCycleProfile }) {
         {data.missingAccountIds.length > 0 && <p role="alert">Some saved accounts are no longer available. Edit this profile to review its scope.</p>}
       </section>
       <div className="pay-cycle-metrics">
-        <article className="panel"><span>External credits</span><strong>{amount(data.totals.externalCredits)}</strong><p>Income, refunds and other credits. Confirmed transfers are separate.</p></article>
-        <article className="panel"><span>Spending</span><strong>{amount(data.totals.spending)}</strong><p>Posted debits excluding confirmed transfers. Credits are not automatically treated as refunds.</p></article>
+        <article className="panel"><span>External credits</span><strong>{amount(data.totals.externalCredits)}</strong><Help title="About credits"><p>Income, refunds and other credits. Confirmed transfers are separate.</p></Help></article>
+        <article className="panel"><span>Spending</span><strong>{amount(data.totals.spending)}</strong><Help title="About spending"><p>Posted debits excluding confirmed transfers. Credits are not automatically treated as refunds.</p></Help></article>
         <article className="panel"><span>Net moved to savings</span><strong>{amount(data.totals.netSavingsTransfers)}</strong><p>{amount(data.totals.savingsTransfersOut)} out, less {amount(data.totals.savingsTransfersIn)} returned.</p></article>
-        <article className="panel"><span>Net account movement</span><strong>{amount(data.totals.netMovement)}</strong><p>All counted credits minus debits. This is not your account balance or money available to spend.</p></article>
+        <article className="panel"><span>Net account movement</span><strong>{amount(data.totals.netMovement)}</strong><Help title="About net movement"><p>All counted credits minus debits. This is not your account balance or money available to spend.</p></Help></article>
       </div>
       {profile.expectedIncome !== null && <section className="panel pay-cycle-intro"><h2>Expected income comparison</h2><p>Expected: {amount(profile.expectedIncome)}. External credits: {amount(data.totals.externalCredits)}. Difference: {amount(data.totals.expectedIncomeDifference ?? 0)}.</p><p>This compares the full cycle target with activity recorded so far. External credits may include refunds or other income; they are not verified salary.</p></section>}
       <section className="panel pay-cycle-intro"><h2>Confirmed transfers</h2><p>Other transfers out: {amount(data.totals.otherTransfersOut)}. Other transfers in: {amount(data.totals.transfersIn)}. Net movement between tracked accounts: {amount(data.totals.withinScopeTransfers)}.</p><p>Each leg counts on its own posted date, including transfers that cross cycle boundaries. Suggested or outdated matches remain ordinary credits or spending until reviewed. <Link to="/transfers">Review transfers</Link>.</p></section>
       <section className="panel pay-cycle-intro"><h2>Spending by category</h2>{data.spendingCategories.length === 0 ? <p>No spending recorded in this cycle.</p> : <ul className="pay-cycle-categories">{data.spendingCategories.map(x => <li key={x.name}><span>{x.name} · {x.transactionCount} transactions</span><strong>{amount(x.amount)}</strong></li>)}</ul>}</section>
-      <details className="panel pay-cycle-intro"><summary>What is excluded</summary><p>{data.unpostedTransactionCount} pending or other unposted transactions and {data.otherCurrencyTransactionCount} posted transactions in another currency within the observed dates. {data.undatedTransactionCount} transactions across these accounts, across all dates, have no posted date and cannot be assigned to any cycle.</p><p>Balances and expected income are never added to actual totals. No currency conversion is performed. Editing this schedule recomputes historical breakdowns.</p></details>
+      <details className="panel pay-cycle-intro"><summary>What is excluded</summary><p>{data.unpostedTransactionCount} pending or other unposted transactions and {data.otherCurrencyTransactionCount} posted transactions in another currency within the observed dates. {data.undatedTransactionCount} transactions across these accounts, across all dates, have no posted date and cannot be assigned to any cycle.</p><Help><p>Balances and expected income are never added to actual totals. No currency conversion is performed. Editing this schedule recomputes historical breakdowns.</p></Help></details>
       <section className="panel pay-cycle-intro">
         <div className="pay-cycle-toolbar"><h2>Transactions behind the numbers</h2><label>Show transaction type<select value={kind} onChange={event => { setKind(event.target.value); setPage(1) }}><option value="">All counted transactions</option>{kinds.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label></div>
         <p>{data.transactions.totalCount} matching transactions. Summary figures above always cover all counted transactions in the cycle.</p>
