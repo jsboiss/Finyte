@@ -1,3 +1,4 @@
+import { Drawer } from '../shared/Drawer'
 import { Help } from '../shared/Help'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { isAxiosError } from 'axios'
@@ -31,16 +32,16 @@ export function BudgetsPage() {
   })
   return (
     <section className="page budgets-page">
-      <header className="page-header"><div><h1>Budgets</h1></div><button type="button" onClick={() => { setEditor('new'); setNotice('') }}>New budget</button></header>
-      <Help title="How budgets work"><p>Budgets count posted spending in one currency, excluding matched transfers. Each period starts fresh. Overlapping budgets should not be added together. History uses your current limits and account selection.</p></Help>
+      <header className="page-header"><div><h1>Budgets</h1><Help title="How budgets work"><p>Budgets count posted spending in one currency, excluding matched transfers. Each period starts fresh. Overlapping budgets should not be added together. History uses your current limits and account selection.</p></Help></div><button type="button" onClick={() => { setEditor('new'); setNotice('') }}>New budget</button></header>
+
       {notice && <p role="status">{notice}</p>}
       {budgets.isPending && <p>Loading budgets…</p>}
       {budgets.error && <p role="alert">{errorMessage(budgets.error)} <button type="button" onClick={() => void budgets.refetch()}>Retry</button></p>}
       {remove.error && <p role="alert">{errorMessage(remove.error)} <button type="button" onClick={() => void budgets.refetch()}>Reload budgets</button></p>}
-      {editor && <BudgetEditor key={editor === 'new' ? 'new' : `${editor.id}-${editor.version}`} budget={editor === 'new' ? undefined : editor} onCancel={() => setEditor(null)} onSaved={async budget => {
+      {editor && <Drawer title={editor === 'new' ? 'New budget' : 'Edit budget'} onClose={() => setEditor(null)}><BudgetEditor key={editor === 'new' ? 'new' : `${editor.id}-${editor.version}`} budget={editor === 'new' ? undefined : editor} onCancel={() => setEditor(null)} onSaved={async budget => {
         setEditor(null); setSelectedId(budget.id); setNotice(`${budget.name} saved.`)
         await queryClient.invalidateQueries({ queryKey: ['budgets'] })
-      }} onReload={async () => { await budgets.refetch(); setEditor(null) }} />}
+      }} onReload={async () => { await budgets.refetch(); setEditor(null) }} /></Drawer>}
       {budgets.data?.length === 0 && !editor && <section className="panel"><h2>No budgets yet</h2><p>Create a limit for all spending, exact categories, or tagged transactions. You can review every transaction that counts.</p></section>}
       {!!budgets.data?.length && <div className="budget-layout">
         <nav className="panel budget-list" aria-label="Budgets">{budgets.data.map(budget => <button type="button" key={budget.id} aria-current={selected?.id === budget.id ? 'true' : undefined} onClick={() => setSelectedId(budget.id)}>
@@ -77,7 +78,7 @@ function BudgetEditor({ budget, onSaved, onCancel, onReload }: { budget?: Budget
     onSuccess: onSaved,
   })
   return <form className="panel budget-editor" onSubmit={event => { event.preventDefault(); save.mutate() }}>
-    <h2>{budget ? `Edit ${budget.name}` : 'New budget'}</h2>
+
     <fieldset disabled={save.isPending}>
       <div className="budget-form-grid">
         <label>Name<input required maxLength={120} value={name} onChange={event => setName(event.target.value)} /></label>

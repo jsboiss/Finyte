@@ -59,13 +59,23 @@ export function DashboardPage() {
     { id: 'daily-spend', label: 'Avg daily spend', value: currency(overview.averageDailySpendMinorUnits, overview.currency) },
   ], [overview])
 
+  if (billingAccessQuery.isLoading || (hasBillingAccess && overviewQuery.isPending)) {
+    return <section className="page"><p role="status">Loading dashboard…</p></section>
+  }
+  if (billingAccessQuery.isError || (hasBillingAccess && overviewQuery.isError)) {
+    return <section className="page"><p role="alert">Unable to load dashboard.</p><button type="button" onClick={() => { void billingAccessQuery.refetch(); void overviewQuery.refetch() }}>Retry</button></section>
+  }
+
   if (!billingAccessQuery.isLoading && !hasBillingAccess) {
     return <LockedDashboard />
   }
 
   return (
     <section className="page">
-      <div className="overview-controls">
+      <div className="overview-controls"><div className="page-title"><h1>Dashboard</h1><Help title="About these totals"><p>Spending and income exclude matched internal transfers. Balances include all account movements.</p>
+        {accountId === null && (accountsQuery.data?.filter(x => !x.includeInAnalytics).length ?? 0) > 0 && <p>{accountsQuery.data?.filter(x => !x.includeInAnalytics).length} accounts excluded from combined spending and income.</p>}
+        <Link to="/accounts">Account preferences</Link>
+      </Help></div>
         <div className="overview-actions">
           <label>
             <AppSelect aria-label="Account" value={selectedAccountId} onChange={x => setSelectedAccountId(x.target.value)}>
@@ -86,10 +96,7 @@ export function DashboardPage() {
       </div>
 
       <DashboardMetricGrid metrics={metrics} />
-      <Help title="About these totals"><p>Spending and income exclude matched internal transfers. Balances include all account movements.</p>
-        {accountId === null && (accountsQuery.data?.filter(x => !x.includeInAnalytics).length ?? 0) > 0 && <p>{accountsQuery.data?.filter(x => !x.includeInAnalytics).length} accounts excluded from combined spending and income.</p>}
-        <Link to="/accounts">Account preferences</Link>
-      </Help>
+
 
       <CashFlowRaceModule overview={overview} />
 

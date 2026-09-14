@@ -1,3 +1,4 @@
+import { Help } from '../../shared/Help'
 import { currency } from '../../shared/formatters'
 import type { OverviewResponse } from '../types'
 
@@ -18,12 +19,12 @@ export function SpendByTagChart({ tags, currencyCode }: { tags: OverviewResponse
       </div>
       <div className="tag-list">
         {tags.map(x => (
-          <div key={x.tagId ?? 'untagged'}>
+          <div className="tag-bucket-link" key={x.tagId ?? 'untagged'}>
             <span><i style={{ backgroundColor: x.color }} />{x.name}</span>
             <strong>{currency(x.amountMinorUnits, currencyCode)}</strong>
           </div>
         ))}
-        {primary && <p>{primary.name} is currently {primary.percentage.toFixed(1)}% of tracked monthly spend.</p>}
+        <p>{primary && <>{primary.name} is currently {primary.percentage.toFixed(1)}% of tracked monthly spend. </>}<Help title="About tag amounts"><p>Amounts on transactions with multiple tags are split between those tags. The transaction list shows each payment’s full amount.</p></Help></p>
       </div>
     </div>
   )

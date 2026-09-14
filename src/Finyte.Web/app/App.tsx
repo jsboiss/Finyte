@@ -180,7 +180,7 @@ function SignedInShell() {
       <header className="mobile-header">
         <div className="brand">
           <div className={isApiConnected ? 'logo-placeholder is-connected' : 'logo-placeholder is-disconnected'} aria-hidden="true" />
-          <span>{getPageTitle(pathname)}</span>
+          <h1>{getPageTitle(pathname)}</h1>
         </div>
         <button
           aria-controls="mobile-navigation"
@@ -463,7 +463,7 @@ function TransactionsPage() {
         <div className="transaction-description">
           <strong>{x.getValue()}</strong>
           {x.row.original.isInternalTransfer && <Link className="transfer-badge" to="/transactions" search={{ transferView: 'confirmed' }}>Internal transfer · excluded from totals</Link>}
-          <span>{x.row.original.merchantName ?? ''}</span>
+          {x.row.original.merchantName && x.row.original.merchantName.toLowerCase() !== x.getValue()?.toLowerCase() && <span>{x.row.original.merchantName}</span>}
         </div>
       ),
     }),
@@ -513,7 +513,7 @@ function TransactionsPage() {
         <div>
           <h1>Transactions</h1>
         </div>
-        <div className="transactions-actions">
+        <div className="transactions-actions"><Help title="Transfer matching"><p>Transfers between your accounts are matched automatically.</p><button type="button" onClick={() => void navigate({ search: { transferView: 'confirmed' } })}>Correct a transfer match</button></Help>
           <button className={showTagManagement ? 'secondary-button is-active' : 'secondary-button'} onClick={() => setShowTagManagement(x => !x)} type="button">
             <Tags aria-hidden="true" />
             Tags
@@ -534,7 +534,7 @@ function TransactionsPage() {
       )}
 
       {showTagManagement && (
-        <section className="panel tag-management-panel">
+        <Drawer title="Tags and rules" onClose={() => setShowTagManagement(false)}><section className="tag-management-panel">{(createTagMutation.isError || deleteTagMutation.isError || createMerchantRuleMutation.isError || deleteMerchantRuleMutation.isError) && <p role="alert">Could not save the change. Please try again.</p>}
           <div className="tag-management-column">
             <div className="panel-header compact-panel-header">
               <div>
@@ -543,7 +543,7 @@ function TransactionsPage() {
               </div>
             </div>
             <div className="tag-form">
-              <input onChange={x => setTagName(x.target.value)} placeholder="New tag" value={tagName} />
+              <input aria-label="New tag name" onChange={x => setTagName(x.target.value)} placeholder="New tag" value={tagName} />
               <div className="tag-color-picker">
                 {tagColorOptions.map(x => (
                   <button
@@ -576,13 +576,14 @@ function TransactionsPage() {
           </div>
           <div className="tag-management-column merchant-rules-column">
             <div className="panel-header compact-panel-header">
-              <div>
-                <p>Automation</p>
+              <div className="section-title">
                 <h2>Merchant tag rules</h2>
+                <Help title="How merchant tag rules work">
+                  <p>Rules apply to existing and future transactions from every source. Matching ignores case and punctuation, and matches whole words at the start of the merchant name (or description when no merchant is supplied). For example, “Coles” includes “Coles 4568”.</p>
+                  <p>Editing or deleting a rule updates automatic tags. Tags you added yourself stay. Removing a tag from one transaction prevents a rule from adding it back.</p>
+                </Help>
               </div>
             </div>
-            <Help><p className="tag-rule-help">Rules apply to existing and future transactions from every source. Matching ignores case and punctuation, and matches whole words at the start of the merchant name (or description when no merchant is supplied). For example, “Coles” includes “Coles 4568”.</p></Help>
-            <Help><p className="tag-rule-help">Editing or deleting a rule updates automatic tags. Manual tags and tags with an unknown original source stay. Removing a tag from one transaction prevents a rule from adding it back.</p></Help>
             <div className="merchant-rule-form">
               <input aria-label="Merchant rule name" maxLength={256} onChange={x => setMerchantName(x.target.value)} placeholder="Merchant name" value={merchantName} />
               <select aria-label="Merchant rule tag" onChange={x => setMerchantTagId(x.target.value)} value={merchantTagId}>
@@ -610,10 +611,10 @@ function TransactionsPage() {
               {!merchantRulesQuery.isLoading && (merchantRulesQuery.data?.length ?? 0) === 0 && <span className="empty-inline">No merchant rules yet.</span>}
             </div>
           </div>
-        </section>
+        </section></Drawer>
       )}
 
-      <Help title="Transfer matching"><p>Transfers between your accounts are matched automatically.</p><button type="button" onClick={() => void navigate({ search: { transferView: 'confirmed' } })}>Correct a transfer match</button></Help>
+
       {transferView && <Drawer title="Transfer matching" onClose={() => void navigate({ search: {} })}><TransferCorrections initialView={transferView} /></Drawer>}
       {showFilters && (
         <Drawer title="Transaction filters" onClose={() => setShowFilters(false)}><TransactionFilterForm
@@ -805,19 +806,16 @@ function TagEditor({ allTags, selectedTags, excludedTagIds = [], onChange, onRes
 }
 
 function TagPill({ tag }: { tag: TransactionTag }) {
-  const sourceLabel = tag.source === 'merchant-rule' ? 'Auto' : tag.source === 'legacy' ? 'Unknown' : tag.source === 'manual' ? 'Manual' : tag.source === 'system' ? 'System' : null
-  const sourceDescription = tag.source === 'merchant-rule' ? `Automatically applied by merchant rule: ${tag.merchantRuleName ?? 'matching merchant'}`
-    : tag.source === 'legacy' ? 'Added before source tracking. Preserved when merchant rules change.'
-    : tag.source === 'manual' ? 'Manually chosen. Preserved when merchant rules change.' : undefined
   return (
-    <span aria-label={sourceLabel ? `${tag.name}: ${sourceLabel}` : undefined} className="tag-pill" title={sourceDescription} style={{ backgroundColor: tag.color, color: getReadableTextColor(tag.color) }}>
+    <span className="tag-pill" style={{ backgroundColor: tag.color, color: getReadableTextColor(tag.color) }}>
       <span className="tag-name">{tag.name}</span>
-      {sourceLabel && <small> · {sourceLabel}</small>}
+
     </span>
   )
 }
 
 function ConnectionsPage() {
+  const [showConnectForm, setShowConnectForm] = useState(false)
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
@@ -855,40 +853,40 @@ function ConnectionsPage() {
   const canConnect = Boolean(name.trim() && email.trim() && phone.trim()) && !connectMutation.isPending
 
   return (
-    <section className="page">
+    <section className="page connections-page">
       <header className="page-header">
         <div>
           <h1>Connections</h1>
         </div>
+        <button type="button" onClick={() => setShowConnectForm(true)}>Connect bank</button>
       </header>
-      <section className="panel">
+      {showConnectForm && <Drawer title="Connect a bank" onClose={() => setShowConnectForm(false)}><section>
         <div className="panel-header">
           <div>
-            <p>Your consent</p>
-            <h2>Connect a bank</h2>
+            <Help title="About bank connections"><p>Your details identify you to Fiskil for bank consent and notifications.</p></Help>
           </div>
         </div>
-        <p>These details identify you to Fiskil and are used for consent notifications.</p>
+
         <p>You can also <Link to="/imports">import an OFX export</Link> without connecting a bank.</p>
-        <div className="tag-form">
-          <input autoComplete="name" onChange={x => setName(x.target.value)} placeholder="Full name" value={name} />
-          <input autoComplete="email" onChange={x => setEmail(x.target.value)} placeholder="Email" type="email" value={email} />
-          <input autoComplete="tel" onChange={x => setPhone(x.target.value)} placeholder="Phone, e.g. +61412345678" type="tel" value={phone} />
+        <div className="connection-fields">
+          <label>Full name<input autoComplete="name" onChange={x => setName(x.target.value)} value={name} /></label>
+          <label>Email<input autoComplete="email" onChange={x => setEmail(x.target.value)} type="email" value={email} /></label>
+          <label>Phone<input autoComplete="tel" onChange={x => setPhone(x.target.value)} placeholder="+61412345678" type="tel" value={phone} /></label>
           <button disabled={!canConnect} onClick={() => connectMutation.mutate()} type="button">
             {connectMutation.isPending ? 'Connecting…' : 'Connect bank'}
           </button>
         </div>
         {connectionError && <p role="alert">{connectionError}</p>}
-      </section>
-      <section className="panel">
+      </section></Drawer>}
+      <section className="panel connection-list">
         <div className="panel-header">
           <div>
-            <p>Household access</p>
-            <h2>Connections</h2>
+
+            <h2>Connected banks</h2>
           </div>
         </div>
         {connectionsQuery.isLoading && <p>Loading connections…</p>}
-        {!connectionsQuery.isLoading && (connectionsQuery.data?.length ?? 0) === 0 && <p>No banks connected yet.</p>}
+        {!connectionsQuery.isLoading && (connectionsQuery.data?.length ?? 0) === 0 && <p>No banks connected yet. Connect a bank to sync transactions, or <Link to="/imports">import a statement</Link>.</p>}
         {(connectionsQuery.data ?? []).map(x => (
           <div className="tag-form" key={x.id}>
             <strong>{x.institutionId ? `Institution ${x.institutionId}` : 'Fiskil connection'}</strong>
@@ -996,7 +994,7 @@ function SettingsPage() {
       {familyQuery.isLoading && <section className="panel"><p>Loading family…</p></section>}
       {familyQuery.isError && <section className="panel"><p role="alert">Unable to load family settings.</p></section>}
       {family?.isDevelopment && (
-        <section className="dev-family-banner">
+        <details className="development-tools"><summary>Development test users</summary><section className="dev-family-banner">
           <div>
             <Shield aria-hidden="true" />
             <div><strong>Development personas</strong><span>Switch users to verify permissions and shared household data.</span></div>
@@ -1004,7 +1002,7 @@ function SettingsPage() {
           <select onChange={x => switchDevelopmentMember(x.target.value)} value={getDevIdentity().userId}>
             {family.members.map(x => <option key={x.id} value={x.userId}>{x.displayName ?? x.email ?? x.userId} · {x.role}</option>)}
           </select>
-        </section>
+        </section></details>
       )}
       {family?.canManage && (
         <section className="panel family-invite-panel">

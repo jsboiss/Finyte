@@ -1,3 +1,4 @@
+import { Drawer } from '../shared/Drawer'
 import { Help } from '../shared/Help'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
@@ -24,16 +25,16 @@ export function PayCyclesPage() {
   })
 
   return <section className="page pay-cycles-page">
-    <header className="page-header"><div><h1>Pay cycles</h1></div><button type="button" disabled={!accounts.data?.length || editor !== null} onClick={() => { setEditor('new'); setMessage('') }}>New pay cycle</button></header>
-    <Help title="How pay cycles work"><p>Choose a known payday and accounts to track. Cycles show recorded activity and savings transfers. Expected income is a comparison, not a balance. Dates use UTC and only posted activity in the selected currency counts.</p></Help>
+    <header className="page-header"><div><h1>Pay cycles</h1><Help title="How pay cycles work"><p>Choose a known payday and accounts to track. Cycles show recorded activity and savings transfers. Expected income is a comparison, not a balance. Dates use UTC and only posted activity in the selected currency counts.</p></Help></div><button type="button" disabled={!accounts.data?.length || editor !== null} onClick={() => { setEditor('new'); setMessage('') }}>New pay cycle</button></header>
+
     {message && <p role="status">{message}</p>}
     {(accounts.isLoading || profiles.isLoading) && <p>Loading pay cycles…</p>}
     {(profiles.error || accounts.error) && <p role="alert">{errorMessage(profiles.error ?? accounts.error)} <button type="button" onClick={() => { void profiles.refetch(); void accounts.refetch() }}>Retry</button></p>}
     {accounts.data?.length === 0 && <p><Link to="/imports">Add an account</Link> before creating a pay cycle.</p>}
     {profiles.data?.length === 0 && accounts.data && accounts.data.length > 0 && editor === null && <p>No pay cycles yet. Create a schedule using a known payday.</p>}
-    {editor !== null && accounts.data && <ProfileEditor key={editor === 'new' ? 'new' : `${editor.id}-${editor.version}`} profile={editor === 'new' ? undefined : editor} accounts={accounts.data}
+    {editor !== null && accounts.data && <Drawer title={editor === 'new' ? 'New pay cycle' : 'Edit pay cycle'} onClose={() => setEditor(null)}><ProfileEditor key={editor === 'new' ? 'new' : `${editor.id}-${editor.version}`} profile={editor === 'new' ? undefined : editor} accounts={accounts.data}
       onCancel={() => setEditor(null)} onReload={async () => { setEditor(null); await profiles.refetch() }}
-      onSaved={async item => { setEditor(null); setSelectedId(item.id); setMessage(`${item.name} saved.`); await queryClient.invalidateQueries({ queryKey: ['pay-cycles'] }) }} />}
+      onSaved={async item => { setEditor(null); setSelectedId(item.id); setMessage(`${item.name} saved.`); await queryClient.invalidateQueries({ queryKey: ['pay-cycles'] }) }} /></Drawer>}
     {profile && <>
       <div className="pay-cycle-toolbar">
         <label>Pay-cycle profile<select value={profile.id} onChange={event => { setSelectedId(event.target.value); setEditor(null); remove.reset() }}>
@@ -67,7 +68,7 @@ function ProfileEditor({ profile, accounts, onCancel, onSaved, onReload }: {
   const toggle = (ids: string[], id: string) => ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id]
 
   return <form className="panel pay-cycle-editor" onSubmit={event => { event.preventDefault(); mutation.mutate() }}>
-    <h2>{profile ? 'Edit pay-cycle schedule' : 'New pay-cycle schedule'}</h2>
+
     {profile && <p>Changes recalculate past and current breakdowns using the new schedule and selection.</p>}
     <fieldset disabled={mutation.isPending}>
       <div className="pay-cycle-fields">

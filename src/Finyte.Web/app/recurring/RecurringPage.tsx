@@ -1,4 +1,5 @@
 import { RecurringCalendarView } from './RecurringCalendarView'
+import { Drawer } from '../shared/Drawer'
 import { Help } from '../shared/Help'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
@@ -16,6 +17,7 @@ export function RecurringPage() {
   const [cadence, setCadence] = useState('')
   const [sort, setSort] = useState('name')
   const [view, setView] = useState('tracked')
+  const [showDiscoveryFilters, setShowDiscoveryFilters] = useState(false)
   const [selectedDate, setSelectedDate] = useState<string | undefined>()
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
@@ -28,8 +30,8 @@ export function RecurringPage() {
   const refresh = async (message = '') => { setNotice(message); await client.invalidateQueries({ queryKey: ['recurring'] }) }
 
   return <section className="page recurring-page">
-    <header className="page-header recurring-heading"><div><h1>Recurring payments</h1></div><button type="button" onClick={() => { setCreating(true); setSelectedId(null); setView('tracked'); setNotice('') }}>Add recurring payment</button></header>
-    <Help title="How recurring payments work"><p>Discover patterns from at least three payments, review the history, then track a series. Add a payment manually if you have less history. Each match stays available for review when its name or price changes.</p></Help>
+    <header className="page-header recurring-heading"><div><h1>Recurring payments</h1><Help title="How recurring payments work"><p>Discover patterns from at least three payments, review the history, then track a series. Add a payment manually if you have less history. Each match stays available for review when its name or price changes.</p></Help></div><button type="button" onClick={() => { setCreating(true); setSelectedId(null); setView('tracked'); setNotice('') }}>Add recurring payment</button></header>
+
     {notice && <p role="status" className="recurring-notice">{notice}</p>}
     {series.isError && <p role="alert">{recurringError(series.error)}</p>}
     {accounts.isError && <p role="alert">Unable to load accounts. <button type="button" onClick={() => void accounts.refetch()}>Retry accounts</button></p>}
@@ -37,25 +39,26 @@ export function RecurringPage() {
       {[['tracked', 'Tracked payments'], ['discover', 'Discover patterns'], ['calendar', 'Calendar'], ['dismissed', 'Dismissed patterns']].map(([id, name]) => <button key={id} type="button" aria-pressed={view === id} onClick={() => { setView(id); setSelectedId(null); setSelectedDate(undefined); setCreating(false); setNotice('') }}>{name}</button>)}
       <button className="secondary" disabled={series.isFetching} onClick={() => void refresh()} type="button">Refresh</button>
     </div>
-    {creating && <SeriesEditor accounts={accounts.data ?? []} onCancel={() => setCreating(false)} onSaved={async created => { setCreating(false); setSelectedId(created.id); await refresh('Recurring payment created. Review its payment history below.') }} />}
+    <div className="recurring-view-picker"><label>View<select value={view} onChange={event => { setView(event.target.value); setSelectedId(null); setSelectedDate(undefined); setCreating(false); setNotice('') }}><option value="tracked">Tracked payments</option><option value="discover">Discover patterns</option><option value="calendar">Calendar</option><option value="dismissed">Dismissed patterns</option></select></label><button type="button" disabled={series.isFetching} onClick={() => void refresh()}>Refresh</button></div>
+    {creating && <Drawer title="Add recurring payment" onClose={() => setCreating(false)}><SeriesEditor accounts={accounts.data ?? []} onCancel={() => setCreating(false)} onSaved={async created => { setCreating(false); setSelectedId(created.id); await refresh('Recurring payment created. Review its payment history below.') }} /></Drawer>}
     {view === 'tracked' && <>
 
       {!selected && <>
-        {(series.data?.costs.length ?? 0) > 0 && <section aria-label="Expected recurring costs"><div className="recurring-costs">{series.data?.costs.map(cost => <div className="recurring-cost" key={cost.currency}><span>{cost.currency} · {cost.activeSeriesCount} active series</span><strong>{money(cost.monthlyEstimate, cost.currency)} / month</strong><p className="recurring-muted">{money(cost.annualEstimate, cost.currency)} / year · Estimated from your expected amounts{cost.variableSeriesCount > 0 && `, including ${cost.variableSeriesCount} variable bills`}</p></div>)}</div><p className="recurring-muted">These are schedule estimates, not payments due in a particular month. Paused and cancelled series are excluded. Currencies stay separate.</p></section>}
+        {(series.data?.costs.length ?? 0) > 0 && <section aria-label="Expected recurring costs"><div className="recurring-costs">{series.data?.costs.map(cost => <div className="recurring-cost" key={cost.currency}><div className="section-title"><span>{cost.currency} · {cost.activeSeriesCount} active series</span><Help title="About recurring estimates"><p>Estimates use your expected amounts, including variable bills. They are not payments due in a particular month. Paused and cancelled series are excluded. Currencies stay separate.</p></Help></div><strong>{money(cost.monthlyEstimate, cost.currency)} / month</strong><p className="recurring-muted">{money(cost.annualEstimate, cost.currency)} / year</p></div>)}</div></section>}
         {series.isLoading && <p>Loading recurring payments…</p>}
         {series.data?.items.length === 0 && !creating && <section className="panel"><h2>Find your regular payments</h2><p className="recurring-muted">1. Find patterns. 2. Review the payments. 3. Track the series.</p><div className="recurring-actions"><button onClick={() => setView('discover')} type="button">Discover patterns</button></div></section>}
         <div className="recurring-list">{series.data?.items.map(item => <article className="panel" key={item.id}>
           <div className="recurring-heading"><div><h2>{item.name}</h2><p className="recurring-muted">{item.accountName} · {label(item.cadence)} · {money(item.expectedAmount, item.currency)} expected {item.amountMode === 'variable' && '· Variable bill'}</p></div><span className="recurring-status">{label(item.state)}</span></div>
           <p>{item.nextDueDate ? `Scheduled ${item.nextDueDate} · ${label(item.nextDueStatus)}` : label(item.nextDueStatus)}</p>
           {item.needsReviewCount > 0 && <p className="recurring-warning">{item.needsReviewCount} previous confirmations changed and need review.</p>}
-          <div className="recurring-actions"><button onClick={() => { setSelectedId(item.id); setSelectedDate(undefined); setCreating(false); setNotice('') }} type="button">Review {item.name}</button></div>
+          <div className="recurring-actions"><button aria-label={`Review ${item.name}`} onClick={() => { setSelectedId(item.id); setSelectedDate(undefined); setCreating(false); setNotice('') }} type="button">Review payments</button></div>
         </article>)}</div>
       </>}
       {selected && <SeriesDetail key={`${selected.id}-${selectedDate ?? ""}`} series={selected} initialDate={selectedDate} accounts={accounts.data ?? []} onBack={() => setSelectedId(null)} onChanged={refresh} />}
     </>}
     {view === 'calendar' && <RecurringCalendarView series={series.data?.items ?? []} onSelect={(id, date) => { setSelectedId(id); setSelectedDate(date); setView('tracked') }} />}
     {(view === 'discover' || view === 'dismissed') && <>
-      <section className="panel"><h2>Search your payment history</h2><Help><p className="recurring-muted">By default, discovery uses accounts included in combined spending and income. Choose a range up to five years. Three years helps reveal annual payments; a shorter range makes a busy account easier to review.</p></Help><div className="recurring-form-grid"><label>Account<select value={accountId} onChange={event => setAccountId(event.target.value)}><option value="">All included accounts</option>{accounts.data?.map(account => <option key={account.id} value={account.id}>{account.name}</option>)}</select></label><label>Find a pattern<input type="search" maxLength={120} value={search} onChange={event => setSearch(event.target.value)} placeholder="Billing name" /></label></div><details><summary>Dates, frequency and sort</summary><div className="recurring-form-grid"><label>Frequency<select value={cadence} onChange={event => setCadence(event.target.value)}><option value="">All frequencies</option>{cadences.map(item => <option key={item} value={item}>{label(item)}</option>)}</select></label><label>Sort<select value={sort} onChange={event => setSort(event.target.value)}><option value="name">Name</option><option value="amount">Amount within currency</option></select></label></div><RangeEditor range={range} onChange={setRange} /></details><small className="recurring-muted">{range.from} – {range.to}{cadence && ` · ${label(cadence)}`}</small></section>
+      <section className="panel"><div className="section-title"><h2>Find patterns</h2><Help title="Pattern search help"><p className="recurring-muted">By default, discovery uses accounts included in combined spending and income. Choose a range up to five years. Three years helps reveal annual payments; a shorter range makes a busy account easier to review.</p></Help></div><div className="recurring-form-grid"><label>Account<select value={accountId} onChange={event => setAccountId(event.target.value)}><option value="">All included accounts</option>{accounts.data?.map(account => <option key={account.id} value={account.id}>{account.name}</option>)}</select></label><label>Find a pattern<input type="search" maxLength={120} value={search} onChange={event => setSearch(event.target.value)} placeholder="Billing name" /></label></div><button type="button" className="secondary" onClick={() => setShowDiscoveryFilters(true)}>Dates, frequency and sort</button>{showDiscoveryFilters && <Drawer title="Pattern filters" onClose={() => setShowDiscoveryFilters(false)}><div className="recurring-form-grid"><label>Frequency<select value={cadence} onChange={event => setCadence(event.target.value)}><option value="">All frequencies</option>{cadences.map(item => <option key={item} value={item}>{label(item)}</option>)}</select></label><label>Sort<select value={sort} onChange={event => setSort(event.target.value)}><option value="name">Name</option><option value="amount">Amount within currency</option></select></label></div><RangeEditor range={range} onChange={setRange} /><button type="button" onClick={() => setShowDiscoveryFilters(false)}>Done</button></Drawer>}<small className="recurring-muted">{range.from} – {range.to}{cadence && ` · ${label(cadence)}`}</small></section>
       <DiscoveryList key={`${view}-${range.from}-${range.to}-${accountId}-${search}-${cadence}-${sort}`} accountId={accountId} search={search} cadence={cadence} sort={sort} range={range} dismissed={view === 'dismissed'} accounts={accounts.data ?? []} onTracked={async item => { setView('tracked'); setSelectedId(item.id); await refresh('Series tracked with the payments you selected.') }} onChanged={refresh} />
     </>}
   </section>
@@ -82,7 +85,7 @@ function SeriesEditor({ series, discovery, accounts, onCancel, onSaved }: { seri
     onSuccess: onSaved,
   })
   return <form className="panel recurring-divider" onSubmit={event => { event.preventDefault(); mutation.mutate() }}>
-    <h2>{series ? 'Edit recurring payment' : discovery ? 'Review this pattern' : 'Add recurring payment'}</h2>
+
     <fieldset disabled={mutation.isPending} className="recurring-form-grid">
       <label>Name<input required maxLength={120} value={name} onChange={event => setName(event.target.value)} placeholder="e.g. Music subscription" /></label>
       <label>Account<select required disabled={Boolean(series || discovery)} value={accountId} onChange={event => { setAccountId(event.target.value); setCurrency(accounts.find(x => x.id === event.target.value)?.currency ?? 'AUD') }}><option value="">Choose an account</option>{accounts.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
@@ -116,7 +119,7 @@ function DiscoveryList({ range, dismissed, accounts, onTracked, onChanged, accou
       <div className="recurring-heading"><div><h2>{item.name}</h2><p className="recurring-muted">{item.accountName} · {label(item.cadence)} · {money(item.expectedAmount, item.currency)}</p></div>
         {selected !== `${item.key}-${item.transactions[0]?.snapshot.id}` && <div className="recurring-actions">{!dismissed && <button type="button" onClick={() => setSelected(`${item.key}-${item.transactions[0]?.snapshot.id}`)}>Review and track</button>}<button type="button" className="secondary" disabled={decision.isPending} onClick={() => decision.mutate(item.key)}>{dismissed ? 'Restore' : 'Dismiss'}</button></div>}
       </div>
-      {selected === `${item.key}-${item.transactions[0]?.snapshot.id}` ? <SeriesEditor discovery={item} accounts={accounts} onCancel={() => setSelected(null)} onSaved={onTracked} /> : <details><summary>Evidence · {item.transactions.length} payments</summary><Evidence items={item.evidence} /><div className="recurring-ledger">{item.transactions.map(payment => <div className="recurring-payment" key={payment.snapshot.id}><SnapshotView snapshot={payment.snapshot} /></div>)}</div></details>}
+      {selected === `${item.key}-${item.transactions[0]?.snapshot.id}` ? <Drawer title="Track recurring payment" onClose={() => setSelected(null)}><SeriesEditor discovery={item} accounts={accounts} onCancel={() => setSelected(null)} onSaved={onTracked} /></Drawer> : <details><summary>Evidence · {item.transactions.length} payments</summary><Evidence items={item.evidence} /><div className="recurring-ledger">{item.transactions.map(payment => <div className="recurring-payment" key={payment.snapshot.id}><SnapshotView snapshot={payment.snapshot} /></div>)}</div></details>}
     </article>)}
     <Pager data={discovery.data} loading={discovery.isFetching} onPage={setPage} />
   </div>
@@ -143,7 +146,7 @@ function SeriesDetail({ series, accounts, onBack, onChanged, initialDate }: { in
     <div className="recurring-actions"><button className="secondary" type="button" onClick={onBack}>All recurring payments</button></div>
     <section className="panel"><div className="recurring-heading"><div><h2>{series.name}</h2><p className="recurring-muted">{series.accountName} · {money(series.expectedAmount, series.currency)} expected · {label(series.cadence)} · {series.state}</p></div><button type="button" className="secondary" onClick={() => setEditing(!editing)}>{editing ? 'Close editor' : 'Edit schedule and amount'}</button></div>
       {series.needsReviewCount > 0 && <p className="recurring-warning">{series.needsReviewCount} {series.needsReviewCount === 1 ? 'confirmation needs' : 'confirmations need'} review. Changed transactions are excluded from recorded payments until reviewed again.</p>}
-      {editing && <SeriesEditor key={`${series.id}-${series.version}`} series={series} accounts={accounts} onCancel={() => setEditing(false)} onSaved={async () => { setEditing(false); await onChanged('Recurring payment updated.') }} />}
+      {editing && <Drawer title="Edit recurring payment" onClose={() => setEditing(false)}><SeriesEditor key={`${series.id}-${series.version}`} series={series} accounts={accounts} onCancel={() => setEditing(false)} onSaved={async () => { setEditing(false); await onChanged('Recurring payment updated.') }} /></Drawer>}
       <details><summary>Recognised billing names ({series.aliases.length})</summary><Help><p className="recurring-muted">Names are compared in their chosen field, ignoring punctuation and letter case. Confirm a payment and choose “remember” to add another name. Shared billing services still need careful review.</p></Help><div className="recurring-ledger">{series.aliases.map(alias => <div className="recurring-heading recurring-payment" key={alias.id}><span>{alias.field}: {alias.value}</span><button type="button" className="secondary" disabled={busy} onClick={() => aliasRemoval.mutate(alias.id)}>Remove {alias.value}</button></div>)}</div></details>
     </section>
     {action.error && <p role="alert">{recurringError(action.error)}</p>}
