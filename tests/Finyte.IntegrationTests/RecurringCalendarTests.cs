@@ -5,6 +5,15 @@ namespace Finyte.IntegrationTests;
 
 public sealed class RecurringCalendarTests
 {
+    [Theory]
+    [InlineData("monthly", 2026, 3, 28)]
+    [InlineData("quarterly", 2026, 5, 28)]
+    [InlineData("yearly", 2028, 2, 28)]
+    public void FebruaryTwentyEighthDoesNotImplyMonthEnd(string cadence, int year, int month, int day)
+    {
+        Assert.Equal(new DateOnly(year, month, day), RecurringCalendar.Add(cadence, new DateOnly(2026, 2, 28), cadence == "yearly" ? 2 : 1));
+    }
+
     [Fact]
     public void MonthlySchedulePreservesMonthEndAcrossFebruaryAndLeapYears()
     {

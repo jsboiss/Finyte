@@ -129,6 +129,17 @@ public sealed class RecurringPatternTests
     }
 
     [Fact]
+    public void TwentyEighthKeepsItsIdentityAcrossFebruary()
+    {
+        var rows = Monthly().Select((x, y) => x with { PostedDate = new DateOnly(2026, y + 2, 28) }).ToList();
+        rows.Add(rows[^1] with { Id = Guid.NewGuid(), PostedDate = new DateOnly(2026, 5, 28) });
+        var full = Assert.Single(RecurringPatternDetector.Detect(rows));
+        var narrowed = Assert.Single(RecurringPatternDetector.Detect(rows.Skip(1).ToList()));
+        Assert.Equal(full.Key, narrowed.Key);
+        Assert.Equal(28, RecurringCalendar.Add(full.Cadence, full.AnchorDate, 1)!.Value.Day);
+    }
+
+    [Fact]
     public void DiscoveryWindowDoesNotChangeDismissalIdentity()
     {
         var rows = Monthly();
