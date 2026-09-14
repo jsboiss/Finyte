@@ -41,19 +41,16 @@ public sealed class AccountPreferencesApiTests
     }
 
     [Fact]
-    public async Task ManualBalanceAcceptsDecimalStringsUsedByTheForm()
+    public async Task ManualBalanceEndpointIsUnavailable()
     {
         await using var factory = new FinyteApiFactory();
         using var client = factory.CreateClient();
         var seed = await Seed(factory, client);
-        (await client.PutAsJsonAsync($"/api/accounts/{seed.AccountId}/balance", new
-        {
-            currentBalance = "-999.25", availableBalance = "25.10", expectedVersion = 0
-        })).EnsureSuccessStatusCode();
+        var response = await client.PutAsJsonAsync($"/api/accounts/{seed.AccountId}/balance", new { currentBalance = 100, expectedVersion = 0 });
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         using var scope = factory.Services.CreateScope();
-        var account = await scope.ServiceProvider.GetRequiredService<FinyteDbContext>().Accounts.SingleAsync(x => x.Id == seed.AccountId);
-        Assert.Equal(-999.25m, account.CurrentBalance);
-        Assert.Equal(25.10m, account.AvailableBalance);
+        var dbContext = scope.ServiceProvider.GetRequiredService<FinyteDbContext>();
+        Assert.Equal(-20000m, (await dbContext.Accounts.SingleAsync(x => x.Id == seed.AccountId)).CurrentBalance);
     }
 
     [Fact]
@@ -169,39 +166,6 @@ public sealed class AccountPreferencesApiTests
         Assert.Equal(35000, combinedCashFlow.DailyCashFlow.Sum(x => x.ExpenseMinorUnits));
         var transactions = await client.GetFromJsonAsync<JsonElement>("/api/transactions");
         Assert.Equal(2, transactions.GetProperty("totalCount").GetInt32());
-    }
-
-    [Fact]
-    public async Task ManualBalanceUpdatesSnapshotWithoutTransactionsAndCannotEditProviderBalance()
-    {
-        await using var factory = new FinyteApiFactory();
-        using var client = factory.CreateClient();
-        var seed = await Seed(factory, client);
-        var response = await client.PutAsJsonAsync($"/api/accounts/{seed.AccountId}/balance", new { currentBalance = -999.25m, availableBalance = (decimal?)null, expectedVersion = 0 });
-        response.EnsureSuccessStatusCode();
-        using (var scope = factory.Services.CreateScope())
-        {
-            var dbContext = scope.ServiceProvider.GetRequiredService<FinyteDbContext>();
-            var account = await dbContext.Accounts.SingleAsync(x => x.Id == seed.AccountId);
-            Assert.Equal(-999.25m, account.CurrentBalance);
-            Assert.Null(account.AvailableBalance);
-            Assert.NotNull(account.BalanceAsOf);
-            Assert.Equal("AUD", account.Currency);
-            Assert.Equal(2, await dbContext.Transactions.CountAsync());
-            Assert.Equal(1, account.ManualBalanceVersion);
-        }
-        Assert.Equal(HttpStatusCode.Conflict, (await client.PutAsJsonAsync($"/api/accounts/{seed.AccountId}/balance", new { currentBalance = 100, expectedVersion = 0 })).StatusCode);
-        Assert.Equal(HttpStatusCode.BadRequest, (await client.PutAsJsonAsync($"/api/accounts/{seed.AccountId}/balance", new { currentBalance = 1.001m, expectedVersion = 1 })).StatusCode);
-        Assert.Equal(HttpStatusCode.BadRequest, (await client.PutAsJsonAsync($"/api/accounts/{seed.AccountId}/balance", new { currentBalance = 10000000000000000m, expectedVersion = 1 })).StatusCode);
-        using (var scope = factory.Services.CreateScope())
-        {
-            var dbContext = scope.ServiceProvider.GetRequiredService<FinyteDbContext>();
-            var account = await dbContext.Accounts.SingleAsync(x => x.Id == seed.AccountId);
-            // Disconnected provider accounts still retain their provider identity and must remain protected.
-            account.FiskilAccountId = "disconnected-bank-account";
-            await dbContext.SaveChangesAsync();
-        }
-        Assert.Equal(HttpStatusCode.BadRequest, (await client.PutAsJsonAsync($"/api/accounts/{seed.AccountId}/balance", new { currentBalance = 0, expectedVersion = 1 })).StatusCode);
     }
 
     [Theory]

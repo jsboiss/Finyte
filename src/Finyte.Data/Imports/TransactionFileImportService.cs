@@ -41,6 +41,19 @@ public sealed class TransactionFileImportService(FinyteDbContext dbContext, IPro
                     $"SELECT 1 FROM accounts WHERE \"Id\" = {accountId} AND \"TenantId\" = {tenantId} FOR UPDATE", cancellationToken);
             }
 
+            // Re-read after acquiring the lock: another import may have supplied a newer snapshot.
+            await dbContext.Entry(account).ReloadAsync(cancellationToken);
+            var balance = AccountPreferences.IsProviderManaged(account) ? null : TransactionFileParser.ParseBalance(content);
+            var balanceChanged = balance is not null
+                && (!AccountPreferences.HasReportedBalance(account) || balance.AsOf > account.BalanceAsOf);
+            if (balanceChanged)
+            {
+                account.CurrentBalance = balance!.CurrentBalance;
+                account.AvailableBalance = balance.AvailableBalance;
+                account.BalanceAsOf = balance.AsOf;
+                account.ManualBalanceVersion++;
+            }
+
             var from = new DateTimeOffset(transactions.Min(x => x.PostedDate).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
             var to = new DateTimeOffset(transactions.Max(x => x.PostedDate).ToDateTime(TimeOnly.MaxValue), TimeSpan.Zero);
             var existing = await dbContext.Transactions
@@ -114,7 +127,7 @@ public sealed class TransactionFileImportService(FinyteDbContext dbContext, IPro
             run.TotalCount = transactions.Count;
             run.Status = "completed";
             run.CompletedAt = DateTimeOffset.UtcNow;
-            if (run.ImportedCount > 0)
+            if (run.ImportedCount > 0 || balanceChanged)
             {
                 await projectionInvalidator.TenantProjectionDataChanged(tenantId, "OFX transactions imported", cancellationToken);
             }

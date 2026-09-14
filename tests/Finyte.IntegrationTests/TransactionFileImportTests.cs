@@ -14,6 +14,61 @@ namespace Finyte.IntegrationTests;
 public sealed class TransactionFileImportTests
 {
     [Theory]
+    [InlineData("20260914120000[10:AEST]", "2026-09-14T02:00:00Z")]
+    [InlineData("20260914", "2026-09-14T00:00:00Z")]
+    public void ParsesDatedBalances(string date, string expected)
+    {
+        var balance = TransactionFileParser.ParseBalance($"<LEDGERBAL><BALAMT>-12.34<DTASOF>{date}</LEDGERBAL>");
+        Assert.Equal(-12.34m, balance!.CurrentBalance);
+        Assert.Equal(DateTimeOffset.Parse(expected), balance.AsOf);
+        Assert.Null(TransactionFileParser.ParseBalance(Wrap(Row("one"))));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task BalanceSnapshotsRespectProviderOwnershipAndDateEvenWithDuplicateTransactions(bool providerManaged)
+    {
+        await using var factory = new FinyteApiFactory();
+        using var client = factory.CreateClient();
+        var (tenantId, accountId) = await Setup(factory, client);
+        using (var scope = factory.Services.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<FinyteDbContext>();
+            var account = await dbContext.Accounts.SingleAsync();
+            account.FiskilAccountId = providerManaged ? "bank-account" : null;
+            account.BalanceAsOf = account.CreatedAt; // Legacy placeholder must not block an older export.
+            await dbContext.SaveChangesAsync();
+        }
+        foreach (var snapshot in new[] { ("20260901", "100"), ("20260903", "200"), ("20260902", "150") })
+        {
+            var content = Wrap(Row("one")) + $"<LEDGERBAL><BALAMT>{snapshot.Item2}<DTASOF>{snapshot.Item1}</LEDGERBAL>";
+            (await Upload(client, accountId, content)).EnsureSuccessStatusCode();
+        }
+        (await Upload(client, accountId, Wrap(Row("one")))).EnsureSuccessStatusCode();
+        using var verificationScope = factory.Services.CreateScope();
+        var verificationDb = verificationScope.ServiceProvider.GetRequiredService<FinyteDbContext>();
+        var result = await verificationDb.Accounts.SingleAsync();
+        Assert.Equal(providerManaged ? 500m : 200m, result.CurrentBalance);
+        Assert.Equal(providerManaged ? result.CreatedAt : new DateTimeOffset(2026, 9, 3, 0, 0, 0, TimeSpan.Zero), result.BalanceAsOf);
+        Assert.Equal(1, await verificationDb.Transactions.CountAsync());
+        Assert.Equal(providerManaged ? 1 : 2, (await verificationDb.Tenants.SingleAsync(x => x.Id == tenantId)).FinancialDataVersion);
+    }
+
+    [Fact]
+    public async Task NewImportAccountHasNoBalanceAndIgnoresManualAmounts()
+    {
+        await using var factory = new FinyteApiFactory();
+        using var client = factory.CreateClient();
+        await Setup(factory, client);
+        var response = await client.PostAsJsonAsync("/api/accounts", new { name = "New import account", currency = "AUD", currentBalance = 999 });
+        response.EnsureSuccessStatusCode();
+        using var json = System.Text.Json.JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal(System.Text.Json.JsonValueKind.Null, json.RootElement.GetProperty("balanceAsOf").ValueKind);
+        Assert.Equal(0m, json.RootElement.GetProperty("currentBalance").GetDecimal());
+    }
+
+    [Theory]
     [InlineData("<STMTTRN><DTPOSTED>20260823<TRNAMT>-12.34<FITID>one<NAME>Coffee &amp; Co</STMTTRN>")]
     [InlineData("<STMTTRN><DTPOSTED>20260823120000[10:AEST]</DTPOSTED><TRNAMT>-12.34</TRNAMT><FITID>one</FITID><NAME>Coffee &amp; Co</NAME></STMTTRN>")]
     public void ParsesSgmlAndXmlExports(string row)
