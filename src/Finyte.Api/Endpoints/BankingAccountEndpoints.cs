@@ -16,7 +16,6 @@ public static class BankingAccountEndpoints
         group.MapGet("/", GetAccounts).WithName("GetAccounts");
         group.MapPost("/", CreateAccount).WithName("CreateAccount");
         group.MapPut("/{accountId:guid}/preferences", UpdatePreferences).WithName("UpdateAccountPreferences");
-        group.MapPut("/{accountId:guid}/balance", UpdateManualBalance).WithName("UpdateManualAccountBalance");
         return app;
     }
 
@@ -45,10 +44,6 @@ public static class BankingAccountEndpoints
         {
             return TypedResults.BadRequest("Use an account name of up to 120 characters and a three-letter currency code.");
         }
-        if (!ValidBalance(request.CurrentBalance) || (request.AvailableBalance.HasValue && !ValidBalance(request.AvailableBalance.Value)))
-        {
-            return TypedResults.BadRequest("Balances must have at most two decimal places and fit within 16 whole digits.");
-        }
         var currentTenant = await tenantResolver.Resolve(httpContext.User, cancellationToken);
         if (!await billingAccess.HasAccess(currentTenant.TenantId, cancellationToken))
         {
@@ -58,9 +53,8 @@ public static class BankingAccountEndpoints
         var account = new Account
         {
             TenantId = currentTenant.TenantId, Name = name,
-            CurrentBalance = request.CurrentBalance, AvailableBalance = request.AvailableBalance,
             Currency = string.IsNullOrWhiteSpace(request.Currency) ? "AUD" : request.Currency.Trim().ToUpperInvariant(),
-            BalanceAsOf = now, CreatedAt = now
+            CreatedAt = now
         };
         dbContext.Accounts.Add(account);
         await projectionInvalidator.TenantProjectionDataChanged(currentTenant.TenantId, "manual account created", cancellationToken);
@@ -108,52 +102,6 @@ public static class BankingAccountEndpoints
         return Results.Ok(ToResponse(account));
     }
 
-    private static async Task<IResult> UpdateManualBalance(
-        Guid accountId, UpdateManualAccountBalanceRequest request, TenantResolver tenantResolver,
-        HttpContext httpContext, IBillingAccess billingAccess, FinyteDbContext dbContext,
-        IProjectionInvalidator projectionInvalidator, CancellationToken cancellationToken)
-    {
-        if (request.CurrentBalance is null || !ValidBalance(request.CurrentBalance.Value)
-            || (request.AvailableBalance.HasValue && !ValidBalance(request.AvailableBalance.Value))
-            || request.ExpectedVersion is null or < 0)
-        {
-            return Results.BadRequest("Provide the current balance and balance version. Balances must have at most two decimal places and fit within 16 whole digits.");
-        }
-        var currentTenant = await tenantResolver.Resolve(httpContext.User, cancellationToken);
-        var account = await dbContext.Accounts.SingleOrDefaultAsync(x => x.TenantId == currentTenant.TenantId && x.Id == accountId, cancellationToken);
-        if (account is null)
-        {
-            return Results.NotFound();
-        }
-        if (AccountPreferences.IsProviderManaged(account))
-        {
-            return Results.BadRequest("This account's balance comes from its bank connection and cannot be edited manually.");
-        }
-        if (!await billingAccess.HasAccess(currentTenant.TenantId, cancellationToken))
-        {
-            return Results.Problem("An active subscription is required to update account balances.", statusCode: StatusCodes.Status402PaymentRequired);
-        }
-        if (account.ManualBalanceVersion != request.ExpectedVersion)
-        {
-            return Results.Conflict("The balance changed. Reload the account before saving again.");
-        }
-        account.CurrentBalance = request.CurrentBalance.Value;
-        account.AvailableBalance = request.AvailableBalance;
-        account.BalanceAsOf = DateTimeOffset.UtcNow;
-        account.ManualBalanceVersion++;
-        try
-        {
-            await projectionInvalidator.AccountBalanceChanged(currentTenant.TenantId, accountId, cancellationToken);
-        }
-        catch (DbUpdateConcurrencyException)
-        {
-            return Results.Conflict("Account data changed. Reload the account before saving again.");
-        }
-        return Results.Ok(ToResponse(account));
-    }
-
-    private static bool ValidBalance(decimal balance) => decimal.Abs(balance) <= 9999999999999999.99m && decimal.Round(balance, 2) == balance;
-
     private static AccountResponse ToResponse(Account account)
     {
         var accountType = AccountPreferences.EffectiveType(account);
@@ -162,12 +110,11 @@ public static class BankingAccountEndpoints
             accountType, AccountPreferences.InferredType(account.ProductCategory), account.AccountTypeOverride,
             AccountPreferences.DefaultIncludeInAnalytics(accountType), account.IncludeInAnalyticsOverride,
             AccountPreferences.IncludeInAnalytics(account), AccountPreferences.IsProviderManaged(account),
-            account.ProductName, account.ProductCategory, account.BalanceAsOf, account.PreferencesVersion, account.ManualBalanceVersion);
+            account.ProductName, account.ProductCategory, AccountPreferences.HasReportedBalance(account) ? account.BalanceAsOf : null, account.PreferencesVersion, account.ManualBalanceVersion);
     }
 
-    private sealed record CreateAccountRequest(string Name, decimal CurrentBalance, decimal? AvailableBalance, string? Currency);
+    private sealed record CreateAccountRequest(string Name, string? Currency);
     private sealed record UpdateAccountPreferencesRequest(string? CustomName, string? AccountTypeOverride, bool? IncludeInAnalyticsOverride, int? ExpectedVersion);
-    private sealed record UpdateManualAccountBalanceRequest(decimal? CurrentBalance, decimal? AvailableBalance, int? ExpectedVersion);
     private sealed record AccountResponse(Guid Id, string Name, decimal CurrentBalance, decimal? AvailableBalance, string Currency,
         DateTimeOffset CreatedAt, string OriginalName, string? CustomName, string AccountType, string InferredAccountType,
         string? AccountTypeOverride, bool DefaultIncludeInAnalytics, bool? IncludeInAnalyticsOverride, bool IncludeInAnalytics,

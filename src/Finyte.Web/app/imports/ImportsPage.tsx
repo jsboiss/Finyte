@@ -26,7 +26,6 @@ export function ImportsPage() {
   const [accountId, setAccountId] = useState('')
   const [file, setFile] = useState<File | null>(null)
   const [name, setName] = useState('')
-  const [balance, setBalance] = useState('0')
   const [currency, setCurrency] = useState('AUD')
   const accounts = useQuery({ queryKey: ['accounts'], queryFn: () => getAccounts() })
   const imports = useQuery({
@@ -52,7 +51,7 @@ export function ImportsPage() {
   const createAccount = useMutation({
     mutationFn: () => httpClient<{ id: string }>({
       method: 'POST', url: '/api/accounts',
-      data: { name: name.trim(), currentBalance: Number(balance), currency },
+      data: { name: name.trim(), currency },
     }),
     onSuccess: async account => {
       await queryClient.invalidateQueries({ queryKey: ['accounts'] })
@@ -91,10 +90,8 @@ export function ImportsPage() {
       </section>
       <ImportAccountList accounts={accounts.data ?? []} selectedId={accountId} disabled={upload.isPending} onSelect={id => { setAccountId(id); upload.reset() }} />
       {showAccountForm && <Drawer title="Add account" onClose={() => setShowAccountForm(false)}><section className="import-panel">
-        <div><p>Enter the current balance shown by your bank. Transaction imports do not change this balance.</p></div>
         <form className="import-form" onSubmit={x => { x.preventDefault(); createAccount.mutate() }}>
           <label>Account name<input required maxLength={120} value={name} onChange={x => setName(x.target.value)} placeholder="Everyday account" /></label>
-          <label>Current balance<input required type="number" step="0.01" value={balance} onChange={x => setBalance(x.target.value)} /></label>
           <label>Currency<input required pattern="[A-Za-z]{3}" maxLength={3} value={currency} onChange={x => setCurrency(x.target.value.toUpperCase())} /></label>
           <button disabled={!name.trim() || createAccount.isPending || upload.isPending} type="submit"><Plus aria-hidden="true" />{createAccount.isPending ? 'Creating…' : 'Create account'}</button>
         </form>

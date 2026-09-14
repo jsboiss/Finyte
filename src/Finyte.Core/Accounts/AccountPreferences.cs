@@ -30,4 +30,8 @@ public static class AccountPreferences
         .Select(x => x.Currency).FirstOrDefault() ?? "AUD";
 
     public static bool IsProviderManaged(Account account) => account.ProviderConnectionId.HasValue || !string.IsNullOrWhiteSpace(account.FiskilAccountId);
+
+    // Older import accounts stamped their creation time onto a placeholder zero balance.
+    public static bool HasReportedBalance(Account account) => account.BalanceAsOf.HasValue
+        && (IsProviderManaged(account) || account.BalanceAsOf != account.CreatedAt || account.ManualBalanceVersion > 0);
 }
