@@ -176,7 +176,7 @@ public static class RecurringPatternDetector
 
     private static string Phase(string cadence, DateOnly date)
     {
-        var day = date.Day == DateTime.DaysInMonth(date.Year, date.Month) ? "end" : date.Day.ToString(CultureInfo.InvariantCulture);
+        var day = date.Day >= 29 && date.Day == DateTime.DaysInMonth(date.Year, date.Month) ? "end" : date.Day.ToString(CultureInfo.InvariantCulture);
         return cadence switch
         {
             "weekly" => (date.DayNumber % 7).ToString(CultureInfo.InvariantCulture),

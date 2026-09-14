@@ -31,7 +31,7 @@ public static class RecurringCalendar
         var year = (int)(monthIndex / 12) + 1;
         var month = (int)(monthIndex % 12) + 1;
         var daysInMonth = DateTime.DaysInMonth(year, month);
-        var anchorIsMonthEnd = anchor.Day == DateTime.DaysInMonth(anchor.Year, anchor.Month);
+        var anchorIsMonthEnd = anchor.Day >= 29 && anchor.Day == DateTime.DaysInMonth(anchor.Year, anchor.Month);
         return new DateOnly(year, month, anchorIsMonthEnd ? daysInMonth : Math.Min(anchor.Day, daysInMonth));
     }
 
