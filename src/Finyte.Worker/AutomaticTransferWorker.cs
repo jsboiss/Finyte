@@ -32,7 +32,9 @@ public sealed class AutomaticTransferWorker(IServiceScopeFactory scopeFactory, I
             {
                 logger.LogWarning(exception, "Automatic transfer reconciliation will retry");
             }
-            await Task.Delay(TimeSpan.FromMinutes(5), stoppingToken);
+            // Imports and syncs reconcile their changed windows immediately; this
+            // slower sweep revalidates historical decisions and account changes.
+            await Task.Delay(TimeSpan.FromHours(24), stoppingToken);
         }
     }
 }

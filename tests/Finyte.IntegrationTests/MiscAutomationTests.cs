@@ -15,6 +15,71 @@ namespace Finyte.IntegrationTests;
 public sealed class MiscAutomationTests
 {
     [Fact]
+    public async Task BoundedReconciliationKeepsHistoricalDecisionsAndDetectsEdgeCompetitors()
+    {
+        await using var factory = new FinyteApiFactory();
+        await CheckBoundedReconciliation(factory);
+    }
+
+    [PostgreSqlFact]
+    public async Task PostgreSqlBoundedReconciliationKeepsHistoricalDecisionsAndDetectsEdgeCompetitors()
+    {
+        var connection = Environment.GetEnvironmentVariable("FINYTE_TEST_POSTGRES")!;
+        var schema = $"bounded_transfers_{Guid.NewGuid():N}";
+        await using var admin = new Npgsql.NpgsqlConnection(connection);
+        await admin.OpenAsync();
+        await using (var create = new Npgsql.NpgsqlCommand($"CREATE SCHEMA \"{schema}\"", admin))
+        {
+            await create.ExecuteNonQueryAsync();
+        }
+        try
+        {
+            await using var factory = new FinyteApiFactory(new Npgsql.NpgsqlConnectionStringBuilder(connection) { SearchPath = schema }.ConnectionString);
+            using var scope = factory.Services.CreateScope();
+            await scope.ServiceProvider.GetRequiredService<FinyteDbContext>().Database.MigrateAsync();
+            await CheckBoundedReconciliation(factory);
+        }
+        finally
+        {
+            await using var drop = new Npgsql.NpgsqlCommand($"DROP SCHEMA \"{schema}\" CASCADE", admin);
+            await drop.ExecuteNonQueryAsync();
+        }
+    }
+
+    private static async Task CheckBoundedReconciliation(FinyteApiFactory factory)
+    {
+        using var client = factory.CreateClient();
+        var tenantId = await Seed(factory, client);
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<FinyteDbContext>();
+        var service = scope.ServiceProvider.GetRequiredService<AutomaticTransferService>();
+        Assert.Equal(1, await service.Reconcile(tenantId, default));
+        var historical = await db.InternalTransfers.SingleAsync();
+        var accounts = await db.Accounts.ToListAsync();
+        var debit = Row(tenantId, accounts[0].Id, -200, "Transfer to savings");
+        debit.PostedAt = new DateTimeOffset(2026, 10, 10, 0, 0, 0, TimeSpan.Zero);
+        var credit = Row(tenantId, accounts[1].Id, 200, "Transfer from main");
+        credit.PostedAt = debit.PostedAt.Value.AddDays(3);
+        var competitor = Row(tenantId, accounts[0].Id, -200, "Card purchase");
+        competitor.PostedAt = debit.PostedAt.Value.AddDays(6);
+        db.Transactions.AddRange(debit, credit, competitor);
+        await db.SaveChangesAsync();
+        Assert.Equal(0, await service.Reconcile(tenantId, default, new(2026, 10, 10), new(2026, 10, 10)));
+        Assert.Equal("confirmed", historical.Status);
+        Assert.Single(await db.InternalTransfers.ToListAsync());
+        competitor.Amount = -300;
+        await db.SaveChangesAsync();
+        Assert.Equal(1, await service.Reconcile(tenantId, default, new(2026, 10, 10), new(2026, 10, 10)));
+        // A newly imported competitor must invalidate a pair even when only its
+        // partner is in the changed window's three-day focus.
+        competitor.Amount = -200;
+        await db.SaveChangesAsync();
+        Assert.Equal(1, await service.Reconcile(tenantId, default, new(2026, 10, 16), new(2026, 10, 16)));
+        Assert.Equal("confirmed", historical.Status);
+        Assert.Equal("needs-review", (await db.InternalTransfers.SingleAsync(x => x.DebitTransactionId == debit.Id)).Status);
+    }
+
+    [Fact]
     public async Task AutomaticMatchIsIdempotentAndUndoSurvivesReconciliation()
     {
         await using var factory = new FinyteApiFactory();

@@ -59,8 +59,13 @@ public sealed class SyncProjectionRefresher(
             return;
         }
 
-        await new Transfers.AutomaticTransferService(dbContext, projectionInvalidator).Reconcile(syncRun.TenantId, cancellationToken);
         var summary = MergeSummaries(syncRuns);
+        if (summary.HasChanges && summary.MinChangedAt is { } minChangedAt && summary.MaxChangedAt is { } maxChangedAt
+            && syncRuns.Any(x => x.Dataset == ProviderSyncDataset.Transactions))
+        {
+            await new Transfers.AutomaticTransferService(dbContext, projectionInvalidator).Reconcile(syncRun.TenantId, cancellationToken,
+                DateOnly.FromDateTime(minChangedAt.UtcDateTime), DateOnly.FromDateTime(maxChangedAt.UtcDateTime));
+        }
 
         if (summary.HasChanges)
         {
