@@ -7,7 +7,7 @@ import { getAccounts, type Account as AccountResponse } from '../accounts/accoun
 import { BillingAccessPanel } from '../billing/BillingAccessPanel'
 import { getBillingAccess } from '../billing/billingApi'
 import { AppSelect } from '../shared/AppSelect'
-import { compactCurrency, formatMonth } from '../shared/formatters'
+import { currency, formatMonth } from '../shared/formatters'
 import { DashboardMetricGrid } from './components/DashboardMetricGrid'
 import { DashboardModuleFrame } from './components/DashboardModuleFrame'
 import { getOverview, getOverviewQueryKey, refreshOverview } from './overviewApi'
@@ -58,9 +58,9 @@ export function DashboardPage() {
   const balanceAccounts = accountsQuery.data?.filter(x => accountId === null || x.id === accountId)
   const hasBalances = !!balanceAccounts?.length && balanceAccounts.every(x => x.balanceAsOf !== null)
   const metrics: DashboardMetric[] = [
-    { id: 'balance', label: overview.scope.label, value: hasBalances ? compactCurrency(overview.accountBalanceMinorUnits, overview.currency) : 'Balance unavailable', href: '/accounts' },
-    { id: 'month-spend', label: 'This month spent', value: compactCurrency(overview.currentMonthSpendMinorUnits, overview.currency), href: transactionLink(overview, 'debit') },
-    { id: 'daily-spend', label: 'Avg daily spend', value: compactCurrency(overview.averageDailySpendMinorUnits, overview.currency), href: transactionLink(overview, 'debit') },
+    { id: 'balance', label: overview.scope.label, value: hasBalances ? currency(overview.accountBalanceMinorUnits, overview.currency) : 'Balance unavailable', href: '/accounts' },
+    { id: 'month-spend', label: 'This month spent', value: currency(overview.currentMonthSpendMinorUnits, overview.currency), href: transactionLink(overview, 'debit') },
+    { id: 'daily-spend', label: 'Avg daily spend', value: currency(overview.averageDailySpendMinorUnits, overview.currency), href: transactionLink(overview, 'debit') },
   ]
 
   if (billingAccessQuery.isLoading || (hasBillingAccess && overviewQuery.isPending)) {

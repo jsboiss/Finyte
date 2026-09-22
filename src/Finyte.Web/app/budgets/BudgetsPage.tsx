@@ -5,7 +5,6 @@ import { isAxiosError } from 'axios'
 import { useState } from 'react'
 import { getAccounts } from '../accounts/accountsApi'
 import { httpClient } from '../api/httpClient'
-import { exactAmount } from '../shared/formatters'
 import type { TransactionTag } from '../transactions/types'
 import './budgets.css'
 
@@ -17,7 +16,7 @@ type Period = { from: string; to: string; limit: number; spent: number; remainin
 type Periods = { budgetId: string; version: number; currency: string; periods: Period[] }
 type TransactionPage = { totalCount: number; items: { id: string; accountName: string; description: string | null; merchantName: string | null; postedAt: string; amount: number; currency: string }[] }
 const today = () => new Date().toISOString().slice(0, 10)
-const money = (amount: number, currency: string) => exactAmount(amount, currency)
+const money = (amount: number, currency: string) => new Intl.NumberFormat('en-AU', { style: 'currency', currency }).format(amount)
 const dateLabel = (date: string) => new Date(`${date}T00:00:00Z`).toLocaleDateString('en-AU', { timeZone: 'UTC', day: 'numeric', month: 'short', year: 'numeric' })
 
 export function BudgetsPage() {

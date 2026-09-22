@@ -1,5 +1,4 @@
 import { httpClient } from '../api/httpClient'
-import { exactAmount } from '../shared/formatters'
 
 export type PayCycleProfile = {
   id: string; name: string; frequency: string; anchorDate: string; currency: string; expectedIncome: number | null
@@ -29,5 +28,5 @@ export const getBreakdown = (id: string, date: string, page: number, kind: strin
 })
 
 export function money(amount: number, currency: string) {
-  return exactAmount(amount, currency)
+  return new Intl.NumberFormat('en-AU', { style: 'currency', currency }).format(amount)
 }

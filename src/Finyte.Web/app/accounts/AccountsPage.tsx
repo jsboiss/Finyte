@@ -5,7 +5,6 @@ import { Link } from '@tanstack/react-router'
 import { isAxiosError } from 'axios'
 import { useState } from 'react'
 import { httpClient } from '../api/httpClient'
-import { exactAmount } from '../shared/formatters'
 import { accountTypeLabel, accountTypes, defaultAnalytics, getAccounts, type Account } from './accountsApi'
 
 type Editor = { account: Account }
@@ -90,7 +89,7 @@ function AccountEditor({ editor, onCancel, onSaved, onReload }: {
 }
 
 function formatBalance(balance: number | string, currency: string) {
-  return exactAmount(Number(balance), currency)
+  return new Intl.NumberFormat('en-AU', { style: 'currency', currency }).format(Number(balance))
 }
 
 function errorMessage(error: Error) {

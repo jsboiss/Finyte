@@ -5,7 +5,7 @@ import { isAxiosError } from 'axios'
 import { ArrowRightLeft } from '../shared/Icons'
 import { useState } from 'react'
 import { httpClient } from '../api/httpClient'
-import { exactAmount } from '../shared/formatters'
+import { currency } from '../shared/formatters'
 
 type TransferLeg = { id: string; accountId: string; accountName: string; description: string; amount: number; currency: string; postedAt: string | null }
 type TransferReview = {
@@ -101,7 +101,7 @@ export function TransferCorrections({ initialView = 'confirmed' }: { initialView
 }
 
 function TransferTransaction({ leg, label }: { leg: TransferLeg; label: string }) {
-  return <div className="transfer-leg"><span>{label} · {leg.accountName}</span><strong>{exactAmount(leg.amount, leg.currency)}</strong><p>{leg.description}</p><time dateTime={leg.postedAt ?? undefined}>{leg.postedAt ? leg.postedAt.slice(0, 10) : 'No posting date'}</time></div>
+  return <div className="transfer-leg"><span>{label} · {leg.accountName}</span><strong>{currency(Math.round(leg.amount * 100), leg.currency)}</strong><p>{leg.description}</p><time dateTime={leg.postedAt ?? undefined}>{leg.postedAt ? leg.postedAt.slice(0, 10) : 'No posting date'}</time></div>
 }
 
 function readError(error: Error) {

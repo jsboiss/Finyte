@@ -1,6 +1,5 @@
 import { isAxiosError } from 'axios'
 import { httpClient } from '../api/httpClient'
-import { exactAmount } from '../shared/formatters'
 
 export const recurringUrl = '/api/recurring-payments'
 export const cadences = ['weekly', 'fortnightly', 'monthly', 'quarterly', 'yearly'] as const
@@ -31,7 +30,7 @@ export type Candidate = { snapshot: Snapshot; suggestedOccurrenceDate: string; a
 export type Review = { id: string; transactionId: string; occurrenceDate: string; action: string; snapshot: Snapshot; currentStatus: string; currentTransaction: Snapshot | null; reviewedByUserId: string; reviewedAt: string }
 
 export function money(amount: number, currency: string) {
-  return exactAmount(amount, currency)
+  return new Intl.NumberFormat('en-AU', { style: 'currency', currency }).format(amount)
 }
 
 export function label(value: string) {

@@ -1,5 +1,5 @@
 import { memo } from 'react'
-import { compactCurrency, exactCurrency, signedCompactCurrency, signedCurrency } from '../../shared/formatters'
+import { currency, signedCurrency } from '../../shared/formatters'
 import { monthRange, transactionLink } from '../transactionLinks'
 import type { CashFlowPoint, DashboardChart, OverviewResponse } from '../types'
 
@@ -40,7 +40,7 @@ const CashFlowSummary = memo(function CashFlowSummary({ points, currencyCode, ov
       <nav className="bucket-links" aria-label="Review cash flow"><a href={transactionLink(overview, 'credit', (points.length ? { from: points[0].from, to: points.at(-1)!.to } : monthRange(overview.monthKey)))}>Income transactions</a><a href={transactionLink(overview, 'debit', (points.length ? { from: points[0].from, to: points.at(-1)!.to } : monthRange(overview.monthKey)))}>Expense transactions</a></nav>
       <div className="cash-flow-summary-net">
         <span>Net cash flow</span>
-        <strong className={net >= 0 ? 'amount-positive' : 'amount-negative'}>{signedCompactCurrency(net, currencyCode)}</strong>
+        <strong className={net >= 0 ? 'amount-positive' : 'amount-negative'}>{signedCurrency(net, currencyCode)}</strong>
       </div>
       <div className="summary-race-track" aria-label="Income vs expenses month to date">
         <div className="race-income" style={{ width: `${incomePercent}%` }} />
@@ -49,21 +49,21 @@ const CashFlowSummary = memo(function CashFlowSummary({ points, currencyCode, ov
       <div className="cash-flow-summary-grid">
         <div>
           <span>Income</span>
-          <strong>{compactCurrency(income, currencyCode)}</strong>
+          <strong>{currency(income, currencyCode)}</strong>
         </div>
         <div>
           <span>Expenses</span>
-          <strong>{compactCurrency(expenses, currencyCode)}</strong>
+          <strong>{currency(expenses, currencyCode)}</strong>
         </div>
       </div>
       <div className="cash-flow-highlights">
         <div>
           <span>Best income day</span>
-          <strong>{bestIncomeDay && bestIncomeDay.incomeMinorUnits > 0 ? `${bestIncomeDay.tooltip} ${compactCurrency(bestIncomeDay.incomeMinorUnits, currencyCode)}` : 'No income yet'}</strong>
+          <strong>{bestIncomeDay && bestIncomeDay.incomeMinorUnits > 0 ? `${bestIncomeDay.tooltip} ${currency(bestIncomeDay.incomeMinorUnits, currencyCode)}` : 'No income yet'}</strong>
         </div>
         <div>
           <span>Highest spend day</span>
-          <strong>{highestExpenseDay && highestExpenseDay.expenseMinorUnits > 0 ? `${highestExpenseDay.tooltip} ${compactCurrency(highestExpenseDay.expenseMinorUnits, currencyCode)}` : 'No spend yet'}</strong>
+          <strong>{highestExpenseDay && highestExpenseDay.expenseMinorUnits > 0 ? `${highestExpenseDay.tooltip} ${currency(highestExpenseDay.expenseMinorUnits, currencyCode)}` : 'No spend yet'}</strong>
         </div>
       </div>
     </div>
@@ -83,8 +83,8 @@ const CashFlowDailyBars = memo(function CashFlowDailyBars({ points, currencyCode
             <div className="daily-bar" key={x.id}>
               <div className="daily-tooltip" style={{ left: getTooltipPosition(index, points.length) }}>
                 <strong>{x.tooltip}</strong>
-                <span>Income {exactCurrency(x.incomeMinorUnits, currencyCode)}</span>
-                <span>Expense {exactCurrency(x.expenseMinorUnits, currencyCode)}</span>
+                <span>Income {currency(x.incomeMinorUnits, currencyCode)}</span>
+                <span>Expense {currency(x.expenseMinorUnits, currencyCode)}</span>
               </div>
               <div className="daily-bar-stack">
                 {x.incomeMinorUnits > 0 && <a aria-label={`View income: ${x.tooltip}`} href={transactionLink(overview, 'credit', x)} className="daily-income" style={{ height: `${incomeHeight}%` }} />}
@@ -114,8 +114,8 @@ const CashFlowWeeklyBars = memo(function CashFlowWeeklyBars({ points, currencyCo
             <div className="weekly-bar" key={x.id}>
               <div className="daily-tooltip" style={{ left: getTooltipPosition(index, points.length) }}>
                 <strong>{x.tooltip}</strong>
-                <span>Income {exactCurrency(x.incomeMinorUnits, currencyCode)}</span>
-                <span>Expense {exactCurrency(x.expenseMinorUnits, currencyCode)}</span>
+                <span>Income {currency(x.incomeMinorUnits, currencyCode)}</span>
+                <span>Expense {currency(x.expenseMinorUnits, currencyCode)}</span>
                 <span>Net {signedCurrency(net, currencyCode)}</span>
               </div>
               <div className="weekly-bar-stack">
@@ -124,7 +124,7 @@ const CashFlowWeeklyBars = memo(function CashFlowWeeklyBars({ points, currencyCo
               </div>
               <div className="weekly-bar-footer">
                 <a href={transactionLink(overview, 'all', x)}>{x.label}</a>
-                <strong className={net >= 0 ? 'amount-positive' : 'amount-negative'}>{signedCompactCurrency(net, currencyCode)}</strong>
+                <strong className={net >= 0 ? 'amount-positive' : 'amount-negative'}>{signedCurrency(net, currencyCode)}</strong>
               </div>
             </div>
           )
