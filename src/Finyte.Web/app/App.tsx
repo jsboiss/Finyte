@@ -1,5 +1,6 @@
 import { Drawer } from './shared/Drawer'
 import { Help } from './shared/Help'
+import { HouseholdSharingSummary } from './shared/HouseholdSharing'
 import { CreateOrganization, OrganizationSwitcher, SignIn, UserButton, useAuth, useOrganization } from '@clerk/react'
 import { link, type LinkError } from '@fiskil/link'
 import { QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -878,6 +879,7 @@ function ConnectionsPage() {
         <div className="panel-header">
           <div>
             <Help title="About bank connections"><p>Your details identify you to Fiskil for bank consent and notifications.</p></Help>
+            <HouseholdSharingSummary context="connection" />
           </div>
         </div>
 
@@ -1022,8 +1024,9 @@ function SettingsPage() {
         <section className="panel family-invite-panel">
           <div className="family-section-heading">
             <div className="family-icon"><UserPlus aria-hidden="true" /></div>
-            <div><p>Grow your household</p><h2>Invite a family member</h2><span>Members can connect their own accounts and view shared family finances.</span></div>
+            <div><p>Grow your household</p><h2>Invite a family member</h2><span>Anyone you invite sees every account and transaction in this household.</span></div>
           </div>
+          <HouseholdSharingSummary context="invite" />
           <form className="family-invite-form" onSubmit={x => { x.preventDefault(); inviteMutation.mutate(inviteEmail) }}>
             <div><Mail aria-hidden="true" /><input onChange={x => setInviteEmail(x.target.value)} placeholder="family@example.com" type="email" value={inviteEmail} /></div>
             <button disabled={!inviteEmail.trim() || inviteMutation.isPending} type="submit">{inviteMutation.isPending ? 'Sending…' : 'Send invite'}</button>
@@ -1037,6 +1040,7 @@ function SettingsPage() {
             <div className="family-icon"><Users aria-hidden="true" /></div>
             <div><p>People</p><h2>Family members</h2><span>{family.members.length} active {family.members.length === 1 ? 'member' : 'members'}</span></div>
           </div>
+          <HouseholdSharingSummary context="settings" />
           <div className="family-list">
             {family.members.map(x => (
               <div className="family-list-row" key={x.id}>

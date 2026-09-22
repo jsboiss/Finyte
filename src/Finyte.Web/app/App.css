@@ -2345,3 +2345,25 @@ td {
 .tag-bucket-link i { width: .65rem; height: .65rem; border-radius: 50%; }
 .daily-bar-stack a, .weekly-bar-stack a { display: block; width: 100%; }
 .bucket-links { display: flex; gap: 1rem; }
+
+.household-sharing {
+  align-items: baseline;
+  display: flex;
+  gap: 0.4rem;
+}
+
+.household-sharing p {
+  color: var(--muted-text, #94a3b8);
+  font-size: 0.8rem;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.household-sharing ul {
+  margin: 0.4rem 0;
+  padding-left: 1.1rem;
+}
+
+.household-sharing li {
+  margin-bottom: 0.25rem;
+}
