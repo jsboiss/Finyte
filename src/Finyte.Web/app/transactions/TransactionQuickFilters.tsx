@@ -7,13 +7,15 @@ export function TransactionQuickFilters({ filters, onApply }: { filters: Transac
   const [error, setError] = useState('')
   const change = (values: Partial<TransactionFilters>) => { setDraft(x => ({ ...x, ...values })); setError('') }
   const noun = draft.direction === 'debit' ? 'payments' : draft.direction === 'credit' ? 'receipts' : 'amounts'
-  return <form className="panel transaction-quick-filters" onSubmit={x => {
-    x.preventDefault()
-    if (draft.minAmount && draft.maxAmount && Number(draft.minAmount) > Number(draft.maxAmount)) { setError('Minimum must be less than or equal to maximum.'); return }
-    onApply({ ...draft, search: draft.search.trim() })
-  }}>
-    <label className="filter-field quick-search"><span>Search transactions</span><input type="search" maxLength={200} placeholder="Merchant, description or reference" value={draft.search} onChange={x => change({ search: x.target.value })} /></label>
-    <label className="filter-field"><span>Money movement</span><select value={draft.direction} onChange={x => change({ direction: x.target.value })}><option value="all">Money in and out</option><option value="debit">Money out</option><option value="credit">Money in</option></select></label>
+  return <section className="panel transaction-quick-filters" aria-label="Transaction search">
+    <form className="quick-search-row" onSubmit={x => { x.preventDefault(); onApply({ ...filters, search: draft.search.trim() }) }}><label className="filter-field"><span className="visually-hidden">Search transactions</span><input type="search" maxLength={200} placeholder="Search transactions" title="Search merchant, description or reference" value={draft.search} onChange={x => change({ search: x.target.value })} /></label><button type="submit">Search</button></form>
+    <details className="quick-filter-options"><summary>Amount &amp; sort</summary><form className="quick-filter-fields" onSubmit={x => {
+      x.preventDefault()
+      if (draft.minAmount && draft.maxAmount && Number(draft.minAmount) > Number(draft.maxAmount)) { setError('Minimum must be less than or equal to maximum.'); return }
+      onApply({ ...draft, search: draft.search.trim() })
+      x.currentTarget.closest('details')?.removeAttribute('open')
+    }}>
+    <label className="filter-field"><span>Money movement</span><select value={draft.direction} onChange={x => change({ direction: x.target.value })}><option value="all">In &amp; out</option><option value="debit">Money out</option><option value="credit">Money in</option></select></label>
 
     {draft.amountMode === 'signed' ? <div className="quick-search"><p>Signed amount filters are active in Advanced.</p><button className="secondary-button" type="button" onClick={() => change({ amountMode: 'absolute', minAmount: '', maxAmount: '' })}>Use positive amounts</button></div> : <>
       <label className="filter-field"><span>Amount match</span><select value={exact ? 'exact' : 'range'} onChange={x => { setExact(x.target.value === 'exact'); change({ minAmount: '', maxAmount: '' }) }}><option value="range">Range</option><option value="exact">Exact amount</option></select></label>
@@ -22,9 +24,10 @@ export function TransactionQuickFilters({ filters, onApply }: { filters: Transac
       <small className="quick-search">Positive amounts; inclusive bounds or exact cents. {draft.direction === 'all' ? 'Both directions, including zero.' : draft.direction === 'debit' ? 'Money out only.' : 'Money in only.'} Currencies are not converted.</small>
     </>}
     <label className="filter-field quick-search"><span>Sort transactions</span><select value={draft.sort} onChange={x => change({ sort: x.target.value })}><option value="-date">Newest first</option><option value="date">Oldest first</option><option value="-magnitude">Largest {noun} first</option><option value="magnitude">Smallest {noun} first</option><option value="description">Description: A to Z</option><option value="-description">Description: Z to A</option>{['amount', '-amount'].includes(draft.sort) && <option value={draft.sort}>Signed amount: {draft.sort === 'amount' ? 'lowest' : 'highest'} first (Advanced)</option>}</select></label>
-    <div className="quick-actions"><button type="submit">Search / apply</button><button type="button" className="secondary-button" disabled={!draft.search && !filters.search} onClick={() => { change({ search: '' }); onApply({ ...filters, search: '' }) }}>Clear search</button></div>
+    <div className="quick-actions"><button type="submit">Apply filters</button></div>
     {error && <p role="alert">{error}</p>}
-  </form>
+    </form></details>
+  </section>
 }
 
 export function TransactionFilterChips({ filters, accounts, tags, onApply }: { filters: TransactionFilters; accounts: { id: string; name: string }[]; tags: { id: string; name: string }[]; onApply: (filters: TransactionFilters) => void }) {
