@@ -35,6 +35,7 @@ export type OverviewResponse = {
     hasFailed: boolean
     lastError: string | null
   }
+  balanceCoverage: { coveredAccounts: number; totalAccounts: number; missingAccounts: string[] } | null
 }
 
 export type OverviewAccountOption = {
@@ -47,6 +48,7 @@ export type DashboardMetric = {
   id: string
   label: string
   value: string
+  note?: string
   tone?: 'default' | 'positive' | 'negative'
 }
 
