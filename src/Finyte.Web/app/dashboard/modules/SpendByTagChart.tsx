@@ -1,5 +1,5 @@
 import { Help } from '../../shared/Help'
-import { currency } from '../../shared/formatters'
+import { compactCurrency } from '../../shared/formatters'
 import type { OverviewResponse } from '../types'
 import { transactionLink } from '../transactionLinks'
 
@@ -17,22 +17,22 @@ export function SpendByTagChart({ tags, currencyCode, overview }: { tags: Overvi
         <svg viewBox="0 0 210 210" role="group" aria-label="Spending by tag: select a slice to view transactions">
           {total <= 0 && <circle cx="105" cy="105" r="83.5" fill="none" stroke="#36393d" strokeWidth="43" />}
           {slices.map(x => (
-            <a key={x.tag.tagId ?? 'untagged'} href={transactionLink(overview, 'debit', undefined, x.tag.tagId)} aria-label={`View ${x.tag.name} transactions: ${currency(x.tag.amountMinorUnits, currencyCode)}`}>
-              <title>{`${x.tag.name}: ${currency(x.tag.amountMinorUnits, currencyCode)} — view transactions`}</title>
+            <a key={x.tag.tagId ?? 'untagged'} href={transactionLink(overview, 'debit', undefined, x.tag.tagId)} aria-label={`View ${x.tag.name} transactions: ${compactCurrency(x.tag.amountMinorUnits, currencyCode)}`}>
+              <title>{`${x.tag.name}: ${compactCurrency(x.tag.amountMinorUnits, currencyCode)} — view transactions`}</title>
               <path d={slicePath(x.start, x.end)} fill={x.tag.color} />
             </a>
           ))}
         </svg>
         <div>
           <span>Total</span>
-          <strong>{currency(total, currencyCode)}</strong>
+          <strong>{compactCurrency(total, currencyCode)}</strong>
         </div>
       </div>
       <div className="tag-list">
         {tags.map(x => (
           <a className="tag-bucket-link" href={transactionLink(overview, 'debit', undefined, x.tagId)} key={x.tagId ?? 'untagged'}>
             <span><i style={{ backgroundColor: x.color }} />{x.name}</span>
-            <strong>{currency(x.amountMinorUnits, currencyCode)}</strong>
+            <strong>{compactCurrency(x.amountMinorUnits, currencyCode)}</strong>
           </a>
         ))}
         <p>{primary && <>{primary.name} is currently {primary.percentage.toFixed(1)}% of tracked monthly spend. </>}<Help title="About tag amounts"><p>Amounts on transactions with multiple tags are split between those tags. The transaction list shows each payment’s full amount.</p></Help></p>

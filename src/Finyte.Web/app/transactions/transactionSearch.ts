@@ -7,6 +7,7 @@ export type TransactionFilters = {
   tagIds: string[]
   tagMatch: 'any' | 'all'
   untagged: boolean
+  amountMode: string
   minAmount: string
   maxAmount: string
   currency: string
@@ -19,13 +20,13 @@ export type TransactionFilters = {
 
 export const defaultTransactionFilters: TransactionFilters = {
   accountId: '', from: '', to: '', search: '', category: '', tagIds: [],
-  tagMatch: 'any', untagged: false, minAmount: '', maxAmount: '', currency: '', sort: '-date',
+  amountMode: 'absolute', tagMatch: 'any', untagged: false, minAmount: '', maxAmount: '', currency: '', sort: '-date',
   postedOnly: false, analyticsOnly: false, direction: 'all', internalTransfers: 'include',
 }
 
 export function transactionSearchParams(page: number, pageSize: number, filters: TransactionFilters) {
   const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize), sort: filters.sort })
-  for (const key of ['accountId', 'from', 'to', 'search', 'category', 'minAmount', 'maxAmount', 'currency'] as const) {
+  for (const key of ['amountMode', 'accountId', 'from', 'to', 'search', 'category', 'minAmount', 'maxAmount', 'currency'] as const) {
     if (filters[key]) {
       params.set(key, filters[key])
     }
@@ -49,9 +50,11 @@ export function transactionSearchParams(page: number, pageSize: number, filters:
 export function readTransactionSearch(search = window.location.search) {
   const params = new URLSearchParams(search)
   const filters = { ...defaultTransactionFilters }
-  for (const key of ['accountId', 'from', 'to', 'search', 'category', 'minAmount', 'maxAmount', 'currency', 'sort', 'direction', 'internalTransfers'] as const) {
+  for (const key of ['amountMode', 'accountId', 'from', 'to', 'search', 'category', 'minAmount', 'maxAmount', 'currency', 'sort', 'direction', 'internalTransfers'] as const) {
     if (params.has(key)) filters[key] = params.get(key)!
   }
+  // Preserve signed semantics for existing bookmarked amount filters.
+  if (!params.has('amountMode') && (params.has('minAmount') || params.has('maxAmount'))) { filters.amountMode = 'signed' }
   filters.tagIds = params.getAll('tagIds')
   filters.tagMatch = params.get('tagMatch') === 'all' ? 'all' : 'any'
   filters.untagged = params.get('untagged') === 'true'

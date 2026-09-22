@@ -5,6 +5,7 @@ import { isAxiosError } from 'axios'
 import { useState } from 'react'
 import { getAccounts } from '../accounts/accountsApi'
 import { httpClient } from '../api/httpClient'
+import { exactAmount } from '../shared/formatters'
 import type { TransactionTag } from '../transactions/types'
 import './budgets.css'
 
@@ -16,7 +17,7 @@ type Period = { from: string; to: string; limit: number; spent: number; remainin
 type Periods = { budgetId: string; version: number; currency: string; periods: Period[] }
 type TransactionPage = { totalCount: number; items: { id: string; accountName: string; description: string | null; merchantName: string | null; postedAt: string; amount: number; currency: string }[] }
 const today = () => new Date().toISOString().slice(0, 10)
-const money = (amount: number, currency: string) => new Intl.NumberFormat('en-AU', { style: 'currency', currency }).format(amount)
+const money = (amount: number, currency: string) => exactAmount(amount, currency)
 const dateLabel = (date: string) => new Date(`${date}T00:00:00Z`).toLocaleDateString('en-AU', { timeZone: 'UTC', day: 'numeric', month: 'short', year: 'numeric' })
 
 export function BudgetsPage() {
@@ -42,7 +43,7 @@ export function BudgetsPage() {
         setEditor(null); setSelectedId(budget.id); setNotice(`${budget.name} saved.`)
         await queryClient.invalidateQueries({ queryKey: ['budgets'] })
       }} onReload={async () => { await budgets.refetch(); setEditor(null) }} /></Drawer>}
-      {budgets.data?.length === 0 && !editor && <section className="panel"><h2>No budgets yet</h2><p>Create a limit for all spending, exact categories, or tagged transactions. You can review every transaction that counts.</p></section>}
+      {budgets.data?.length === 0 && !editor && <section className="panel"><h2>No budgets yet</h2><p>Create a limit for all spending, categories, or tagged transactions. You can review every transaction that counts.</p></section>}
       {!!budgets.data?.length && <div className="budget-layout">
         <nav className="panel budget-list" aria-label="Budgets">{budgets.data.map(budget => <button type="button" key={budget.id} aria-current={selected?.id === budget.id ? 'true' : undefined} onClick={() => setSelectedId(budget.id)}>
           <strong>{budget.name}</strong><span>{money(budget.limit, budget.currency)} · {budget.frequency}</span>
@@ -55,7 +56,7 @@ export function BudgetsPage() {
   )
 }
 
-function BudgetEditor({ budget, onSaved, onCancel, onReload }: { budget?: Budget; onSaved: (budget: Budget) => Promise<void>; onCancel: () => void; onReload: () => Promise<void> }) {
+export function BudgetEditor({ budget, onSaved, onCancel, onReload }: { budget?: Budget; onSaved: (budget: Budget) => Promise<void>; onCancel: () => void; onReload: () => Promise<void> }) {
   const accounts = useQuery({ queryKey: ['accounts'], queryFn: getAccounts })
   const tags = useQuery({ queryKey: ['tags'], queryFn: () => httpClient<TransactionTag[]>({ url: '/api/tags' }) })
   const [name, setName] = useState(budget?.name ?? '')
@@ -64,20 +65,36 @@ function BudgetEditor({ budget, onSaved, onCancel, onReload }: { budget?: Budget
   const [frequency, setFrequency] = useState(budget?.frequency ?? 'monthly')
   const [anchor, setAnchor] = useState(budget?.anchorDate ?? `${today().slice(0, 7)}-01`)
   const [mode, setMode] = useState(budget?.matchMode ?? 'all')
-  const [categories, setCategories] = useState(budget?.categories.join('\n') ?? '')
+  const [categories, setCategories] = useState<string[]>(budget?.categories ?? [])
+  const availableCategories = useQuery({ queryKey: ['budgets', 'categories'], queryFn: () => httpClient<string[]>({ url: '/api/budgets/categories' }) })
+  const [search, setSearch] = useState('')
+  const [tagSearch, setTagSearch] = useState('')
+  const [previewDate, setPreviewDate] = useState(today)
   const [tagIds, setTagIds] = useState(budget?.tagIds ?? [])
   const [scope, setScope] = useState(budget?.accountScope ?? 'analytics')
   const [accountIds, setAccountIds] = useState(budget?.accountIds ?? [])
+  const data = { name, limit, currency, frequency, anchorDate: anchor, matchMode: mode,
+    categories: mode === 'selected' ? categories : [], tagIds: mode === 'selected' ? tagIds : [],
+    accountScope: scope, accountIds: scope === 'selected' ? accountIds : [], expectedVersion: budget?.version }
+  const missingCategories = categories.filter(x => availableCategories.data && !availableCategories.data.some(y => y.toLowerCase() === x.toLowerCase()))
+  const missingTags = tagIds.filter(x => tags.data && !tags.data.some(y => y.id === x))
+  const selectionError = mode === 'selected' && (!categories.length && !tagIds.length
+    ? 'Choose at least one category or tag. Nothing is selected.'
+    : missingCategories.length || missingTags.length ? 'Remove unavailable selections and choose current categories or tags.' : '')
+  const missingAccounts = accountIds.filter(x => accounts.data && !accounts.data.some(y => y.id === x))
+  const accountError = scope === 'selected' && (!accountIds.length || missingAccounts.length > 0)
+  const valid = !!name.trim() && Number(limit) > 0 && /^[A-Z]{3}$/.test(currency) && !!anchor && !selectionError && !accountError
+    && (mode !== 'selected' || availableCategories.isSuccess && tags.isSuccess) && (scope !== 'selected' || accounts.isSuccess)
+  const preview = useQuery({ queryKey: ['budgets', 'preview', data, previewDate],
+    queryFn: ({ signal }) => httpClient<Pick<Period, 'from' | 'to' | 'spent' | 'transactionCount' | 'observedThrough' | 'excludedCurrencies'> & { currency: string; items: TransactionPage['items'] }>({ method: 'POST', url: '/api/budgets/preview', params: { date: previewDate }, data, signal }),
+    enabled: valid && !!previewDate, retry: false })
   const save = useMutation({
     mutationFn: () => httpClient<Budget>({
-      method: budget ? 'PUT' : 'POST', url: budget ? `/api/budgets/${budget.id}` : '/api/budgets',
-      data: { name, limit, currency, frequency, anchorDate: anchor, matchMode: mode,
-        categories: mode === 'selected' ? categories.split('\n').map(x => x.trim()).filter(Boolean) : [],
-        tagIds: mode === 'selected' ? tagIds : [], accountScope: scope, accountIds: scope === 'selected' ? accountIds : [], expectedVersion: budget?.version },
+      method: budget ? 'PUT' : 'POST', url: budget ? `/api/budgets/${budget.id}` : '/api/budgets', data,
     }),
     onSuccess: onSaved,
   })
-  return <form className="panel budget-editor" onSubmit={event => { event.preventDefault(); save.mutate() }}>
+  return <form className="panel budget-editor" onSubmit={event => { event.preventDefault(); if (valid && preview.isSuccess && !preview.isFetching) { save.mutate() } }}>
 
     <fieldset disabled={save.isPending}>
       <div className="budget-form-grid">
@@ -90,19 +107,50 @@ function BudgetEditor({ budget, onSaved, onCancel, onReload }: { budget?: Budget
       </div>
       <Help><p>The start date anchors the repeating schedule, including past periods. Monthly schedules clamp to the last day of shorter months, then return to the original day.</p></Help>
       {mode === 'selected' && <>
-        <label>Exact category names, one per line<textarea rows={3} value={categories} onChange={event => setCategories(event.target.value)} placeholder={'Groceries\nEating Out'} /></label>
-        <p>A transaction counts once if either its primary or secondary category exactly matches a name (ignoring case), or it has any selected tag.</p>
-        <fieldset className="budget-choices"><legend>Tags</legend>{tags.data?.map(tag => <label key={tag.id}><input type="checkbox" checked={tagIds.includes(tag.id)} onChange={event => setTagIds(x => event.target.checked ? [...x, tag.id] : x.filter(y => y !== tag.id))} />{tag.name}</label>)}
-          {tags.isPending && <p>Loading tags…</p>}{tags.data?.length === 0 && <p>Create tags on the Transactions page, or use exact categories.</p>}
-          {tags.error && <p role="alert">Unable to load tags. <button type="button" onClick={() => void tags.refetch()}>Retry</button></p>}
+        <p>Choose categories such as groceries, or optional tags such as holidays. A transaction counts if it matches <strong>any</strong> selection, and counts only once.</p>
+        <fieldset className="budget-choices"><legend>Categories</legend>
+          <label>Search categories<input type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Find a category" /></label>
+          <div className="budget-picked" aria-label="Selected categories">{categories.map(category => <button type="button" key={category} onClick={() => setCategories(x => x.filter(y => y !== category))}>{category}{missingCategories.includes(category) ? ' · unavailable' : ''} ×<span className="sr-only"> Remove category</span></button>)}</div>
+          <div className="budget-options">{availableCategories.data?.filter(x => x.toLowerCase().includes(search.toLowerCase())).map(category => <label key={category}><input type="checkbox" checked={categories.some(x => x.toLowerCase() === category.toLowerCase())} onChange={event => setCategories(x => event.target.checked ? [...x, category] : x.filter(y => y.toLowerCase() !== category.toLowerCase()))} />{category}</label>)}</div>
+          {availableCategories.isPending && <p>Loading categories…</p>}
+          {availableCategories.error && <p role="alert">Unable to load categories. <button type="button" onClick={() => void availableCategories.refetch()}>Retry categories</button></p>}
+          {availableCategories.data?.length === 0 && <p>No categories are available in your transactions yet. Use a tag, or import categorised transactions.</p>}
+          {!!availableCategories.data?.length && !availableCategories.data.some(x => x.toLowerCase().includes(search.toLowerCase())) && <p>No categories match your search.</p>}
         </fieldset>
+        <fieldset className="budget-choices"><legend>Tags (optional)</legend>
+          <label>Search tags<input type="search" value={tagSearch} onChange={event => setTagSearch(event.target.value)} placeholder="Find a tag" /></label>
+          <div className="budget-picked" aria-label="Selected tags">{tagIds.map(id => <button type="button" key={id} onClick={() => setTagIds(x => x.filter(y => y !== id))}>{tags.data?.find(x => x.id === id)?.name ?? 'Unavailable tag'} ×<span className="sr-only"> Remove tag</span></button>)}</div>
+          <div className="budget-options">{tags.data?.filter(x => x.name.toLowerCase().includes(tagSearch.toLowerCase())).map(tag => <label key={tag.id}><input type="checkbox" checked={tagIds.includes(tag.id)} onChange={event => setTagIds(x => event.target.checked ? [...x, tag.id] : x.filter(y => y !== tag.id))} />{tag.name}</label>)}</div>
+          {tags.isPending && <p>Loading tags…</p>}{tags.data?.length === 0 && <p>No tags yet. Categories alone are enough.</p>}
+          {!!tags.data?.length && !tags.data.some(x => x.name.toLowerCase().includes(tagSearch.toLowerCase())) && <p>No tags match your search.</p>}
+          {tags.error && <p role="alert">Unable to load tags. <button type="button" onClick={() => void tags.refetch()}>Retry tags</button></p>}
+        </fieldset>
+        {selectionError && <p role="alert">{selectionError}</p>}
       </>}
-      <label>Accounts<select value={scope} onChange={event => setScope(event.target.value)}><option value="analytics">Use accounts included in combined spending</option><option value="selected">Choose specific accounts</option></select></label>
+      <label>Accounts<select value={scope} onChange={event => setScope(event.target.value)}><option value="analytics">Combined spending accounts</option><option value="selected">Choose specific accounts</option></select></label>
       <p>{scope === 'analytics' ? 'Follows your family’s account preferences, including future accounts.' : 'Only selected accounts count, even when excluded from combined spending. Other currencies still do not count.'}</p>
       {scope === 'selected' && <fieldset className="budget-choices"><legend>Specific accounts</legend>{accounts.data?.map(account => <label key={account.id}><input type="checkbox" checked={accountIds.includes(account.id)} onChange={event => setAccountIds(x => event.target.checked ? [...x, account.id] : x.filter(y => y !== account.id))} />{account.name} ({account.currency}){!account.includeInAnalytics && ' · excluded from combined spending'}</label>)}
+        {missingAccounts.map(id => <button type="button" key={id} onClick={() => setAccountIds(x => x.filter(y => y !== id))}>Remove unavailable account</button>)}
         {accounts.isPending && <p>Loading accounts…</p>}{accounts.error && <p role="alert">Unable to load accounts. <button type="button" onClick={() => void accounts.refetch()}>Retry</button></p>}
       </fieldset>}
-      <div className="budget-actions"><button type="submit">{save.isPending ? 'Saving…' : 'Save budget'}</button><button type="button" onClick={onCancel}>Cancel</button></div>
+      {accountError && <p role="alert">Choose at least one available account. Remove any deleted accounts.</p>}
+      <section className="budget-preview" aria-label="Spending preview">
+        <h3>Spending preview</h3>
+        <label>Preview the period containing<input type="date" required min="1901-01-01" max="9990-12-31" value={previewDate} onChange={event => setPreviewDate(event.target.value)} /></label>
+        <p>Posted debits only, in {currency || 'the chosen currency'}. Matched transfers are excluded. Categories match either category on a transaction.</p>
+        {!valid && <p>Complete the budget details and selections to preview spending.</p>}
+        {valid && preview.isFetching && <p role="status">Updating preview…</p>}
+        {valid && preview.error && <p role="alert">{errorMessage(preview.error)} <button type="button" onClick={() => void preview.refetch()}>Retry preview</button></p>}
+        {valid && preview.isSuccess && !preview.isFetching && preview.data && <>
+          <h4>{dateLabel(preview.data.from)} – {dateLabel(preview.data.to)}</h4>
+          <p>{preview.data.observedThrough ? `Actual spending through ${dateLabel(preview.data.observedThrough)} (UTC).` : 'Future period: no actual spending yet.'}</p>
+          <strong>{money(preview.data.spent, preview.data.currency)} · {preview.data.transactionCount} transactions</strong>
+          {preview.data.excludedCurrencies.length > 0 && <p>Excluded currencies: {preview.data.excludedCurrencies.map(x => `${x.transactionCount} ${x.currency} transactions`).join(', ')}. No conversion.</p>}
+          {!preview.data.transactionCount && <p>No matching spending in this period. Try another preview date or check your categories, tags and accounts.</p>}
+          {!!preview.data.items.length && <><h4>Latest examples (up to 5)</h4>{preview.data.items.map(transaction => <article key={transaction.id}><div><strong>{transaction.merchantName || transaction.description || 'Transaction'}</strong><p>{dateLabel(transaction.postedAt.slice(0, 10))} · {transaction.accountName}</p></div><strong>{money(-transaction.amount, transaction.currency)}</strong></article>)}</>}
+        </>}
+      </section>
+      <div className="budget-actions"><button type="submit" disabled={!valid || !preview.isSuccess || preview.isFetching}>{save.isPending ? 'Saving…' : 'Save budget'}</button><button type="button" onClick={onCancel}>Cancel</button></div>
     </fieldset>
     {save.error && <p role="alert">{errorMessage(save.error)} {isAxiosError(save.error) && save.error.response?.status === 409 && <button type="button" onClick={() => void onReload()}>Discard edits and reload</button>}</p>}
   </form>

@@ -24,12 +24,62 @@ public static class BudgetEndpoints
             return await next(context);
         });
         group.MapGet("/", GetBudgets).WithName("GetBudgets");
+        group.MapGet("/categories", GetCategories).WithName("GetBudgetCategories");
+        group.MapPost("/preview", Preview).WithName("PreviewBudget");
         group.MapPost("/", CreateBudget).WithName("CreateBudget");
         group.MapPut("/{budgetId:guid}", UpdateBudget).WithName("UpdateBudget");
         group.MapDelete("/{budgetId:guid}", DeleteBudget).WithName("DeleteBudget");
         group.MapGet("/{budgetId:guid}/periods", GetPeriods).WithName("GetBudgetPeriods");
         group.MapGet("/{budgetId:guid}/transactions", GetTransactions).WithName("GetBudgetTransactions");
         return app;
+    }
+
+    private static async Task<string[]> AvailableCategories(FinyteDbContext dbContext, Guid tenantId, CancellationToken cancellationToken)
+    {
+        var transactions = dbContext.Transactions.Where(x => x.TenantId == tenantId);
+        var categories = await transactions.Select(x => x.PrimaryCategory)
+            .Union(transactions.Select(x => x.SecondaryCategory))
+            .Where(x => x != null && x != "").ToListAsync(cancellationToken);
+        return categories.Where(x => !string.IsNullOrWhiteSpace(x) && x.Length <= 120 && x == x.Trim())
+            .Select(x => x!).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    private static async Task<IResult> GetCategories(TenantResolver tenantResolver, HttpContext httpContext, FinyteDbContext dbContext, CancellationToken cancellationToken)
+    {
+        var tenant = await tenantResolver.Resolve(httpContext.User, cancellationToken);
+        return Results.Ok(await AvailableCategories(dbContext, tenant.TenantId, cancellationToken));
+    }
+
+    private static async Task<IResult> Preview(BudgetRequest request, DateOnly date, TenantResolver tenantResolver, HttpContext httpContext, FinyteDbContext dbContext, CancellationToken cancellationToken)
+    {
+        var error = Validate(request);
+        if (error != null || !BudgetPeriods.SupportedDate(date))
+        {
+            return Results.BadRequest(error ?? "Choose a preview date from 1901 through 9990.");
+        }
+        var tenant = await tenantResolver.Resolve(httpContext.User, cancellationToken);
+        await using var snapshot = dbContext.Database.IsRelational()
+            ? await dbContext.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken) : null;
+        error = await ValidateReferences(dbContext, tenant.TenantId, request, cancellationToken);
+        if (error != null)
+        {
+            return Results.BadRequest(error);
+        }
+        var budget = new Budget { TenantId = tenant.TenantId, Name = request.Name! };
+        Apply(budget, request);
+        var period = BudgetPeriods.Containing(budget.Frequency, budget.AnchorDate, date);
+        var query = (await BudgetQueries.Transactions(dbContext, budget, cancellationToken, includeOtherCurrencies: true)).InPeriod(period);
+        var totals = await query.GroupBy(x => x.Currency)
+            .Select(x => new { Currency = x.Key, Spent = x.Sum(y => -y.Amount), Count = x.Count() }).ToListAsync(cancellationToken);
+        var included = totals.SingleOrDefault(x => x.Currency == budget.Currency);
+        var items = await query.Where(x => x.Currency == budget.Currency).OrderByDescending(x => x.PostedAt).ThenBy(x => x.Id).Take(5)
+            .Select(x => new { x.Id, accountName = x.Account == null ? "Account" : x.Account.CustomName ?? x.Account.Name,
+                x.PostedAt, x.Description, x.MerchantName, x.Amount, x.Currency }).ToListAsync(cancellationToken);
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        return Results.Ok(new { period.From, period.To, budget.Currency, spent = included?.Spent ?? 0,
+            transactionCount = included?.Count ?? 0, observedThrough = period.From > today ? (DateOnly?)null : period.To < today ? period.To : today,
+            excludedCurrencies = totals.Where(x => x.Currency != budget.Currency).OrderBy(x => x.Currency)
+                .Select(x => new ExcludedCurrencyResponse(x.Currency, x.Count)), items });
     }
 
     private static async Task<IResult> GetBudgets(TenantResolver tenantResolver, HttpContext httpContext, FinyteDbContext dbContext, CancellationToken cancellationToken)
@@ -245,6 +295,14 @@ public static class BudgetEndpoints
 
     private static async Task<string?> ValidateReferences(FinyteDbContext dbContext, Guid tenantId, BudgetRequest request, CancellationToken cancellationToken)
     {
+        if (request.Categories!.Length > 0)
+        {
+            var available = await AvailableCategories(dbContext, tenantId, cancellationToken);
+            if (request.Categories.Any(x => !available.Contains(x.Trim(), StringComparer.OrdinalIgnoreCase)))
+            {
+                return "One or more selected categories are no longer available. Remove them and choose from the current categories.";
+            }
+        }
         var tagIds = request.TagIds!.Distinct().ToArray();
         var accountIds = request.AccountIds!.Distinct().ToArray();
         if (await dbContext.TransactionTags.CountAsync(x => x.TenantId == tenantId && tagIds.Contains(x.Id), cancellationToken) != tagIds.Length

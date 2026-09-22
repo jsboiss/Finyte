@@ -57,13 +57,14 @@ export function TransactionFilterForm({ filters, accounts, tags, onApply }: Tran
         <span>Category</span>
         <input maxLength={200} placeholder="Search categories" value={draft.category} onChange={x => change('category', x.target.value)} />
       </label>
+      <label className="filter-field"><span>Amount interpretation</span><select value={draft.amountMode} onChange={x => setDraft(y => ({ ...y, amountMode: x.target.value, minAmount: '', maxAmount: '' }))}><option value="absolute">Positive amounts (either direction)</option><option value="signed">Advanced: signed amounts</option></select></label>
       <label className="filter-field amount-filter-field">
         <span>Amount range</span>
         <div className="range-filter">
-          <input aria-label="Minimum amount" placeholder="Min, e.g. -100" type="number" step="0.01" value={draft.minAmount} onChange={x => change('minAmount', x.target.value)} />
-          <input aria-label="Maximum amount" placeholder="Max, e.g. -20" type="number" step="0.01" value={draft.maxAmount} onChange={x => change('maxAmount', x.target.value)} />
+          <input aria-label="Minimum amount" min={draft.amountMode === 'absolute' ? 0 : undefined} placeholder="Minimum" type="number" step="0.01" value={draft.minAmount} onChange={x => change('minAmount', x.target.value)} />
+          <input aria-label="Maximum amount" min={draft.amountMode === 'absolute' ? 0 : undefined} placeholder="Maximum" type="number" step="0.01" value={draft.maxAmount} onChange={x => change('maxAmount', x.target.value)} />
         </div>
-        <small>Use negative amounts for money out and positive amounts for money in.</small>
+        <small>{draft.amountMode === 'signed' ? 'Signed: negative is money out; positive is money in. Both bounds are inclusive.' : 'Positive amounts in the selected direction. Both bounds are inclusive; equal bounds match an exact amount.'}</small>
       </label>
       <label className="filter-field">
         <span>Currency</span>
@@ -77,8 +78,10 @@ export function TransactionFilterForm({ filters, accounts, tags, onApply }: Tran
         <select value={draft.sort} onChange={x => change('sort', x.target.value)}>
           <option value="-date">Newest first</option>
           <option value="date">Oldest first</option>
-          <option value="amount">Amount: lowest first</option>
-          <option value="-amount">Amount: highest first</option>
+          <option value="-magnitude">Largest amounts first</option>
+          <option value="magnitude">Smallest amounts first</option>
+          <option value="amount">Signed amount: lowest first</option>
+          <option value="-amount">Signed amount: highest first</option>
           <option value="description">Description: A to Z</option>
           <option value="-description">Description: Z to A</option>
         </select>

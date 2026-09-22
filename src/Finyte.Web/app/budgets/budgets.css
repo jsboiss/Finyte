@@ -27,3 +27,16 @@
 .budget-audit article > div { min-width: 0; }
 @media (max-width: 900px) { .budget-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .budget-layout { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 520px) { .budget-form-grid, .budget-metrics { grid-template-columns: minmax(0, 1fr); } .budget-audit article { align-items: start; } }
+
+.budget-options { max-height: 12rem; overflow-y: auto; }
+.budget-picked { display: flex; flex-wrap: wrap; gap: .5rem; }
+.budget-picked button { white-space: normal; overflow-wrap: anywhere; text-align: left; }
+.budget-choices > label:has(input[type="search"]) { display: grid; }
+.budget-choices input[type="search"] { width: 100%; }
+.budget-options label { min-height: 44px; overflow-wrap: anywhere; }
+.budget-options input { flex-shrink: 0; }
+.budget-preview { border-top: 1px solid #334155; margin-top: 1rem; padding-top: .75rem; }
+.budget-preview article { display: flex; justify-content: space-between; align-items: start; gap: .75rem; padding: .75rem 0; border-bottom: 1px solid #334155; }
+.budget-preview article > div { min-width: 0; overflow-wrap: anywhere; }
+.budget-preview article > strong { white-space: nowrap; }
+.budget-preview article p { margin: .3rem 0 0; }

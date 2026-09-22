@@ -190,7 +190,21 @@ public sealed class BudgetApiTests
     {
         using var client = factory.CreateClient();
         var seed = await Seed(factory, client);
-        var budget = await Create(client, Request() with { MatchMode = "selected", Categories = ["groceries"], TagIds = [seed.TagId, seed.SecondTagId] });
+        var request = Request() with { MatchMode = "selected", Categories = ["groceries"], TagIds = [seed.TagId, seed.SecondTagId] };
+        var categories = (await client.GetFromJsonAsync<string[]>("/api/budgets/categories"))!;
+        Assert.Single(categories, x => x.Equals("Groceries", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains("Other", categories);
+        var previewResponse = await client.PostAsJsonAsync("/api/budgets/preview?date=2025-09-09", request);
+        Assert.True(previewResponse.IsSuccessStatusCode, await previewResponse.Content.ReadAsStringAsync());
+        var preview = (await previewResponse.Content.ReadFromJsonAsync<JsonElement>());
+        Assert.Equal("2025-09-01", preview.GetProperty("from").GetString());
+        Assert.Equal("2025-09-30", preview.GetProperty("to").GetString());
+        Assert.Equal(190, preview.GetProperty("spent").GetDecimal());
+        Assert.Equal(20, preview.GetProperty("transactionCount").GetInt32());
+        Assert.Equal(5, preview.GetProperty("items").GetArrayLength());
+        Assert.Equal("USD", preview.GetProperty("excludedCurrencies")[0].GetProperty("currency").GetString());
+        Assert.Empty((await client.GetFromJsonAsync<BudgetResponse[]>("/api/budgets"))!);
+        var budget = await Create(client, request);
         var period = await Period(client, budget.Id);
         Assert.Equal(190, period.Spent);
         Assert.Equal(-90, period.Remaining);
@@ -221,6 +235,71 @@ public sealed class BudgetApiTests
             await dbContext.SaveChangesAsync();
         }
         Assert.Equal(241, (await Period(client, budget.Id)).Spent);
+    }
+
+    [Fact]
+    public async Task PreviewRejectsMissingCriteriaAndUsesAccountScopeWithoutSaving()
+    {
+        await using var factory = new FinyteApiFactory();
+        using var client = factory.CreateClient();
+        var seed = await Seed(factory, client);
+        var invalid = new[]
+        {
+            Request() with { MatchMode = "selected" },
+            Request() with { MatchMode = "selected", Categories = ["Grocereis"] },
+            Request() with { MatchMode = "selected", TagIds = [Guid.NewGuid()] },
+            Request() with { AccountScope = "selected", AccountIds = [Guid.NewGuid()] }
+        };
+        foreach (var request in invalid)
+        {
+            Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync("/api/budgets/preview?date=2025-09-09", request)).StatusCode);
+            Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync("/api/budgets", request)).StatusCode);
+        }
+        var scoped = Request() with { AccountScope = "selected", AccountIds = [seed.LoanAccountId] };
+        var response = await client.PostAsJsonAsync("/api/budgets/preview?date=2025-09-09", scoped);
+        response.EnsureSuccessStatusCode();
+        var preview = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(900, preview.GetProperty("spent").GetDecimal());
+        var future = DateOnly.FromDateTime(DateTime.UtcNow).AddMonths(2);
+        response = await client.PostAsJsonAsync($"/api/budgets/preview?date={future:yyyy-MM-dd}", scoped);
+        response.EnsureSuccessStatusCode();
+        preview = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(0, preview.GetProperty("transactionCount").GetInt32());
+        Assert.Equal(JsonValueKind.Null, preview.GetProperty("observedThrough").ValueKind);
+        Assert.Empty((await client.GetFromJsonAsync<BudgetResponse[]>("/api/budgets"))!);
+        using var other = factory.CreateClient();
+        other.DefaultRequestHeaders.Add("X-Dev-Organization", "org_empty-budget");
+        (await other.PostAsJsonAsync("/api/auth/family", new { name = "Empty family" })).EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.PaymentRequired, (await other.GetAsync("/api/budgets/categories")).StatusCode);
+        Assert.Equal(HttpStatusCode.PaymentRequired, (await other.PostAsJsonAsync("/api/budgets/preview?date=2025-09-09", scoped)).StatusCode);
+    }
+
+    [Fact]
+    public async Task MissingCategoriesDoNotBroadenSavedBudgetsAndForeignCategoriesAreUnavailable()
+    {
+        await using var factory = new FinyteApiFactory();
+        using var client = factory.CreateClient();
+        var seed = await Seed(factory, client);
+        var request = Request() with { MatchMode = "selected", Categories = ["Groceries"] };
+        var budget = await Create(client, request);
+        using (var scope = factory.Services.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<FinyteDbContext>();
+            var transactions = await dbContext.Transactions.Where(x => x.TenantId == seed.TenantId).ToListAsync();
+            foreach (var transaction in transactions)
+            {
+                transaction.PrimaryCategory = "Family-only category";
+                transaction.SecondaryCategory = null;
+            }
+            await dbContext.SaveChangesAsync();
+        }
+        Assert.Equal(0, (await Period(client, budget.Id)).Spent);
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync("/api/budgets/preview?date=2025-09-09", request)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PutAsJsonAsync($"/api/budgets/{budget.Id}", request with { ExpectedVersion = 0 })).StatusCode);
+        using var other = factory.CreateClient();
+        await Seed(factory, other, "org_category-isolation");
+        Assert.DoesNotContain("Family-only category", (await other.GetFromJsonAsync<string[]>("/api/budgets/categories"))!);
+        Assert.Equal(HttpStatusCode.BadRequest, (await other.PostAsJsonAsync("/api/budgets/preview?date=2025-09-09", request with { Categories = ["Family-only category"] })).StatusCode);
     }
 
     private static async Task<BudgetResponse> Create(HttpClient client, BudgetInput request)

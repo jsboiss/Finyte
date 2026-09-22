@@ -2358,3 +2358,21 @@ td {
 .account-balance .balance-missing {
   color: var(--warning-text, #f59a55);
 }
+
+.transaction-quick-filters { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; padding: 12px; width: 100%; }
+.quick-search-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; }
+.quick-filter-options { min-width: 0; }
+.quick-filter-options summary { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 14px; color: #c5c7c2; }
+.quick-filter-options summary::before { content: '+'; font-size: 20px; }
+.quick-filter-options[open] summary::before { content: '−'; }
+.quick-filter-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding-top: 8px; }
+.transaction-quick-filters .quick-search, .quick-actions, .quick-filter-fields [role=alert] { grid-column: 1 / -1; }
+.transaction-quick-filters .filter-field { min-width: 0; }
+.transaction-quick-filters small { color: #a7aaa8; line-height: 1.5; }
+.quick-actions, .transaction-filter-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.transaction-filter-chips:empty { display: none; }
+.transaction-filter-chips button { font-size: 13px; padding: 8px 10px; min-height: 44px; white-space: normal; text-align: left; overflow-wrap: anywhere; max-width: 100%; }
+.app-drawer:has(.transaction-filters-panel) { overflow: hidden; }
+.app-drawer[open]:has(.transaction-filters-panel) { display: flex; flex-direction: column; }
+.app-drawer:has(.transaction-filters-panel) > header { flex: 0 0 auto; position: relative; }
+.app-drawer:has(.transaction-filters-panel) > .drawer-content { overflow-y: auto; min-height: 0; }
