@@ -58,7 +58,7 @@ export function DashboardPage() {
   const balanceAccounts = accountsQuery.data?.filter(x => accountId === null || x.id === accountId)
   const hasBalances = !!balanceAccounts?.length && balanceAccounts.every(x => x.balanceAsOf !== null)
   const metrics: DashboardMetric[] = [
-    balanceMetric(overview, hasBalances),
+    { id: 'balance', label: overview.scope.label, value: hasBalances ? compactCurrency(overview.accountBalanceMinorUnits, overview.currency) : 'Balance unavailable', href: '/accounts' },
     { id: 'month-spend', label: 'This month spent', value: compactCurrency(overview.currentMonthSpendMinorUnits, overview.currency), href: transactionLink(overview, 'debit') },
     { id: 'daily-spend', label: 'Avg daily spend', value: compactCurrency(overview.averageDailySpendMinorUnits, overview.currency), href: transactionLink(overview, 'debit') },
   ]
@@ -117,31 +117,6 @@ export function DashboardPage() {
   )
 }
 
-// The aggregate only sums accounts whose source reported a balance, so a partial total is labelled with its exact
-// scope instead of being hidden entirely or presented as complete.
-function balanceMetric(overview: OverviewResponse, hasBalances: boolean): DashboardMetric {
-  const base = { id: 'balance', label: overview.scope.label, href: '/accounts' }
-  const coverage = overview.balanceCoverage
-
-  if (!coverage) {
-    // Projections written before coverage was published fall back to the previous all-or-nothing rule.
-    return { ...base, value: hasBalances ? compactCurrency(overview.accountBalanceMinorUnits, overview.currency) : 'Balance unavailable' }
-  }
-
-  if (coverage.totalAccounts === 0) {
-    return { ...base, value: 'No accounts yet' }
-  }
-
-  if (coverage.coveredAccounts === 0) {
-    return { ...base, value: 'Balance unavailable', note: 'No account has reported a balance yet.' }
-  }
-
-  const value = compactCurrency(overview.accountBalanceMinorUnits, overview.currency)
-  return coverage.coveredAccounts < coverage.totalAccounts
-    ? { ...base, value, note: `${coverage.coveredAccounts} of ${coverage.totalAccounts} accounts. No balance from ${coverage.missingAccounts.join(', ')}.` }
-    : { ...base, value }
-}
-
 // A rebuild that keeps failing must not be polled once a second: the server retries on a cooldown, so back off
 // to a rate that still converges without every open dashboard hammering the API while the failure persists.
 function refreshInterval(freshness: OverviewResponse['freshness'] | undefined) {
@@ -177,6 +152,5 @@ function createEmptyOverview(accountId: string | null, selectedAccountId: string
     dailyCashFlow: [],
     monthlySpendByTag: [{ tagId: null, name: 'Untagged', color: '#94a3b8', amountMinorUnits: 0, percentage: 0 }],
     freshness: { calculatedAt: new Date().toISOString(), sourceWatermark: null, isRefreshing: false, isStale: false, hasFailed: false, lastError: null },
-    balanceCoverage: null,
   }
 }

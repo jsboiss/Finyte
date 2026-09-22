@@ -2346,18 +2346,6 @@ td {
 .daily-bar-stack a, .weekly-bar-stack a { display: block; width: 100%; }
 .bucket-links { display: flex; gap: 1rem; }
 
-.metric-card small,
-.account-balance small {
-  color: var(--muted-text, #94a3b8);
-  display: block;
-  font-size: 0.75rem;
-  line-height: 1.35;
-  margin-top: 0.25rem;
-}
-
-.account-balance .balance-missing {
-  color: var(--warning-text, #f59a55);
-}
 
 .transaction-quick-filters { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; padding: 12px; width: 100%; }
 .quick-search-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; }

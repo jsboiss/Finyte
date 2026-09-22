@@ -57,14 +57,7 @@ public sealed class OverviewProjector(FinyteDbContext dbContext) : IOverviewProj
         // Account preferences control all-account income/spending, never balances or direct inspection.
         var accountIds = accountRows.Where(x => scope.AccountId != null || AccountPreferences.IncludeInAnalytics(x)).Select(x => x.Id).ToList();
         var currency = AccountPreferences.AnalyticsCurrency(accountRows, scope.AccountId);
-        // Summing CurrentBalance for an account whose source never reported a balance invents a zero and makes a
-        // partial total look complete, so only reported balances contribute and the scope is published alongside.
-        var reportedBalances = accountRows.Where(x => x.BalanceAsOf is not null).ToList();
-        var accountBalanceMinorUnits = reportedBalances.Sum(x => ToMinorUnits(x.CurrentBalance));
-        var balanceCoverage = new OverviewBalanceCoverageResponse(
-            reportedBalances.Count,
-            accountRows.Count,
-            accountRows.Where(x => x.BalanceAsOf is null).Select(AccountPreferences.DisplayName).ToList());
+        var accountBalanceMinorUnits = accountRows.Sum(x => ToMinorUnits(x.CurrentBalance));
         var accountLabel = scope.AccountId is null
             ? "All accounts"
             : accountRows.FirstOrDefault() is { } account ? AccountPreferences.DisplayName(account) : "Selected account";
@@ -178,8 +171,7 @@ public sealed class OverviewProjector(FinyteDbContext dbContext) : IOverviewProj
             new OverviewCashFlowRaceResponse(incomeMinorUnits, expenseMinorUnits, incomeMinorUnits - expenseMinorUnits),
             dailyCashFlow,
             monthlySpendByTag,
-            new OverviewFreshnessResponse(now, sourceWatermark, IsRefreshing: false),
-            balanceCoverage);
+            new OverviewFreshnessResponse(now, sourceWatermark, IsRefreshing: false));
         if (includeInternalTransfers)
         {
             return response;

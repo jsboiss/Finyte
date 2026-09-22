@@ -8,7 +8,6 @@ export const DashboardMetricGrid = memo(function DashboardMetricGrid({ metrics }
         <a href={x.href} className={x.tone ? `metric-card metric-card-${x.tone}` : 'metric-card'} key={x.id}>
           <span>{x.label}</span>
           <strong>{x.value}</strong>
-          {x.note && <small>{x.note}</small>}
         </a>
       ))}
     </div>
