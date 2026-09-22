@@ -47,6 +47,9 @@ public sealed class TransactionSearchApiTests
             Assert.Equal("2026-06-01", item.PostedDate);
             Assert.Equal(2, item.Tags.Count);
 
+            var absolute = await Read(client, "amountMode=absolute&minAmount=20&maxAmount=100&sort=-magnitude");
+            Assert.Equal([10000L, -8000L, -3000L, -2000L], absolute.Items.Select(x => x.AmountMinorUnits));
+
             var dateBounds = await Read(client, "from=2026-06-01&to=2026-06-01&sort=date");
             Assert.Equal(["Morning coffee", "Unposted purchase", "Late dinner"], dateBounds.Items.Select(x => x.Description));
             var tags = await Read(client, $"tagIds={seed.FirstTagId}&tagIds={seed.SecondTagId}&tagMatch=all");
@@ -76,6 +79,40 @@ public sealed class TransactionSearchApiTests
         Assert.Equal(1, page.PageSize);
         Assert.Equal("Morning coffee", Assert.Single(page.Items).Description);
         Assert.Equal(-500, page.Items[0].AmountMinorUnits);
+    }
+
+    [Theory]
+    [InlineData("debit", 3, -8000)]
+    [InlineData("credit", 1, 10000)]
+    [InlineData("all", 4, 10000)]
+    public async Task PositiveRangesFilterAndSortByMagnitudeBeforePagination(string direction, int count, long firstAmount)
+    {
+        await using var factory = new FinyteApiFactory();
+        var client = factory.CreateClient();
+        await Seed(factory, client);
+
+        var page = await Read(client, $"amountMode=absolute&direction={direction}&minAmount=20&maxAmount=100&sort=-magnitude&pageSize=1");
+        Assert.Equal(count, page.TotalCount);
+        Assert.Equal(firstAmount, Assert.Single(page.Items).AmountMinorUnits);
+        var last = await Read(client, $"amountMode=absolute&direction={direction}&minAmount=20&maxAmount=100&sort=-magnitude&pageSize=1&page={count}");
+        Assert.Equal(direction == "credit" ? 10000 : -2000, Assert.Single(last.Items).AmountMinorUnits);
+    }
+
+    [Theory]
+    [InlineData("all", "20", 1)]
+    [InlineData("debit", "20", 1)]
+    [InlineData("credit", "20", 0)]
+    [InlineData("all", "0", 1)]
+    [InlineData("debit", "0", 0)]
+    [InlineData("credit", "0", 0)]
+    [InlineData("all", "20.01", 0)]
+    public async Task ExactPositiveAmountsRespectDirectionAndZero(string direction, string amount, int count)
+    {
+        await using var factory = new FinyteApiFactory();
+        var client = factory.CreateClient();
+        await Seed(factory, client);
+        var page = await Read(client, $"amountMode=absolute&direction={direction}&minAmount={amount}&maxAmount={amount}");
+        Assert.Equal(count, page.TotalCount);
     }
 
     [Fact]
@@ -168,6 +205,8 @@ public sealed class TransactionSearchApiTests
     [InlineData("-date")]
     [InlineData("amount")]
     [InlineData("-amount")]
+    [InlineData("magnitude")]
+    [InlineData("-magnitude")]
     [InlineData("description")]
     [InlineData("-description")]
     public async Task EverySortHasStableTiesAcrossPages(string sort)
@@ -204,6 +243,9 @@ public sealed class TransactionSearchApiTests
     [InlineData("pageSize=251")]
     [InlineData("from=2026-06-02&to=2026-06-01")]
     [InlineData("minAmount=1&maxAmount=-1")]
+    [InlineData("amountMode=unknown")]
+    [InlineData("amountMode=absolute&minAmount=-1")]
+    [InlineData("amountMode=absolute&maxAmount=-1")]
     [InlineData("minAmount=not-a-number")]
     [InlineData("from=2026-13-01")]
     [InlineData("tagMatch=unknown")]

@@ -2345,3 +2345,15 @@ td {
 .tag-bucket-link i { width: .65rem; height: .65rem; border-radius: 50%; }
 .daily-bar-stack a, .weekly-bar-stack a { display: block; width: 100%; }
 .bucket-links { display: flex; gap: 1rem; }
+
+.transaction-quick-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; padding: 16px; }
+.transaction-quick-filters .quick-search, .quick-actions { grid-column: 1 / -1; }
+.transaction-quick-filters .filter-field { min-width: 0; }
+.transaction-quick-filters small { color: #a7aaa8; line-height: 1.5; }
+.quick-actions, .transaction-filter-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.transaction-filter-chips:empty { display: none; }
+.transaction-filter-chips button { font-size: 13px; padding: 8px 10px; min-height: 36px; white-space: normal; text-align: left; overflow-wrap: anywhere; max-width: 100%; }
+@media (max-width: 480px) {
+  .transaction-quick-filters { padding: 12px; gap: 12px; }
+  .quick-actions button { flex: 1 1 auto; }
+}

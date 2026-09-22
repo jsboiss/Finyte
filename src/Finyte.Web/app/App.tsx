@@ -21,6 +21,7 @@ import { RecurringPage } from './recurring/RecurringPage'
 import { TransactionAccountChip, TransactionAmount } from './transactions/TransactionCard'
 import { TransactionCardList } from './transactions/TransactionCardList'
 import { TransactionPagination } from './transactions/TransactionPagination'
+import { TransactionQuickFilters, TransactionFilterChips } from './transactions/TransactionQuickFilters'
 import { TransactionFilterForm } from './transactions/TransactionFilters'
 import { defaultTransactionFilters, readTransactionRouteSearch, transactionRouteSearch, transactionSearchParams, type TransactionFilters } from './transactions/transactionSearch'
 import type { Transaction, TransactionPage, TransactionTag } from './transactions/types'
@@ -525,11 +526,11 @@ function TransactionsPage() {
           </button>
           <button className={showFilters ? 'secondary-button is-active' : 'secondary-button'} onClick={() => setShowFilters(x => !x)} type="button">
             <SlidersHorizontal aria-hidden="true" />
-            Filters
+            Advanced
           </button>
-          <button className="secondary-button" disabled={!hasFilters} onClick={() => setTransactionSearch({ page: 1, filters: defaultTransactionFilters })} type="button">
+          <button className="secondary-button" aria-label="Reset all filters" disabled={!hasFilters} onClick={() => setTransactionSearch({ page: 1, filters: defaultTransactionFilters })} type="button">
             <X aria-hidden="true" />
-            Clear
+            Reset
           </button>
         </div>
       </header>
@@ -622,7 +623,7 @@ function TransactionsPage() {
 
       {transferView && <Drawer title="Transfer matching" onClose={() => void navigate({ search: previous => ({ ...previous, transferView: undefined }) })}><TransferCorrections initialView={transferView} /></Drawer>}
       {showFilters && (
-        <Drawer title="Transaction filters" onClose={() => setShowFilters(false)}><TransactionFilterForm
+        <Drawer title="Advanced filters" onClose={() => setShowFilters(false)}><TransactionFilterForm
           key={JSON.stringify(filters)}
           filters={filters}
           accounts={accountsQuery.data ?? []}
@@ -630,16 +631,8 @@ function TransactionsPage() {
           onApply={nextFilters => { setTransactionSearch({ page: 1, filters: nextFilters }); setShowFilters(false) }}
         /></Drawer>
       )}
-      {hasFilters && <p className="transaction-search-summary">{[
-        filters.accountId && (accountsQuery.data?.find(x => x.id === filters.accountId)?.name ?? 'Selected account'),
-        (filters.from || filters.to) && `${filters.from || 'Start'} – ${filters.to || 'Today'}`,
-        filters.direction === 'debit' ? 'Expenses' : filters.direction === 'credit' ? 'Income' : '',
-        filters.internalTransfers === 'exclude' ? 'Transfers excluded' : filters.internalTransfers === 'only' ? 'Transfers only' : '',
-        filters.postedOnly && 'Posted only', filters.analyticsOnly && 'Dashboard accounts',
-        filters.tagIds.length > 0 && `${filters.tagIds.length} tag${filters.tagIds.length === 1 ? '' : 's'}`,
-        filters.untagged && 'Untagged', filters.search, filters.category, filters.currency,
-        filters.minAmount && `Minimum ${filters.minAmount}`, filters.maxAmount && `Maximum ${filters.maxAmount}`,
-      ].filter(Boolean).join(' · ')}</p>}
+      <TransactionQuickFilters key={JSON.stringify(filters)} filters={filters} onApply={nextFilters => setTransactionSearch({ page: 1, filters: nextFilters })} />
+      <TransactionFilterChips filters={filters} accounts={accountsQuery.data ?? []} tags={tagsQuery.data ?? []} onApply={nextFilters => setTransactionSearch({ page: 1, filters: nextFilters })} />
       {transactionsQuery.isError && (
         <p role="alert">Transactions could not be loaded. Check your filters and <button className="secondary-button" type="button" onClick={() => transactionsQuery.refetch()}>Try again</button>.</p>
       )}

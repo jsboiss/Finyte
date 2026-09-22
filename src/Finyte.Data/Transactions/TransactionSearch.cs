@@ -14,6 +14,7 @@ public sealed record TransactionSearch
     public Guid[] TagIds { get; init; } = [];
     public string TagMatch { get; init; } = "any";
     public bool Untagged { get; init; }
+    public string AmountMode { get; init; } = "signed";
     public decimal? MinAmount { get; init; }
     public decimal? MaxAmount { get; init; }
     public string? Currency { get; init; }
@@ -46,6 +47,11 @@ public sealed record TransactionSearch
             errors["from"] = ["Start date must be on or before end date."];
         }
 
+        if (AmountMode is not ("signed" or "absolute") || (AmountMode == "absolute" && (MinAmount < 0 || MaxAmount < 0)))
+        {
+            errors["amountMode"] = ["Choose signed or absolute amounts; absolute bounds must be non-negative."];
+        }
+
         if (MinAmount > MaxAmount)
         {
             errors["minAmount"] = ["Minimum amount must be less than or equal to maximum amount."];
@@ -76,9 +82,9 @@ public sealed record TransactionSearch
             errors["currency"] = ["Currency must be a three-letter currency code."];
         }
 
-        if (Sort is not ("date" or "-date" or "amount" or "-amount" or "description" or "-description"))
+        if (Sort is not ("date" or "-date" or "amount" or "-amount" or "description" or "-description" or "magnitude" or "-magnitude"))
         {
-            errors["sort"] = ["Sort must be date, -date, amount, -amount, description or -description."];
+            errors["sort"] = ["Sort must be date, -date, amount, -amount, description, -description, magnitude or -magnitude."];
         }
 
         return errors;
@@ -152,12 +158,12 @@ public sealed record TransactionSearch
 
         if (MinAmount is { } minAmount)
         {
-            query = query.Where(x => x.Amount >= minAmount);
+            query = query.Where(x => (AmountMode == "absolute" ? Math.Abs(x.Amount) : x.Amount) >= minAmount);
         }
 
         if (MaxAmount is { } maxAmount)
         {
-            query = query.Where(x => x.Amount <= maxAmount);
+            query = query.Where(x => (AmountMode == "absolute" ? Math.Abs(x.Amount) : x.Amount) <= maxAmount);
         }
 
         if (Currency is not null)
@@ -173,6 +179,8 @@ public sealed record TransactionSearch
         var ordered = Sort switch
         {
             "date" => transactions.OrderBy(x => x.PostedAt ?? x.CreatedAt),
+            "magnitude" => transactions.OrderBy(x => Math.Abs(x.Amount)),
+            "-magnitude" => transactions.OrderByDescending(x => Math.Abs(x.Amount)),
             "amount" => transactions.OrderBy(x => x.Amount),
             "-amount" => transactions.OrderByDescending(x => x.Amount),
             "description" => transactions.OrderBy(x => (x.Description ?? "").ToLower()),
