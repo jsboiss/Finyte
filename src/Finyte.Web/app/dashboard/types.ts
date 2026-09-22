@@ -32,6 +32,7 @@ export type OverviewResponse = {
     sourceWatermark: string | null
     isRefreshing: boolean
   }
+  balanceCoverage: { coveredAccounts: number; totalAccounts: number; missingAccounts: string[] } | null
 }
 
 export type OverviewAccountOption = {
@@ -44,6 +45,7 @@ export type DashboardMetric = {
   id: string
   label: string
   value: string
+  note?: string
   tone?: 'default' | 'positive' | 'negative'
 }
 

@@ -6,6 +6,7 @@ import { isAxiosError } from 'axios'
 import { useState } from 'react'
 import { httpClient } from '../api/httpClient'
 import { accountTypeLabel, accountTypes, defaultAnalytics, getAccounts, type Account } from './accountsApi'
+import { balanceGuidance, balanceState } from './balanceState'
 
 type Editor = { account: Account }
 
@@ -34,7 +35,7 @@ export function AccountsPage() {
         {(accounts.data ?? []).filter(account => account.name.toLowerCase().includes(search.toLowerCase())).map(account => (
           <article className="panel account-card" key={account.id}>
             <div className="account-identity"><h2>{account.name}</h2><span>{account.isProviderManaged ? 'Connected' : 'Imported'} · {accountTypeLabel(account.accountType)}</span>{!account.includeInAnalytics && <small>Excluded from combined spending</small>}</div>
-            <div className="account-balance"><strong>{account.balanceAsOf ? formatBalance(account.currentBalance, account.currency) : 'Balance unavailable'}</strong><span>{account.balanceAsOf ? `Updated ${new Date(account.balanceAsOf).toLocaleDateString('en-AU')}` : ''}</span></div>
+            <AccountBalance account={account} />
             <div className="account-actions">
               <button type="button" onClick={() => { setSaved(''); setEditor({ account }) }}>Edit preferences</button>
             </div>
@@ -85,6 +86,22 @@ function AccountEditor({ editor, onCancel, onSaved, onReload }: {
       <div className="account-actions"><button type="submit" disabled={mutation.isPending}>{mutation.isPending ? 'Saving…' : 'Save changes'}</button><button type="button" disabled={mutation.isPending} onClick={onCancel}>Cancel</button></div>
       {mutation.error && <p role="alert">{errorMessage(mutation.error)} {isAxiosError(mutation.error) && mutation.error.response?.status === 409 && <button type="button" onClick={() => void onReload()}>Discard edits and reload</button>}</p>}
     </form>
+  )
+}
+
+function AccountBalance({ account }: { account: Account }) {
+  const state = balanceState(account)
+  const guidance = balanceGuidance(account, state)
+
+  return (
+    <div className="account-balance">
+      {/* A reported balance of zero is a real balance, so it is shown as an amount and never as unavailable. */}
+      <strong>{state.kind === 'missing' ? 'Balance unavailable' : formatBalance(account.currentBalance, account.currency)}</strong>
+      {state.kind !== 'missing' && <span>Updated {new Date(state.asOf).toLocaleDateString()}</span>}
+      {guidance && <small className={state.kind === 'missing' ? 'balance-missing' : 'balance-stale'}>
+        {guidance.text}{guidance.to && <> <Link to={guidance.to}>{guidance.action}</Link></>}
+      </small>}
+    </div>
   )
 }
 

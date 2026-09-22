@@ -58,7 +58,7 @@ export function DashboardPage() {
   const balanceAccounts = accountsQuery.data?.filter(x => accountId === null || x.id === accountId)
   const hasBalances = !!balanceAccounts?.length && balanceAccounts.every(x => x.balanceAsOf !== null)
   const metrics: DashboardMetric[] = [
-    { id: 'balance', label: overview.scope.label, value: hasBalances ? currency(overview.accountBalanceMinorUnits, overview.currency) : 'Balance unavailable', href: '/accounts' },
+    balanceMetric(overview, hasBalances),
     { id: 'month-spend', label: 'This month spent', value: currency(overview.currentMonthSpendMinorUnits, overview.currency), href: transactionLink(overview, 'debit') },
     { id: 'daily-spend', label: 'Avg daily spend', value: currency(overview.averageDailySpendMinorUnits, overview.currency), href: transactionLink(overview, 'debit') },
   ]
@@ -117,6 +117,31 @@ export function DashboardPage() {
   )
 }
 
+// The aggregate only sums accounts whose source reported a balance, so a partial total is labelled with its exact
+// scope instead of being hidden entirely or presented as complete.
+function balanceMetric(overview: OverviewResponse, hasBalances: boolean): DashboardMetric {
+  const base = { id: 'balance', label: overview.scope.label, href: '/accounts' }
+  const coverage = overview.balanceCoverage
+
+  if (!coverage) {
+    // Projections written before coverage was published fall back to the previous all-or-nothing rule.
+    return { ...base, value: hasBalances ? currency(overview.accountBalanceMinorUnits, overview.currency) : 'Balance unavailable' }
+  }
+
+  if (coverage.totalAccounts === 0) {
+    return { ...base, value: 'No accounts yet' }
+  }
+
+  if (coverage.coveredAccounts === 0) {
+    return { ...base, value: 'Balance unavailable', note: 'No account has reported a balance yet.' }
+  }
+
+  const value = currency(overview.accountBalanceMinorUnits, overview.currency)
+  return coverage.coveredAccounts < coverage.totalAccounts
+    ? { ...base, value, note: `${coverage.coveredAccounts} of ${coverage.totalAccounts} accounts. No balance from ${coverage.missingAccounts.join(', ')}.` }
+    : { ...base, value }
+}
+
 function LockedDashboard() {
   return (
     <section className="page">
@@ -142,5 +167,6 @@ function createEmptyOverview(accountId: string | null, selectedAccountId: string
     dailyCashFlow: [],
     monthlySpendByTag: [{ tagId: null, name: 'Untagged', color: '#94a3b8', amountMinorUnits: 0, percentage: 0 }],
     freshness: { calculatedAt: new Date().toISOString(), sourceWatermark: null, isRefreshing: false },
+    balanceCoverage: null,
   }
 }
