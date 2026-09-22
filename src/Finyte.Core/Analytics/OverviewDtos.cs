@@ -20,13 +20,7 @@ public sealed record OverviewDailyCashFlowResponse(string Date, int Day, long In
 
 public sealed record OverviewMonthlySpendByTagResponse(Guid? TagId, string Name, string Color, long AmountMinorUnits, decimal Percentage);
 
-public sealed record OverviewFreshnessResponse(
-    DateTimeOffset CalculatedAt,
-    DateTimeOffset? SourceWatermark,
-    bool IsRefreshing,
-    bool IsStale = false,
-    bool HasFailed = false,
-    string? LastError = null);
+public sealed record OverviewFreshnessResponse(DateTimeOffset CalculatedAt, DateTimeOffset? SourceWatermark, bool IsRefreshing);
 
 public sealed record CashFlowRangeResponse(
     string From,

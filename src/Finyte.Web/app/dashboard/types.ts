@@ -31,9 +31,6 @@ export type OverviewResponse = {
     calculatedAt: string
     sourceWatermark: string | null
     isRefreshing: boolean
-    isStale: boolean
-    hasFailed: boolean
-    lastError: string | null
   }
 }
 

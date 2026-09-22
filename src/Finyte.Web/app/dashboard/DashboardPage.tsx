@@ -40,7 +40,7 @@ export function DashboardPage() {
     queryKey: getOverviewQueryKey(accountId, includeInternalTransfers),
     queryFn: () => getOverview(accountId, includeInternalTransfers),
     enabled: hasBillingAccess,
-    refetchInterval: x => refreshInterval(x.state.data?.freshness),
+    refetchInterval: x => x.state.data?.freshness.isRefreshing ? 1_000 : false,
     staleTime: 60_000,
   })
   const refreshOverviewMutation = useMutation({
@@ -117,16 +117,6 @@ export function DashboardPage() {
   )
 }
 
-// A rebuild that keeps failing must not be polled once a second: the server retries on a cooldown, so back off
-// to a rate that still converges without every open dashboard hammering the API while the failure persists.
-function refreshInterval(freshness: OverviewResponse['freshness'] | undefined) {
-  if (!freshness?.isRefreshing) {
-    return false as const
-  }
-
-  return freshness.hasFailed ? 15_000 : 1_000
-}
-
 function LockedDashboard() {
   return (
     <section className="page">
@@ -151,6 +141,6 @@ function createEmptyOverview(accountId: string | null, selectedAccountId: string
     cashFlowRace: { incomeMinorUnits: 0, expenseMinorUnits: 0, netMinorUnits: 0 },
     dailyCashFlow: [],
     monthlySpendByTag: [{ tagId: null, name: 'Untagged', color: '#94a3b8', amountMinorUnits: 0, percentage: 0 }],
-    freshness: { calculatedAt: new Date().toISOString(), sourceWatermark: null, isRefreshing: false, isStale: false, hasFailed: false, lastError: null },
+    freshness: { calculatedAt: new Date().toISOString(), sourceWatermark: null, isRefreshing: false },
   }
 }

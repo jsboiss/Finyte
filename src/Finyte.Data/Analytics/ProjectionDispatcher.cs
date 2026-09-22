@@ -9,10 +9,6 @@ public sealed class ProjectionDispatcher(FinyteDbContext dbContext, IOverviewPro
 {
     private static JsonSerializerOptions JsonOptions { get; } = new(JsonSerializerDefaults.Web);
 
-    // A failed rebuild used to stay failed forever: reads only re-queued succeeded projections and the reconciler
-    // only dispatches pending ones, so the dashboard reported IsRefreshing indefinitely while nothing retried.
-    private static TimeSpan FailedRetryCooldown { get; } = TimeSpan.FromMinutes(1);
-
     public async Task<OverviewResponse> GetOrRebuildOverview(OverviewProjectionScope scope, CancellationToken cancellationToken)
     {
         var sourceVersion = await dbContext.Tenants
@@ -25,55 +21,23 @@ public sealed class ProjectionDispatcher(FinyteDbContext dbContext, IOverviewPro
                 && x.MonthKey == scope.MonthKey,
                 cancellationToken);
 
-        var now = DateTimeOffset.UtcNow;
-
         if (projection is null)
         {
             projection = await CreatePendingProjection(scope, cancellationToken);
         }
-        else if (NeedsRebuild(projection, scope, sourceVersion, now))
+        else if (projection.SourceVersion < sourceVersion && projection.Status == ProjectionStatus.Succeeded)
         {
-            MarkPending(projection, now);
+            MarkPending(projection, DateTimeOffset.UtcNow);
             await dbContext.SaveChangesAsync(cancellationToken);
         }
 
         var response = Deserialize(projection.PayloadJson);
-        var isStale = projection.SourceVersion < sourceVersion || IsElapsedDaysStale(projection, scope, now);
-        var isRefreshing = projection.Status is ProjectionStatus.Pending or ProjectionStatus.Running || isStale;
+        var isRefreshing = projection.Status is ProjectionStatus.Pending or ProjectionStatus.Running
+            || projection.SourceVersion < sourceVersion;
         return response with
         {
-            Freshness = response.Freshness with
-            {
-                IsRefreshing = isRefreshing,
-                IsStale = isStale,
-                HasFailed = projection.Status == ProjectionStatus.Failed,
-                LastError = projection.Status == ProjectionStatus.Failed ? projection.LastError : null
-            }
+            Freshness = response.Freshness with { IsRefreshing = isRefreshing }
         };
-    }
-
-    private static bool NeedsRebuild(OverviewProjection projection, OverviewProjectionScope scope, long sourceVersion, DateTimeOffset now)
-    {
-        if (projection.Status == ProjectionStatus.Failed)
-        {
-            return projection.UpdatedAt + FailedRetryCooldown <= now;
-        }
-
-        if (projection.Status != ProjectionStatus.Succeeded)
-        {
-            return false;
-        }
-
-        return projection.SourceVersion < sourceVersion || IsElapsedDaysStale(projection, scope, now);
-    }
-
-    // Average daily spend divides by days elapsed in the month, so the value expires at midnight even when no
-    // transaction changed. FinancialDataVersion only tracks data changes, so the day itself has to be checked.
-    private static bool IsElapsedDaysStale(OverviewProjection projection, OverviewProjectionScope scope, DateTimeOffset now)
-    {
-        var today = DateOnly.FromDateTime(now.UtcDateTime);
-        return scope.MonthKey == $"{today.Year:D4}-{today.Month:D2}"
-            && DateOnly.FromDateTime(projection.CalculatedAt.UtcDateTime) < today;
     }
 
     public async Task<OverviewResponse> RebuildOverview(OverviewProjectionScope scope, CancellationToken cancellationToken)
