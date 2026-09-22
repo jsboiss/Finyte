@@ -25,6 +25,8 @@ All routes require an authenticated family and subscription; family IDs are reso
 | Method and path | Behaviour |
 | --- | --- |
 | `GET /api/budgets` | Definitions, scopes and versions; sorted by name then ID. |
+| `GET /api/budgets/categories` | Available primary/secondary names from this family’s transactions, deduplicated ignoring case. Empty, padded, and overlength names that cannot be saved are omitted. |
+| `POST /api/budgets/preview?date=2026-09-22` | Validate an unsaved definition and return its containing period, observed-through date, matching spent/count, excluded currencies, and up to five latest example transactions. Does not write a budget. Uses the saved-budget eligibility query in a repeatable-read snapshot. |
 | `POST /api/budgets` | Create a definition. Returns 201, initial version 0. |
 | `PUT /api/budgets/{id}` | Replace settings atomically. Requires `expectedVersion`; increments version. |
 | `DELETE /api/budgets/{id}?expectedVersion=0` | Delete a definition and its selection links only; preserves transactions. |
@@ -48,7 +50,7 @@ Example definition:
 }
 ```
 
-PUT adds `expectedVersion`. Limits must be positive with at most two decimal places and fit in 16 whole digits. Names/categories have at most 120 characters, currency is three letters, dates span 1901–9990, selections are capped at 50 categories/tags and 100 accounts. Nonexistent or foreign tags/accounts are rejected instead of silently discarded. Selected scopes require at least one criterion/account at save time; all/analytics scopes reject contradictory selections. A family may create up to 100 budgets. Names are labels, not identifiers, and need not be unique. Malformed requests return 400, absent/foreign budget IDs 404, stale edits/deletes 409, inactive subscriptions 402.
+PUT adds `expectedVersion`. Limits must be positive with at most two decimal places and fit in 16 whole digits. Names/categories have at most 120 characters, currency is three letters, dates span 1901–9990, selections are capped at 50 categories/tags and 100 accounts. Unavailable category names and nonexistent or foreign tags/accounts are rejected instead of silently discarded. Existing budgets keep their explicit selected scope if a category disappears; edit the unavailable selection before saving again. Selected scopes require at least one criterion/account at save time; all/analytics scopes reject contradictory selections. A family may create up to 100 budgets. Names are labels, not identifiers, and need not be unique. Malformed requests return 400, absent/foreign budget IDs 404, stale edits/deletes 409, inactive subscriptions 402.
 
 ## Storage and validation
 
@@ -59,3 +61,11 @@ PUT adds `expectedVersion`. Limits must be positive with at most two decimal pla
 Budgets calculate live; no Temporal workflow or projection migration is required. The placeholder frontend invalidates budget queries after imports, account preferences, tag changes and transfer decisions.
 
 Review follow-up: history uses one SQL aggregation across all requested dates, grouped by UTC day and currency. Each period includes excludedCurrencies (currency and transaction count) for otherwise matching spending, without mixing currencies or converting money. Budget and pay-cycle boundaries use the same AnchoredPeriods implementation, included identically in both sibling branches so neither feature depends on the other.
+
+## Category picker and preview
+
+The editor searches existing categories and optional tags. Search only narrows the displayed options; selected chips remain visible and removable. Empty selections never mean all spending: that is a separate explicit choice. Missing category/tag/account selections have removal and recovery feedback. No categories are invented for uncategorised imports; the picker can adopt the category-model source when #29 lands.
+
+Complete the budget details to see a preview before saving. Its date selects a period using the chosen frequency and anchor. Changing the definition, scope or date replaces the preview query and cancels obsolete requests; saving is disabled until the current preview succeeds. Empty matches are valid but explained. A failed preview offers retry and cannot be mistaken for a zero total. Categories and tags use OR matching; multiple matches still count a transaction once.
+
+See `docs/issue-30/README.md` for mobile verification and the development-only synthetic fixture. The fixture is outside the production entry point and never calls the API.
