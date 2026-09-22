@@ -7,7 +7,7 @@ import { getAccounts, type Account as AccountResponse } from '../accounts/accoun
 import { BillingAccessPanel } from '../billing/BillingAccessPanel'
 import { getBillingAccess } from '../billing/billingApi'
 import { AppSelect } from '../shared/AppSelect'
-import { currency, formatMonth } from '../shared/formatters'
+import { compactCurrency, formatMonth } from '../shared/formatters'
 import { DashboardMetricGrid } from './components/DashboardMetricGrid'
 import { DashboardModuleFrame } from './components/DashboardModuleFrame'
 import { getOverview, getOverviewQueryKey, refreshOverview } from './overviewApi'
@@ -40,7 +40,7 @@ export function DashboardPage() {
     queryKey: getOverviewQueryKey(accountId, includeInternalTransfers),
     queryFn: () => getOverview(accountId, includeInternalTransfers),
     enabled: hasBillingAccess,
-    refetchInterval: x => x.state.data?.freshness.isRefreshing ? 1_000 : false,
+    refetchInterval: x => refreshInterval(x.state.data?.freshness),
     staleTime: 60_000,
   })
   const refreshOverviewMutation = useMutation({
@@ -58,9 +58,9 @@ export function DashboardPage() {
   const balanceAccounts = accountsQuery.data?.filter(x => accountId === null || x.id === accountId)
   const hasBalances = !!balanceAccounts?.length && balanceAccounts.every(x => x.balanceAsOf !== null)
   const metrics: DashboardMetric[] = [
-    { id: 'balance', label: overview.scope.label, value: hasBalances ? currency(overview.accountBalanceMinorUnits, overview.currency) : 'Balance unavailable', href: '/accounts' },
-    { id: 'month-spend', label: 'This month spent', value: currency(overview.currentMonthSpendMinorUnits, overview.currency), href: transactionLink(overview, 'debit') },
-    { id: 'daily-spend', label: 'Avg daily spend', value: currency(overview.averageDailySpendMinorUnits, overview.currency), href: transactionLink(overview, 'debit') },
+    balanceMetric(overview, hasBalances),
+    { id: 'month-spend', label: 'This month spent', value: compactCurrency(overview.currentMonthSpendMinorUnits, overview.currency), href: transactionLink(overview, 'debit') },
+    { id: 'daily-spend', label: 'Avg daily spend', value: compactCurrency(overview.averageDailySpendMinorUnits, overview.currency), href: transactionLink(overview, 'debit') },
   ]
 
   if (billingAccessQuery.isLoading || (hasBillingAccess && overviewQuery.isPending)) {
@@ -117,6 +117,41 @@ export function DashboardPage() {
   )
 }
 
+// The aggregate only sums accounts whose source reported a balance, so a partial total is labelled with its exact
+// scope instead of being hidden entirely or presented as complete.
+function balanceMetric(overview: OverviewResponse, hasBalances: boolean): DashboardMetric {
+  const base = { id: 'balance', label: overview.scope.label, href: '/accounts' }
+  const coverage = overview.balanceCoverage
+
+  if (!coverage) {
+    // Projections written before coverage was published fall back to the previous all-or-nothing rule.
+    return { ...base, value: hasBalances ? compactCurrency(overview.accountBalanceMinorUnits, overview.currency) : 'Balance unavailable' }
+  }
+
+  if (coverage.totalAccounts === 0) {
+    return { ...base, value: 'No accounts yet' }
+  }
+
+  if (coverage.coveredAccounts === 0) {
+    return { ...base, value: 'Balance unavailable', note: 'No account has reported a balance yet.' }
+  }
+
+  const value = compactCurrency(overview.accountBalanceMinorUnits, overview.currency)
+  return coverage.coveredAccounts < coverage.totalAccounts
+    ? { ...base, value, note: `${coverage.coveredAccounts} of ${coverage.totalAccounts} accounts. No balance from ${coverage.missingAccounts.join(', ')}.` }
+    : { ...base, value }
+}
+
+// A rebuild that keeps failing must not be polled once a second: the server retries on a cooldown, so back off
+// to a rate that still converges without every open dashboard hammering the API while the failure persists.
+function refreshInterval(freshness: OverviewResponse['freshness'] | undefined) {
+  if (!freshness?.isRefreshing) {
+    return false as const
+  }
+
+  return freshness.hasFailed ? 15_000 : 1_000
+}
+
 function LockedDashboard() {
   return (
     <section className="page">
@@ -141,6 +176,7 @@ function createEmptyOverview(accountId: string | null, selectedAccountId: string
     cashFlowRace: { incomeMinorUnits: 0, expenseMinorUnits: 0, netMinorUnits: 0 },
     dailyCashFlow: [],
     monthlySpendByTag: [{ tagId: null, name: 'Untagged', color: '#94a3b8', amountMinorUnits: 0, percentage: 0 }],
-    freshness: { calculatedAt: new Date().toISOString(), sourceWatermark: null, isRefreshing: false },
+    freshness: { calculatedAt: new Date().toISOString(), sourceWatermark: null, isRefreshing: false, isStale: false, hasFailed: false, lastError: null },
+    balanceCoverage: null,
   }
 }
