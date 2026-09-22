@@ -1,7 +1,7 @@
 import { CreditCard } from '../shared/Icons'
 import { Link } from '@tanstack/react-router'
 import { type CSSProperties, type ReactNode } from 'react'
-import { currency, formatChartDate } from '../shared/formatters'
+import { exactCurrency, formatChartDate } from '../shared/formatters'
 import type { Transaction } from './types'
 
 type TransactionAccountChipProps = {
@@ -56,7 +56,7 @@ export function TransactionAmount({ amountMinorUnits, className, currencyCode }:
 
   return (
     <strong className={className ? `${amountClassName} ${className}` : amountClassName}>
-      {currency(amountMinorUnits, currencyCode)}
+      {exactCurrency(amountMinorUnits, currencyCode)}
     </strong>
   )
 }
