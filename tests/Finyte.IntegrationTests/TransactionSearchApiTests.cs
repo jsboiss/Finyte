@@ -304,6 +304,40 @@ public sealed class TransactionSearchApiTests
         Assert.Contains("TenantId", sql);
     }
 
+    [Fact]
+    public async Task TotalsCoverEveryMatchingPageAndKeepCurrenciesSeparate()
+    {
+        await using var factory = new FinyteApiFactory();
+        var client = factory.CreateClient();
+        await Seed(factory, client);
+
+        var first = await Read(client, "pageSize=1");
+        var second = await Read(client, "pageSize=1&page=2");
+
+        Assert.Equal(7, first.TotalCount);
+        Assert.Equal(first.Totals, second.Totals);
+        var aud = Assert.Single(first.Totals, x => x.Currency == "AUD");
+        Assert.Equal(10000, aud.MoneyInMinorUnits);
+        Assert.Equal(13500, aud.MoneyOutMinorUnits);
+        Assert.Equal(-3500, aud.NetMinorUnits);
+        Assert.Equal(6, aud.TransactionCount);
+        var usd = Assert.Single(first.Totals, x => x.Currency == "USD");
+        Assert.Equal(0, usd.MoneyInMinorUnits);
+        Assert.Equal(500, usd.MoneyOutMinorUnits);
+        Assert.Equal(-500, usd.NetMinorUnits);
+        Assert.Equal(1, usd.TransactionCount);
+
+        var debits = await Read(client, "direction=debit");
+        var audDebits = Assert.Single(debits.Totals, x => x.Currency == "AUD");
+        Assert.Equal(0, audDebits.MoneyInMinorUnits);
+        Assert.Equal(13500, audDebits.MoneyOutMinorUnits);
+        Assert.Equal(4, audDebits.TransactionCount);
+
+        var unmatched = await Read(client, "search=nothingmatchesthis");
+        Assert.Empty(unmatched.Totals);
+        Assert.Equal(0, unmatched.TotalCount);
+    }
+
     private static async Task<PageResponse> Read(HttpClient client, string query)
     {
         var response = await client.GetAsync($"/api/transactions?{query}");
@@ -378,5 +412,6 @@ public sealed class TransactionSearchApiTests
     private sealed record CurrentUserResponse(Guid TenantId);
     private sealed record TagResponse(Guid Id, string Name);
     private sealed record ItemResponse(Guid Id, string Description, long AmountMinorUnits, string PostedDate, IReadOnlyList<TagResponse> Tags);
-    private sealed record PageResponse(IReadOnlyList<ItemResponse> Items, int Page, int PageSize, int TotalCount);
+    private sealed record TotalsResponse(string Currency, long MoneyInMinorUnits, long MoneyOutMinorUnits, long NetMinorUnits, int TransactionCount);
+    private sealed record PageResponse(IReadOnlyList<ItemResponse> Items, int Page, int PageSize, int TotalCount, IReadOnlyList<TotalsResponse> Totals);
 }

@@ -21,6 +21,7 @@ import { RecurringPage } from './recurring/RecurringPage'
 import { TransactionAccountChip, TransactionAmount } from './transactions/TransactionCard'
 import { TransactionCardList } from './transactions/TransactionCardList'
 import { TransactionPagination } from './transactions/TransactionPagination'
+import { TransactionResultTotals } from './transactions/TransactionResultTotals'
 import { TransactionQuickFilters, TransactionFilterChips } from './transactions/TransactionQuickFilters'
 import { TransactionFilterForm } from './transactions/TransactionFilters'
 import { defaultTransactionFilters, readTransactionRouteSearch, transactionRouteSearch, transactionSearchParams, type TransactionFilters } from './transactions/transactionSearch'
@@ -674,6 +675,13 @@ function TransactionsPage() {
           </tbody>
         </table>
       </section>
+
+      <TransactionResultTotals
+        internalTransfers={filters.internalTransfers}
+        isError={transactionsQuery.isError}
+        isLoading={isLoading}
+        totals={transactionsQuery.data?.totals}
+      />
 
       <TransactionPagination
         isLoading={isLoading}

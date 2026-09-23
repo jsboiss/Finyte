@@ -2364,3 +2364,12 @@ td {
 .app-drawer[open]:has(.transaction-filters-panel) { display: flex; flex-direction: column; }
 .app-drawer:has(.transaction-filters-panel) > header { flex: 0 0 auto; position: relative; }
 .app-drawer:has(.transaction-filters-panel) > .drawer-content { overflow-y: auto; min-height: 0; }
+.result-totals { background: #18191b; border: 1px solid #36393d; border-radius: 8px; display: grid; gap: 12px; margin-top: 12px; padding: 12px 16px; }
+.result-totals > p[role="status"] { color: #9aa0a6; margin: 0; }
+.result-totals-currency h3 { font-size: 12px; letter-spacing: 0.04em; margin: 0 0 8px; text-transform: uppercase; }
+.result-totals-currency dl { display: flex; flex-wrap: wrap; gap: 8px 24px; margin: 0; }
+.result-totals-currency dt { color: #9aa0a6; font-size: 12px; margin: 0; }
+.result-totals-currency dd { font-variant-numeric: tabular-nums; font-weight: 650; margin: 0; }
+.result-totals-currency .amount-in { color: #7ccf9f; }
+.result-totals-currency .amount-out { color: #e8927c; }
+.result-totals-note { color: #9aa0a6; font-size: 12px; margin: 0; }
