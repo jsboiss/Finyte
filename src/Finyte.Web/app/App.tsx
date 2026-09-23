@@ -22,6 +22,7 @@ import { TransactionAccountChip, TransactionAmount } from './transactions/Transa
 import { TransactionCardList } from './transactions/TransactionCardList'
 import { TransactionPagination } from './transactions/TransactionPagination'
 import { TransactionResultTotals } from './transactions/TransactionResultTotals'
+import { tagAllocationMinorUnits } from './transactions/tagAllocation'
 import { TransactionQuickFilters, TransactionFilterChips } from './transactions/TransactionQuickFilters'
 import { TransactionFilterForm } from './transactions/TransactionFilters'
 import { defaultTransactionFilters, readTransactionRouteSearch, transactionRouteSearch, transactionSearchParams, type TransactionFilters } from './transactions/transactionSearch'
@@ -454,6 +455,18 @@ function TransactionsPage() {
       ])
     },
   })
+  const allocationTag = filters.tagIds.length === 1
+    ? (tagsQuery.data ?? []).find(x => x.id === filters.tagIds[0])
+    : undefined
+  const allocationFor = useCallback((transaction: Transaction) => {
+    if (!allocationTag || transaction.tags.length < 2) {
+      return undefined
+    }
+    return {
+      minorUnits: tagAllocationMinorUnits(transaction.amountMinorUnits, transaction.tags.map(x => x.id), allocationTag.id),
+      tagName: allocationTag.name,
+    }
+  }, [allocationTag])
   const columns = useMemo(() => [
     transactionColumnHelper.accessor('postedDate', {
       header: 'Date',
@@ -492,9 +505,9 @@ function TransactionsPage() {
     }),
     transactionColumnHelper.accessor('amountMinorUnits', {
       header: 'Amount',
-      cell: x => <TransactionAmount amountMinorUnits={x.getValue()} currencyCode={x.row.original.currency} />,
+      cell: x => <TransactionAmount allocation={allocationFor(x.row.original)} amountMinorUnits={x.getValue()} currencyCode={x.row.original.currency} />,
     }),
-  ], [setTransactionTagIds, tagsQuery.data, restoreAutomaticTagsMutation, updateTransactionTagsMutation.isPending])
+  ], [allocationFor, setTransactionTagIds, tagsQuery.data, restoreAutomaticTagsMutation, updateTransactionTagsMutation.isPending])
   // TanStack Table intentionally returns stateful functions that React Compiler cannot memoize.
   // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
@@ -640,6 +653,7 @@ function TransactionsPage() {
       {(updateTransactionTagsMutation.isError || deleteTagMutation.isError || createMerchantRuleMutation.isError) && <p role="alert">The tag change could not be saved. Please try again.</p>}
 
       <TransactionCardList
+        allocationFor={allocationFor}
         emptyMessage={emptyMessage}
         isLoading={isLoading}
         renderTags={x => (

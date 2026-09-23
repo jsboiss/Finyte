@@ -35,7 +35,8 @@ export function SpendByTagChart({ tags, currencyCode, overview }: { tags: Overvi
             <strong>{compactCurrency(x.amountMinorUnits, currencyCode)}</strong>
           </a>
         ))}
-        <p>{primary && <>{primary.name} is currently {primary.percentage.toFixed(1)}% of tracked monthly spend. </>}<Help title="About tag amounts"><p>Amounts on transactions with multiple tags are split between those tags. The transaction list shows each payment’s full amount.</p></Help></p>
+        <p className="tag-allocation-note">Allocated amounts. A payment with more than one tag is split evenly between them, so these add up to tracked spend rather than to each payment. Opening a tag shows the full payments alongside the amount counted here.</p>
+        <p>{primary && <>{primary.name} is currently {primary.percentage.toFixed(1)}% of tracked monthly spend. </>}<Help title="About tag amounts"><p>A payment tagged Food and Shared contributes half its amount to each. The transaction list shows the full payment and, when you open a single tag, the share counted towards it.</p></Help></p>
       </div>
     </div>
   )
