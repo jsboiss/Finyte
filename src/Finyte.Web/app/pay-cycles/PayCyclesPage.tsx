@@ -4,8 +4,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { isAxiosError } from 'axios'
 import { useState } from 'react'
-import { getAccounts, type Account } from '../accounts/accountsApi'
+import { accountTypeLabel, getAccounts, type Account } from '../accounts/accountsApi'
 import { httpClient } from '../api/httpClient'
+import { initialRoles, type AccountRole } from './accountRoles'
 import { getBreakdown, getPayCycles, kinds, money, type PayCycleProfile } from './payCyclesApi'
 import './payCycles.css'
 
@@ -58,14 +59,24 @@ function ProfileEditor({ profile, accounts, onCancel, onSaved, onReload }: {
   const [anchorDate, setAnchorDate] = useState(profile?.anchorDate ?? today())
   const [currency, setCurrency] = useState(defaultCurrency)
   const [expectedIncome, setExpectedIncome] = useState(profile?.expectedIncome?.toString() ?? '')
-  const [accountIds, setAccountIds] = useState(profile?.accountIds ?? accounts.filter(x => x.includeInAnalytics && x.currency === defaultCurrency).map(x => x.id))
-  const [savingsIds, setSavingsIds] = useState(profile?.savingsAccountIds ?? [])
+  const [roles, setRoles] = useState(() => initialRoles(accounts, profile))
+  const [currencyNotice, setCurrencyNotice] = useState('')
+  const inCurrency = accounts.filter(x => x.currency === currency)
+  const accountIds = inCurrency.filter(x => roles[x.id] === 'spending').map(x => x.id)
+  const savingsIds = inCurrency.filter(x => roles[x.id] === 'savings').map(x => x.id)
+  const unconfirmed = inCurrency.filter(x => x.accountType === 'other' && roles[x.id] === 'excluded')
   const mutation = useMutation({
     mutationFn: () => httpClient<PayCycleProfile>({ method: profile ? 'PUT' : 'POST', url: profile ? `/api/pay-cycles/${profile.id}` : '/api/pay-cycles',
       data: { name, frequency, anchorDate, currency, expectedIncome: expectedIncome === '' ? null : expectedIncome, accountIds, savingsAccountIds: savingsIds, expectedVersion: profile?.version } }),
     onSuccess: onSaved,
   })
-  const toggle = (ids: string[], id: string) => ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id]
+
+  const changeCurrency = (next: string) => {
+    const moving = accounts.filter(x => x.currency === next)
+    setCurrency(next)
+    setRoles(x => ({ ...x, ...initialRoles(moving) }))
+    setCurrencyNotice(moving.length === 0 ? '' : `Your ${currency} choices no longer apply. The ${moving.length === 1 ? 'account' : `${moving.length} accounts`} below started from suggested roles.`)
+  }
 
   return <form className="panel pay-cycle-editor" onSubmit={event => { event.preventDefault(); mutation.mutate() }}>
 
@@ -75,21 +86,29 @@ function ProfileEditor({ profile, accounts, onCancel, onSaved, onReload }: {
         <label>Name<input required maxLength={120} value={name} onChange={event => setName(event.target.value)} placeholder="Household payday" /></label>
         <label>Frequency<select value={frequency} onChange={event => setFrequency(event.target.value)}><option value="weekly">Weekly</option><option value="fortnightly">Fortnightly</option><option value="monthly">Monthly</option></select></label>
         <label>Known payday (UTC)<input type="date" required min="1900-01-01" max="9998-12-31" value={anchorDate} onChange={event => setAnchorDate(event.target.value)} /></label>
-        <label>Currency<select value={currency} onChange={event => { setCurrency(event.target.value); setAccountIds([]); setSavingsIds([]) }}>
+        <label>Currency<select value={currency} onChange={event => changeCurrency(event.target.value)}>
           {[...new Set([defaultCurrency, ...accounts.map(x => x.currency)])].sort().map(x => <option key={x}>{x}</option>)}
         </select></label>
         <label>Expected income per cycle (optional)<input type="number" min="0" step="0.01" value={expectedIncome} onChange={event => setExpectedIncome(event.target.value)} placeholder="No target" /></label>
       </div>
       <Help><p>Each cycle starts on payday and ends the day before the next one. Monthly schedules use the same day of month, clamped to the last day in shorter months. No weekend or holiday adjustment is applied.</p></Help>
-      <div className="pay-cycle-selections">
-        <fieldset><legend>Accounts to track</legend><p>Explicit selection. Dashboard preferences do not change this scope.</p>
-          {accounts.filter(x => x.currency === currency).map(x => <label className="pay-cycle-checkbox" key={x.id}><input type="checkbox" checked={accountIds.includes(x.id)} onChange={() => { setAccountIds(toggle(accountIds, x.id)); setSavingsIds(savingsIds.filter(y => y !== x.id)) }} />{x.name}{!x.includeInAnalytics && ' · Excluded from dashboard'}</label>)}
-        </fieldset>
-        <fieldset><legend>Savings destinations (optional)</legend><p>Confirmed transfers to and from these accounts are shown as savings movements. Destinations sit outside the tracked accounts.</p>
-          {accounts.filter(x => x.currency === currency && !accountIds.includes(x.id)).map(x => <label className="pay-cycle-checkbox" key={x.id}><input type="checkbox" checked={savingsIds.includes(x.id)} onChange={() => setSavingsIds(toggle(savingsIds, x.id))} />{x.name}</label>)}
-          {accounts.every(x => x.currency !== currency || accountIds.includes(x.id)) && <p>No other accounts in this currency.</p>}
-        </fieldset>
-      </div>
+      <fieldset className="pay-cycle-roles"><legend>What each account is for</legend>
+        <p>Spending accounts are tracked for income and spending. Savings destinations are not tracked, but confirmed transfers to and from them are shown as savings movements. Each account does one job, and dashboard preferences do not change this scope.</p>
+        {currencyNotice && <p role="status">{currencyNotice}</p>}
+        {inCurrency.length === 0 && <p role="alert">No accounts are held in {currency}. Choose another currency, or <Link to="/imports">add a {currency} account</Link>.</p>}
+        {inCurrency.map(x => <label className="pay-cycle-role" key={x.id}>
+          <span>{x.name}<small>{accountTypeLabel(x.accountType)}{!x.includeInAnalytics && ' · Excluded from dashboard'}</small></span>
+          <select value={roles[x.id] ?? 'excluded'} onChange={event => { setRoles(y => ({ ...y, [x.id]: event.target.value as AccountRole })); setCurrencyNotice('') }}>
+            <option value="spending">Spending</option>
+            <option value="savings">Savings destination</option>
+            <option value="excluded">Not part of this pay cycle</option>
+          </select>
+        </label>)}
+        {unconfirmed.length > 0 && <p>{unconfirmed.map(x => x.name).join(', ')} {unconfirmed.length === 1 ? 'has no account type' : 'have no account type'}, so no role was suggested. Give {unconfirmed.length === 1 ? 'it' : 'them'} a role if {unconfirmed.length === 1 ? 'it belongs' : 'they belong'} in this pay cycle.</p>}
+        <p className="pay-cycle-scope">{accountIds.length === 0
+          ? 'Choose at least one spending account before saving.'
+          : `Saving will track ${accountIds.length === 1 ? '1 spending account' : `${accountIds.length} spending accounts`} and ${savingsIds.length === 0 ? 'no savings destinations' : savingsIds.length === 1 ? '1 savings destination' : `${savingsIds.length} savings destinations`} in ${currency}.`}</p>
+      </fieldset>
       <div className="pay-cycle-toolbar"><button type="submit" disabled={accountIds.length === 0}>{mutation.isPending ? 'Saving…' : 'Save pay cycle'}</button><button type="button" className="pay-cycle-secondary" onClick={onCancel}>Cancel</button></div>
     </fieldset>
     {mutation.error && <p role="alert">{errorMessage(mutation.error)} {isAxiosError(mutation.error) && mutation.error.response?.status === 409 && <button type="button" onClick={() => void onReload()}>Discard edits and reload</button>}</p>}
