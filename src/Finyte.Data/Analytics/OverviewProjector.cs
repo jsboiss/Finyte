@@ -57,8 +57,6 @@ public sealed class OverviewProjector(FinyteDbContext dbContext) : IOverviewProj
         // Account preferences control all-account income/spending, never balances or direct inspection.
         var accountIds = accountRows.Where(x => scope.AccountId != null || AccountPreferences.IncludeInAnalytics(x)).Select(x => x.Id).ToList();
         var currency = AccountPreferences.AnalyticsCurrency(accountRows, scope.AccountId);
-        // Summing CurrentBalance for an account whose source never reported a balance invents a zero and makes a
-        // partial total look complete, so only reported balances contribute and the scope is published alongside.
         var reportedBalances = accountRows.Where(x => x.BalanceAsOf is not null).ToList();
         var accountBalanceMinorUnits = reportedBalances.Sum(x => ToMinorUnits(x.CurrentBalance));
         var balanceCoverage = new OverviewBalanceCoverageResponse(

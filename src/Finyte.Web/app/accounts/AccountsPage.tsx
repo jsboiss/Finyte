@@ -96,7 +96,6 @@ function AccountBalance({ account }: { account: Account }) {
 
   return (
     <div className="account-balance">
-      {/* A reported balance of zero is a real balance, so it is shown as an amount and never as unavailable. */}
       <strong>{state.kind === 'missing' ? 'Balance unavailable' : formatBalance(account.currentBalance, account.currency)}</strong>
       {state.kind !== 'missing' && <span>Updated {new Date(state.asOf).toLocaleDateString()}</span>}
       {guidance && <small className={state.kind === 'missing' ? 'balance-missing' : 'balance-stale'}>

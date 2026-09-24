@@ -9,8 +9,6 @@ public sealed class ProjectionDispatcher(FinyteDbContext dbContext, IOverviewPro
 {
     private static JsonSerializerOptions JsonOptions { get; } = new(JsonSerializerDefaults.Web);
 
-    // A failed rebuild used to stay failed forever: reads only re-queued succeeded projections and the reconciler
-    // only dispatches pending ones, so the dashboard reported IsRefreshing indefinitely while nothing retried.
     private static TimeSpan FailedRetryCooldown { get; } = TimeSpan.FromMinutes(1);
 
     public async Task<OverviewResponse> GetOrRebuildOverview(OverviewProjectionScope scope, CancellationToken cancellationToken)
@@ -67,8 +65,6 @@ public sealed class ProjectionDispatcher(FinyteDbContext dbContext, IOverviewPro
         return projection.SourceVersion < sourceVersion || IsElapsedDaysStale(projection, scope, now);
     }
 
-    // Average daily spend divides by days elapsed in the month, so the value expires at midnight even when no
-    // transaction changed. FinancialDataVersion only tracks data changes, so the day itself has to be checked.
     private static bool IsElapsedDaysStale(OverviewProjection projection, OverviewProjectionScope scope, DateTimeOffset now)
     {
         var today = DateOnly.FromDateTime(now.UtcDateTime);

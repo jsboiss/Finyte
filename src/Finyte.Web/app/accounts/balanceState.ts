@@ -1,7 +1,5 @@
 import type { Account } from './accountsApi'
 
-// A balance the source has not refreshed for this long is reported as stale rather than current, so a figure
-// that predates recent spending is never read as today's position.
 const staleAfterDays = 3
 
 export type BalanceState =
@@ -20,10 +18,6 @@ export function balanceState(account: Account, now = new Date()): BalanceState {
     : { kind: 'current', asOf: account.balanceAsOf }
 }
 
-/**
- * What to tell the user, and the next step the account's actual source supports. An imported account has no
- * source to re-poll, so it gets an honest limitation rather than an action that cannot work.
- */
 export function balanceGuidance(account: Account, state: BalanceState) {
   if (state.kind === 'current') {
     return null

@@ -11,11 +11,8 @@ public sealed record OverviewResponse(
     IReadOnlyList<OverviewDailyCashFlowResponse> DailyCashFlow,
     IReadOnlyList<OverviewMonthlySpendByTagResponse> MonthlySpendByTag,
     OverviewFreshnessResponse Freshness,
-    // Nullable so projections persisted before this field existed still deserialize.
     OverviewBalanceCoverageResponse? BalanceCoverage = null);
 
-// A balance is only real when its source reported one. Callers need the scope so a partial total is never
-// presented as complete, and the names so the user can see which accounts are holding it back.
 public sealed record OverviewBalanceCoverageResponse(
     int CoveredAccounts,
     int TotalAccounts,
