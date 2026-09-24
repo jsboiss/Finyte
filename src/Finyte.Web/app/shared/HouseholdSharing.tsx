@@ -1,9 +1,6 @@
 import { Help } from './Help'
 
-/**
- * The real sharing boundary, audited against the endpoints in docs/household-permissions.md. Tenant scoping is
- * the only access control there is, so this must not imply any per-account privacy. Re-audit before editing.
- */
+// Every claim here is audited against the endpoints in docs/household-permissions.md. Re-audit before editing.
 export function HouseholdSharingSummary({ context }: { context: 'invite' | 'connection' | 'settings' }) {
   return (
     <div className="household-sharing">
@@ -21,6 +18,7 @@ export function HouseholdSharingSummary({ context }: { context: 'invite' | 'conn
           <li>Everyone can start or manage the subscription.</li>
           <li>Only the owner can invite or remove people.</li>
         </ul>
+        <p>Removing someone does not disconnect the banks they connected, and once they are removed nobody can disconnect them here. Ask them to disconnect first, or revoke the consent with the bank.</p>
         <p>Grouping accounts for reporting changes what a chart counts. It does not restrict who can see them.</p>
       </Help>
     </div>

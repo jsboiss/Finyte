@@ -1040,7 +1040,7 @@ function SettingsPage() {
                 <div className="family-avatar">{(x.displayName ?? x.email ?? '?').slice(0, 1).toUpperCase()}</div>
                 <div className="family-person"><strong>{x.displayName ?? x.email ?? 'Family member'}{x.isCurrent ? ' (you)' : ''}</strong><span>{x.email ?? x.userId}</span></div>
                 <span className={x.role === 'Owner' ? 'family-role is-owner' : 'family-role'}>{x.role}</span>
-                {family.canManage && !x.isCurrent && <button className="family-icon-button" aria-label={`Remove ${x.displayName ?? x.email}`} onClick={() => removeMutation.mutate(x.id)} type="button"><Trash2 aria-hidden="true" /></button>}
+                {family.canManage && !x.isCurrent && <button className="family-icon-button" aria-label={`Remove ${x.displayName ?? x.email}`} onClick={() => { if (window.confirm(`Remove ${x.displayName ?? x.email ?? 'this member'}? Any banks they connected keep syncing, and once they are removed nobody can disconnect those here. Ask them to disconnect first if you need that stopped.`)) { removeMutation.mutate(x.id) } }} type="button"><Trash2 aria-hidden="true" /></button>}
               </div>
             ))}
           </div>
