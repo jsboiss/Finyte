@@ -118,11 +118,11 @@ export function DashboardPage() {
 }
 
 function refreshInterval(freshness: OverviewResponse['freshness'] | undefined) {
-  if (!freshness?.isRefreshing) {
-    return false as const
+  if (freshness?.hasFailed) {
+    return 60_000
   }
 
-  return freshness.hasFailed ? 15_000 : 1_000
+  return freshness?.isRefreshing ? 1_000 : false
 }
 
 function LockedDashboard() {
