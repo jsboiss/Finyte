@@ -1,6 +1,5 @@
 import { Help } from './Help'
 
-// Every claim here is audited against the endpoints in docs/household-permissions.md. Re-audit before editing.
 export function HouseholdSharingSummary({ context }: { context: 'invite' | 'connection' | 'settings' }) {
   return (
     <div className="household-sharing">

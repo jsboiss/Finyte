@@ -117,14 +117,11 @@ export function DashboardPage() {
   )
 }
 
-// The aggregate only sums accounts whose source reported a balance, so a partial total is labelled with its exact
-// scope instead of being hidden entirely or presented as complete.
 function balanceMetric(overview: OverviewResponse, hasBalances: boolean): DashboardMetric {
   const base = { id: 'balance', label: overview.scope.label, href: '/accounts' }
   const coverage = overview.balanceCoverage
 
   if (!coverage) {
-    // Projections written before coverage was published fall back to the previous all-or-nothing rule.
     return { ...base, value: hasBalances ? compactCurrency(overview.accountBalanceMinorUnits, overview.currency) : 'Balance unavailable' }
   }
 
@@ -142,14 +139,12 @@ function balanceMetric(overview: OverviewResponse, hasBalances: boolean): Dashbo
     : { ...base, value }
 }
 
-// A rebuild that keeps failing must not be polled once a second: the server retries on a cooldown, so back off
-// to a rate that still converges without every open dashboard hammering the API while the failure persists.
 function refreshInterval(freshness: OverviewResponse['freshness'] | undefined) {
-  if (!freshness?.isRefreshing) {
-    return false as const
+  if (freshness?.hasFailed) {
+    return 60_000
   }
 
-  return freshness.hasFailed ? 15_000 : 1_000
+  return freshness?.isRefreshing ? 1_000 : false
 }
 
 function LockedDashboard() {
