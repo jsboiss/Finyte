@@ -1,5 +1,4 @@
-// Mirrors OverviewProjector: the absolute amount is split evenly in minor units across the transaction's tags and
-// the remainder goes to the first. The API returns tags in the same order the projector uses, so never re-sort here.
+// tagIds arrive in the projector's own order, so sorting them here would move the remainder under another collation.
 export function tagAllocationMinorUnits(amountMinorUnits: number, tagIds: string[], tagId: string) {
   const index = tagIds.indexOf(tagId)
   if (index < 0) {
