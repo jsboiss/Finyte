@@ -1,5 +1,5 @@
 import { memo, useEffect, useRef } from 'react'
-import { currency, signedCurrency } from '../../shared/formatters'
+import { compactCurrency, signedCompactCurrency } from '../../shared/formatters'
 import { transactionLink } from '../transactionLinks'
 import type { CashFlowModuleData, OverviewResponse } from '../types'
 
@@ -26,15 +26,15 @@ export const CashFlowRace = memo(function CashFlowRace({ currencyCode, data, isL
       <div className="cash-flow-values">
         <a href={transactionLink(overview, 'credit', range)} className="cash-flow-value is-income">
           <span>Income</span>
-          <strong>{currency(income, currencyCode)}</strong>
+          <strong>{compactCurrency(income, currencyCode)}</strong>
         </a>
         <a href={transactionLink(overview, 'all', range)} className="cash-flow-value is-net">
           <span>Net</span>
-          <strong>{signedCurrency(net, currencyCode)}</strong>
+          <strong>{signedCompactCurrency(net, currencyCode)}</strong>
         </a>
         <a href={transactionLink(overview, 'debit', range)} className="cash-flow-value is-expense">
           <span>Expenses</span>
-          <strong>{currency(expenses, currencyCode)}</strong>
+          <strong>{compactCurrency(expenses, currencyCode)}</strong>
         </a>
       </div>
       <div className="race-track" aria-label="Income vs expenses">
