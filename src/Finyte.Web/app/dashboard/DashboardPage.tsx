@@ -40,7 +40,7 @@ export function DashboardPage() {
     queryKey: getOverviewQueryKey(accountId, includeInternalTransfers),
     queryFn: () => getOverview(accountId, includeInternalTransfers),
     enabled: hasBillingAccess,
-    refetchInterval: x => x.state.data?.freshness.isRefreshing ? 1_000 : false,
+    refetchInterval: x => refreshInterval(x.state.data?.freshness),
     staleTime: 60_000,
   })
   const refreshOverviewMutation = useMutation({
@@ -117,6 +117,14 @@ export function DashboardPage() {
   )
 }
 
+function refreshInterval(freshness: OverviewResponse['freshness'] | undefined) {
+  if (freshness?.hasFailed) {
+    return 60_000
+  }
+
+  return freshness?.isRefreshing ? 1_000 : false
+}
+
 function LockedDashboard() {
   return (
     <section className="page">
@@ -141,6 +149,6 @@ function createEmptyOverview(accountId: string | null, selectedAccountId: string
     cashFlowRace: { incomeMinorUnits: 0, expenseMinorUnits: 0, netMinorUnits: 0 },
     dailyCashFlow: [],
     monthlySpendByTag: [{ tagId: null, name: 'Untagged', color: '#94a3b8', amountMinorUnits: 0, percentage: 0 }],
-    freshness: { calculatedAt: new Date().toISOString(), sourceWatermark: null, isRefreshing: false },
+    freshness: { calculatedAt: new Date().toISOString(), sourceWatermark: null, isRefreshing: false, isStale: false, hasFailed: false, lastError: null },
   }
 }
