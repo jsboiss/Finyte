@@ -10,7 +10,13 @@ public sealed record OverviewResponse(
     OverviewCashFlowRaceResponse CashFlowRace,
     IReadOnlyList<OverviewDailyCashFlowResponse> DailyCashFlow,
     IReadOnlyList<OverviewMonthlySpendByTagResponse> MonthlySpendByTag,
-    OverviewFreshnessResponse Freshness);
+    OverviewFreshnessResponse Freshness,
+    OverviewBalanceCoverageResponse? BalanceCoverage = null);
+
+public sealed record OverviewBalanceCoverageResponse(
+    int CoveredAccounts,
+    int TotalAccounts,
+    IReadOnlyList<string> MissingAccounts);
 
 public sealed record OverviewScopeResponse(Guid? AccountId, string Label);
 
