@@ -57,7 +57,12 @@ public sealed class OverviewProjector(FinyteDbContext dbContext) : IOverviewProj
         // Account preferences control all-account income/spending, never balances or direct inspection.
         var accountIds = accountRows.Where(x => scope.AccountId != null || AccountPreferences.IncludeInAnalytics(x)).Select(x => x.Id).ToList();
         var currency = AccountPreferences.AnalyticsCurrency(accountRows, scope.AccountId);
-        var accountBalanceMinorUnits = accountRows.Sum(x => ToMinorUnits(x.CurrentBalance));
+        var reportedBalances = accountRows.Where(x => AccountPreferences.HasReportedBalance(x)).ToList();
+        var accountBalanceMinorUnits = reportedBalances.Sum(x => ToMinorUnits(x.CurrentBalance));
+        var balanceCoverage = new OverviewBalanceCoverageResponse(
+            reportedBalances.Count,
+            accountRows.Count,
+            accountRows.Where(x => !AccountPreferences.HasReportedBalance(x)).Select(AccountPreferences.DisplayName).ToList());
         var accountLabel = scope.AccountId is null
             ? "All accounts"
             : accountRows.FirstOrDefault() is { } account ? AccountPreferences.DisplayName(account) : "Selected account";
@@ -171,7 +176,8 @@ public sealed class OverviewProjector(FinyteDbContext dbContext) : IOverviewProj
             new OverviewCashFlowRaceResponse(incomeMinorUnits, expenseMinorUnits, incomeMinorUnits - expenseMinorUnits),
             dailyCashFlow,
             monthlySpendByTag,
-            new OverviewFreshnessResponse(now, sourceWatermark, IsRefreshing: false));
+            new OverviewFreshnessResponse(now, sourceWatermark, IsRefreshing: false),
+            balanceCoverage);
         if (includeInternalTransfers)
         {
             return response;

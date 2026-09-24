@@ -1,4 +1,3 @@
-// Amounts arrive as hundredths regardless of currency, because the server's ToMinorUnits always scales by 100.
 const minorUnitScale = 100
 const numberFormats = new Map<string, Intl.NumberFormat>()
 
@@ -9,7 +8,6 @@ function moneyFormat(currencyCode: string, exact: boolean) {
     return cached
   }
 
-  // An unusable currency code must not blank an entire ledger, so fall back to plain decimal formatting.
   let format: Intl.NumberFormat
   try {
     format = new Intl.NumberFormat(undefined, exact
@@ -24,17 +22,14 @@ function moneyFormat(currencyCode: string, exact: boolean) {
   return format
 }
 
-/** Ledger, detail and audit amounts. Keeps the currency's own minor units so a row reconciles against a statement. */
 export function exactCurrency(minorUnits: number, currencyCode: string) {
   return moneyFormat(currencyCode, true).format(minorUnits / minorUnitScale)
 }
 
-/** Ledger amounts already expressed as a decimal by the API rather than as minor units. */
 export function exactAmount(amount: number, currencyCode: string) {
   return moneyFormat(currencyCode, true).format(amount)
 }
 
-/** Charts and summary tiles only. Never use where the amount has to reconcile against a statement. */
 export function compactCurrency(minorUnits: number, currencyCode: string) {
   return moneyFormat(currencyCode, false).format(minorUnits / minorUnitScale)
 }
