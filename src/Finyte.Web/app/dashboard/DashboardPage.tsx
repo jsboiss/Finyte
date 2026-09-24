@@ -117,8 +117,6 @@ export function DashboardPage() {
   )
 }
 
-// A rebuild that keeps failing must not be polled once a second: the server retries on a cooldown, so back off
-// to a rate that still converges without every open dashboard hammering the API while the failure persists.
 function refreshInterval(freshness: OverviewResponse['freshness'] | undefined) {
   if (!freshness?.isRefreshing) {
     return false as const
