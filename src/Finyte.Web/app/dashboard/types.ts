@@ -36,6 +36,7 @@ export type OverviewResponse = {
     lastError: string | null
   }
   balanceCoverage: { coveredAccounts: number; totalAccounts: number; missingAccounts: string[] } | null
+  currencyScope: { excludedAccounts: number; excludedTransactions: number; excludedCurrencies: string[] } | null
 }
 
 export type OverviewAccountOption = {

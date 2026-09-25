@@ -8,7 +8,7 @@ export function CashFlowRaceModule({ overview }: { overview: OverviewResponse })
     <CashFlowDashboardModule
       icon={<WalletCards aria-hidden="true" />}
       overview={overview}
-      title="Income vs expenses"
+      title="Money in vs money out"
     >
       {(data, _timeframe, state) => (
         <CashFlowRace

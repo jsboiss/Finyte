@@ -25,7 +25,7 @@ export const CashFlowRace = memo(function CashFlowRace({ currencyCode, data, isL
     <div className="cash-flow-race">
       <div className="cash-flow-values">
         <a href={transactionLink(overview, 'credit', range)} className="cash-flow-value is-income">
-          <span>Income</span>
+          <span>Money in</span>
           <strong>{compactCurrency(income, currencyCode)}</strong>
         </a>
         <a href={transactionLink(overview, 'all', range)} className="cash-flow-value is-net">
@@ -33,11 +33,11 @@ export const CashFlowRace = memo(function CashFlowRace({ currencyCode, data, isL
           <strong>{signedCompactCurrency(net, currencyCode)}</strong>
         </a>
         <a href={transactionLink(overview, 'debit', range)} className="cash-flow-value is-expense">
-          <span>Expenses</span>
+          <span>Money out</span>
           <strong>{compactCurrency(expenses, currencyCode)}</strong>
         </a>
       </div>
-      <div className="race-track" aria-label="Income vs expenses">
+      <div className="race-track" aria-label="Money in versus money out">
         <div className="race-income" style={{ width: `${incomePercent}%` }} />
         <div className="race-expense" style={{ width: `${expensePercent}%` }} />
       </div>
