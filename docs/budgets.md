@@ -11,6 +11,7 @@ Budgets are family-owned spending limits, available at `/budgets` with an active
 - `accountScope: analytics` follows account preferences, including accounts added later. `selected` counts only those accounts, overriding their combined-analytics preference as direct account views do. Transaction currency filtering still applies.
 - Deleted tag/account links cascade away, while the explicit scope persists. Deleting the last selected tag or account cannot broaden a budget to all transactions. A now-empty selection counts nothing and the UI explains why.
 - Budgets may overlap. Their totals are not additive.
+- Spending is gross, never net of refunds. Refunding a budgeted purchase leaves the original debit counted and records the refund as a separate credit outside the budget, so a period's spending never changes after the fact. This is a decided position, recorded against issue #38 on 25 September 2026, not a limitation waiting to be fixed: it keeps every total traceable to transactions with a matching account, date, currency and transfer scope. A net-of-refund mode would have to be added as an explicit, opt-in reporting choice.
 
 ## Periods and history
 

@@ -42,23 +42,23 @@ const CashFlowSummary = memo(function CashFlowSummary({ points, currencyCode, ov
         <span>Net cash flow</span>
         <strong className={net >= 0 ? 'amount-positive' : 'amount-negative'}>{signedCompactCurrency(net, currencyCode)}</strong>
       </div>
-      <div className="summary-race-track" aria-label="Income vs expenses month to date">
+      <div className="summary-race-track" aria-label="Money in versus money out month to date">
         <div className="race-income" style={{ width: `${incomePercent}%` }} />
         <div className="race-expense" style={{ width: `${expensePercent}%` }} />
       </div>
       <div className="cash-flow-summary-grid">
         <div>
-          <span>Income</span>
+          <span>Money in</span>
           <strong>{compactCurrency(income, currencyCode)}</strong>
         </div>
         <div>
-          <span>Expenses</span>
+          <span>Money out</span>
           <strong>{compactCurrency(expenses, currencyCode)}</strong>
         </div>
       </div>
       <div className="cash-flow-highlights">
         <div>
-          <span>Best income day</span>
+          <span>Best day for money in</span>
           <strong>{bestIncomeDay && bestIncomeDay.incomeMinorUnits > 0 ? `${bestIncomeDay.tooltip} ${compactCurrency(bestIncomeDay.incomeMinorUnits, currencyCode)}` : 'No income yet'}</strong>
         </div>
         <div>
@@ -138,8 +138,8 @@ const CashFlowWeeklyBars = memo(function CashFlowWeeklyBars({ points, currencyCo
 function CashFlowLegend() {
   return (
     <div className="chart-legend">
-      <span><i className="legend-income" />Income</span>
-      <span><i className="legend-expense" />Expense</span>
+      <span><i className="legend-income" />Money in</span>
+      <span><i className="legend-expense" />Money out</span>
     </div>
   )
 }
