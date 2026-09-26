@@ -68,4 +68,4 @@ The editor searches existing categories and optional tags. Search only narrows t
 
 Complete the budget details to see a preview before saving. Its date selects a period using the chosen frequency and anchor. Changing the definition, scope or date replaces the preview query and cancels obsolete requests; saving is disabled until the current preview succeeds. Empty matches are valid but explained. A failed preview offers retry and cannot be mistaken for a zero total. Categories and tags use OR matching; multiple matches still count a transaction once.
 
-See `docs/issue-30/README.md` for mobile verification and the development-only synthetic fixture. The fixture is outside the production entry point and never calls the API.
+The development-only synthetic fixture at `src/Finyte.Web/tests/budget-review.html` exercises the editor without the API. It is outside the production entry point.
