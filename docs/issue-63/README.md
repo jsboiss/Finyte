@@ -38,16 +38,14 @@ is empty, so the change is a no-op for the common case.
 
 None. The app cannot be run here — no .NET SDK means no API, so the dashboard cannot be loaded end to end.
 
-The screenshot below is the real `CashFlowRace` component rendered through a temporary Vite harness with the
-production stylesheets and a fixture `OverviewResponse`. It shows the #38 relabelling only. It is not a
-screenshot of the running application, and the empty-state, multi-currency note and balance tile are unverified
-visually.
+Screenshots are attached to the pull request rather than committed here, so the repository does not carry
+image files. What was captured: the real `CashFlowRace` component rendered through a temporary Vite harness
+with the production stylesheets and a fixture `OverviewResponse`, showing the #38 relabelling. It is not the
+running application, and the empty state, multi-currency note and balance tile are visually unverified.
 
-Captured at 560 CSS pixels wide rather than a phone viewport: at 402 the panel overflowed its container in the
-harness and clipped the right-hand label. I could not confidently tell whether that is a harness artifact or a
-real narrow-viewport overflow in `.cash-flow-values`, so it is worth checking on a real phone viewport.
-
-![Money in vs money out](money-in-out.png)
+It was captured at 560 CSS pixels rather than a phone viewport: at 402 the panel overflowed its container in
+the harness and clipped the right-hand label. I could not tell whether that is a harness artifact or a real
+narrow-viewport overflow in `.cash-flow-values`, so it is worth checking on a real phone.
 
 ## Not covered
 
