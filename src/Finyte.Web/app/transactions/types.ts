@@ -15,6 +15,7 @@ export type Transaction = {
   description: string
   merchantName: string | null
   category: string
+  hasCategoryOverride?: boolean
   amountMinorUnits: number
   currency: string
   tags: TransactionTag[]

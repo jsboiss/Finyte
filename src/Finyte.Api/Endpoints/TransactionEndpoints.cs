@@ -21,6 +21,7 @@ public static partial class TransactionEndpoints
         transactions.MapGet("/", GetTransactions).WithName("GetTransactions");
         transactions.MapPut("/{transactionId:guid}/tags", SetTransactionTags).WithName("SetTransactionTags");
         transactions.MapPost("/{transactionId:guid}/tags/restore-automatic", RestoreAutomaticTags).WithName("RestoreAutomaticTransactionTags");
+        transactions.MapPut("/{transactionId:guid}/category", SetTransactionCategory).WithName("SetTransactionCategory");
 
         var tags = app.MapGroup("/api/tags").RequireAuthorization();
         tags.MapGet("/", GetTags).WithName("GetTransactionTags");
@@ -127,7 +128,8 @@ public static partial class TransactionEndpoints
                 GetPostedDate(x.PostedAt ?? x.CreatedAt),
                 x.Description ?? "",
                 x.MerchantName,
-                GetCategory(x.PrimaryCategory, x.SecondaryCategory),
+                TransactionCategories.Effective(x.CategoryOverride, x.SecondaryCategory, x.PrimaryCategory),
+                x.CategoryOverride != null,
                 ToMinorUnits(x.Amount),
                 x.Currency,
                 transfers.Any(y => y.DebitTransactionId == x.Id || y.CreditTransactionId == x.Id),
@@ -284,6 +286,35 @@ public static partial class TransactionEndpoints
             await databaseTransaction.CommitAsync(cancellationToken);
         }
         return TypedResults.Ok(await ReadTransactionTags(currentTenant.TenantId, transactionId, dbContext, cancellationToken));
+    }
+
+    private static async Task<Results<Ok<SetCategoryResponse>, BadRequest<string>, NotFound>> SetTransactionCategory(
+        Guid transactionId,
+        SetCategoryRequest request,
+        TenantResolver tenantResolver,
+        HttpContext httpContext,
+        FinyteDbContext dbContext,
+        IProjectionInvalidator projectionInvalidator,
+        CancellationToken cancellationToken)
+    {
+        var category = request.Category?.Trim();
+        if (category is { Length: 0 } || category?.Length > 128)
+        {
+            return TypedResults.BadRequest("A category must contain 1 to 128 characters, or be null to use the imported category.");
+        }
+
+        var currentTenant = await tenantResolver.Resolve(httpContext.User, cancellationToken);
+        var transaction = await dbContext.Transactions
+            .SingleOrDefaultAsync(x => x.TenantId == currentTenant.TenantId && x.Id == transactionId, cancellationToken);
+        if (transaction is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        transaction.CategoryOverride = category;
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await projectionInvalidator.TransactionChanged(currentTenant.TenantId, transaction.AccountId, transaction.PostedAt, cancellationToken);
+        return TypedResults.Ok(new SetCategoryResponse(TransactionCategories.Effective(transaction), transaction.CategoryOverride != null));
     }
 
     private static async Task<Results<Ok<IReadOnlyList<TransactionTagResponse>>, NotFound>> RestoreAutomaticTags(
@@ -479,16 +510,6 @@ public static partial class TransactionEndpoints
         return TypedResults.Ok(new MerchantTagRuleResponse(rule.Id, rule.MerchantName, new TransactionTagResponse(tag.Id, tag.Name, tag.Color)));
     }
 
-    private static string GetCategory(string? primaryCategory, string? secondaryCategory)
-    {
-        if (!string.IsNullOrWhiteSpace(secondaryCategory))
-        {
-            return secondaryCategory;
-        }
-
-        return string.IsNullOrWhiteSpace(primaryCategory) ? "Uncategorised" : primaryCategory;
-    }
-
     private static string NormalizeColor(string? color)
     {
         if (color is not null && HexColorRegex().IsMatch(color))
@@ -520,6 +541,7 @@ public static partial class TransactionEndpoints
         string Description,
         string? MerchantName,
         string Category,
+        bool HasCategoryOverride,
         long AmountMinorUnits,
         string Currency,
         bool IsInternalTransfer,
@@ -534,6 +556,10 @@ public static partial class TransactionEndpoints
 
     private sealed record TransactionTagResponse(Guid Id, string Name, string Color,
         string? Source = null, Guid? MerchantRuleId = null, string? MerchantRuleName = null);
+
+    private sealed record SetCategoryRequest(string? Category);
+
+    private sealed record SetCategoryResponse(string Category, bool HasCategoryOverride);
 
     private sealed record CreateTransactionTagRequest(string Name, string? Color);
 

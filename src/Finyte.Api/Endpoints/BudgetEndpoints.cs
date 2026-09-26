@@ -39,6 +39,7 @@ public static class BudgetEndpoints
         var transactions = dbContext.Transactions.Where(x => x.TenantId == tenantId);
         var categories = await transactions.Select(x => x.PrimaryCategory)
             .Union(transactions.Select(x => x.SecondaryCategory))
+            .Union(transactions.Select(x => x.CategoryOverride))
             .Where(x => x != null && x != "").ToListAsync(cancellationToken);
         return categories.Where(x => !string.IsNullOrWhiteSpace(x))
             .Select(x => x!.Trim())

@@ -20,6 +20,7 @@ import { TransferCorrections } from './transfers/TransferCorrections'
 import { PayCyclesPage } from './pay-cycles/PayCyclesPage'
 import { RecurringPage } from './recurring/RecurringPage'
 import { TransactionAccountChip, TransactionAmount } from './transactions/TransactionCard'
+import { CategoryEditor } from './transactions/CategoryEditor'
 import { TransactionCardList } from './transactions/TransactionCardList'
 import { TransactionPagination } from './transactions/TransactionPagination'
 import { TransactionQuickFilters, TransactionFilterChips } from './transactions/TransactionQuickFilters'
@@ -454,6 +455,23 @@ function TransactionsPage() {
       ])
     },
   })
+  const setCategoryMutation = useMutation({
+    mutationFn: (input: { transactionId: string; category: string | null }) => setTransactionCategory(input),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['transactions'] }),
+        queryClient.invalidateQueries({ queryKey: ['overview'] }),
+        queryClient.invalidateQueries({ queryKey: ['budgets'] }),
+      ])
+    },
+  })
+  const categorySuggestionsQuery = useQuery({
+    queryKey: ['budgets', 'categories'],
+    queryFn: () => httpClient<string[]>({ url: '/api/budgets/categories' }),
+    staleTime: 60_000,
+  })
+  const categorySuggestionsData = categorySuggestionsQuery.data
+  const categorySuggestions = useMemo(() => categorySuggestionsData ?? [], [categorySuggestionsData])
   const columns = useMemo(() => [
     transactionColumnHelper.accessor('postedDate', {
       header: 'Date',
@@ -476,6 +494,14 @@ function TransactionsPage() {
     }),
     transactionColumnHelper.accessor('category', {
       header: 'Category',
+      cell: x => (
+        <CategoryEditor
+          disabled={setCategoryMutation.isPending}
+          onChange={category => setCategoryMutation.mutate({ transactionId: x.row.original.id, category })}
+          suggestions={categorySuggestions}
+          transaction={x.row.original}
+        />
+      ),
     }),
     transactionColumnHelper.accessor('tags', {
       header: 'Tags',
@@ -494,13 +520,13 @@ function TransactionsPage() {
       header: 'Amount',
       cell: x => <TransactionAmount amountMinorUnits={x.getValue()} currencyCode={x.row.original.currency} />,
     }),
-  ], [setTransactionTagIds, tagsQuery.data, restoreAutomaticTagsMutation, updateTransactionTagsMutation.isPending])
+  ], [categorySuggestions, setCategoryMutation, setTransactionTagIds, tagsQuery.data, restoreAutomaticTagsMutation, updateTransactionTagsMutation.isPending])
   // TanStack Table intentionally returns stateful functions that React Compiler cannot memoize.
   // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data: transactionsQuery.data?.items ?? [],
     columns,
-    state: { columnVisibility: { category: false } },
+    state: { columnVisibility: { category: true } },
     manualFiltering: true,
     manualSorting: true,
     manualPagination: true,
@@ -669,7 +695,7 @@ function TransactionsPage() {
             ))}
             {table.getRowModel().rows.length === 0 && (
               <tr>
-                <td className="empty-table-cell" colSpan={5}>{emptyMessage}</td>
+                <td className="empty-table-cell" colSpan={6}>{emptyMessage}</td>
               </tr>
             )}
           </tbody>
@@ -1123,6 +1149,15 @@ async function setTransactionTags(input: SetTransactionTagsInput) {
     headers: { 'Content-Type': 'application/json' },
     method: 'PUT',
     url: `/api/transactions/${input.transactionId}/tags`,
+  })
+}
+
+async function setTransactionCategory(input: { transactionId: string; category: string | null }) {
+  return httpClient<{ category: string; hasCategoryOverride: boolean }>({
+    data: { category: input.category },
+    headers: { 'Content-Type': 'application/json' },
+    method: 'PUT',
+    url: `/api/transactions/${input.transactionId}/category`,
   })
 }
 

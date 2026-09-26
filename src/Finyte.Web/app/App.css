@@ -2397,3 +2397,8 @@ td {
 .app-drawer[open]:has(.transaction-filters-panel) { display: flex; flex-direction: column; }
 .app-drawer:has(.transaction-filters-panel) > header { flex: 0 0 auto; position: relative; }
 .app-drawer:has(.transaction-filters-panel) > .drawer-content { overflow-y: auto; min-height: 0; }
+.category-chip { align-items: center; background: transparent; border: 1px solid #36393d; border-radius: 999px; color: inherit; display: inline-flex; font-size: 13px; font-weight: 500; gap: 6px; min-height: 32px; padding: 4px 12px; white-space: nowrap; }
+.category-chip small { color: #9aa0a6; font-size: 11px; }
+.category-editor { align-items: center; display: flex; flex-wrap: wrap; gap: 6px; }
+.category-editor input { min-width: 140px; }
+.category-editor button { font-size: 13px; min-height: 32px; padding: 0 10px; }
