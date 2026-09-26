@@ -7,6 +7,17 @@ export function monthRange(month: string): DashboardDateRange {
   return { from: `${month}-01`, to: `${month}-${lastDay}` }
 }
 
+export function categoryTransactionLink(overview: OverviewResponse, category: string, range = monthRange(overview.monthKey)) {
+  const isUncategorised = category === 'Uncategorised'
+  const filters = {
+    ...defaultTransactionFilters, ...range, accountId: overview.scope.accountId ?? '',
+    postedOnly: true, analyticsOnly: !overview.scope.accountId, direction: 'debit',
+    internalTransfers: overview.includeInternalTransfers ? 'include' : 'exclude',
+    category: isUncategorised ? '' : category, uncategorised: isUncategorised,
+  }
+  return `/transactions?${transactionSearchParams(1, 25, filters)}`
+}
+
 export function transactionLink(overview: OverviewResponse, direction = 'all', range = monthRange(overview.monthKey), tagId?: string | null) {
   const filters = {
     ...defaultTransactionFilters, ...range, accountId: overview.scope.accountId ?? '',

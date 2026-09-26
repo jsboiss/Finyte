@@ -3,7 +3,10 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Finyte.Core.Accounts;
 using Finyte.Core.Billing;
+using Finyte.Core.Analytics;
 using Finyte.Data;
+using Finyte.Data.Analytics;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -135,6 +138,54 @@ public sealed class TransactionCategoryOverrideTests
         var tagId = (await tag.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
         var rule = await client.PostAsJsonAsync("/api/merchant-tags", new { merchantName, tagId, category });
         Assert.True(rule.IsSuccessStatusCode, await rule.Content.ReadAsStringAsync());
+    }
+
+
+    [Fact]
+    public async Task TheCategoryBreakdownIsAdditiveAndNamesUncategorisedSpending()
+    {
+        await using var factory = new FinyteApiFactory();
+        using var client = factory.CreateClient();
+        var seed = await Seed(factory, client);
+        using (var scope = factory.Services.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<FinyteDbContext>();
+            var account = await dbContext.Accounts.SingleAsync(x => x.TenantId == seed.TenantId);
+            dbContext.Transactions.Add(new Transaction
+            {
+                TenantId = seed.TenantId, Account = account, FiskilTransactionId = Guid.NewGuid().ToString("N"),
+                Amount = -30m, Currency = "AUD", Description = "Unknown", Status = "posted",
+                PostedAt = new DateTimeOffset(2026, 8, 11, 0, 0, 0, TimeSpan.Zero), CreatedAt = DateTimeOffset.UtcNow
+            });
+            await dbContext.SaveChangesAsync();
+        }
+
+        using var projectorScope = factory.Services.CreateScope();
+        var projector = projectorScope.ServiceProvider.GetRequiredService<IOverviewProjector>();
+        var overview = await projector.Rebuild(new OverviewProjectionScope(seed.TenantId, null, "2026-08"), CancellationToken.None);
+        var categories = overview.MonthlySpendByCategory!;
+
+        Assert.Equal(7500, overview.CurrentMonthSpendMinorUnits);
+        Assert.Equal(7500, categories.Sum(x => x.AmountMinorUnits));
+        Assert.Equal("Department stores", categories[0].Name);
+        Assert.Equal(4500, categories[0].AmountMinorUnits);
+        Assert.Equal(3000, Assert.Single(categories, x => x.Name == "Uncategorised").AmountMinorUnits);
+    }
+
+    [Fact]
+    public async Task TheUncategorisedFilterFindsOnlyTransactionsWithNoCategoryAtAll()
+    {
+        await using var factory = new FinyteApiFactory();
+        using var client = factory.CreateClient();
+        var seed = await Seed(factory, client, importedWithoutCategory: true);
+
+        var before = await client.GetFromJsonAsync<JsonElement>("/api/transactions?uncategorised=true");
+        Assert.Equal(1, before.GetProperty("totalCount").GetInt32());
+
+        (await client.PutAsJsonAsync($"/api/transactions/{seed.TransactionId}/category", new { category = "Transport" })).EnsureSuccessStatusCode();
+
+        var after = await client.GetFromJsonAsync<JsonElement>("/api/transactions?uncategorised=true");
+        Assert.Equal(0, after.GetProperty("totalCount").GetInt32());
     }
 
     private static async Task<string> CategoryOf(HttpClient client, Guid transactionId)

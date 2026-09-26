@@ -7,6 +7,7 @@ export type TransactionFilters = {
   tagIds: string[]
   tagMatch: 'any' | 'all'
   untagged: boolean
+  uncategorised: boolean
   amountMode: string
   minAmount: string
   maxAmount: string
@@ -20,7 +21,7 @@ export type TransactionFilters = {
 
 export const defaultTransactionFilters: TransactionFilters = {
   accountId: '', from: '', to: '', search: '', category: '', tagIds: [],
-  amountMode: 'absolute', tagMatch: 'any', untagged: false, minAmount: '', maxAmount: '', currency: '', sort: '-date',
+  amountMode: 'absolute', tagMatch: 'any', untagged: false, uncategorised: false, minAmount: '', maxAmount: '', currency: '', sort: '-date',
   postedOnly: false, analyticsOnly: false, direction: 'all', internalTransfers: 'include',
 }
 
@@ -40,6 +41,9 @@ export function transactionSearchParams(page: number, pageSize: number, filters:
   if (filters.untagged) {
     params.set('untagged', 'true')
   }
+  if (filters.uncategorised) {
+    params.set('uncategorised', 'true')
+  }
   params.set('direction', filters.direction)
   params.set('internalTransfers', filters.internalTransfers)
   if (filters.postedOnly) params.set('postedOnly', 'true')
@@ -58,6 +62,7 @@ export function readTransactionSearch(search = window.location.search) {
   filters.tagIds = params.getAll('tagIds')
   filters.tagMatch = params.get('tagMatch') === 'all' ? 'all' : 'any'
   filters.untagged = params.get('untagged') === 'true'
+  filters.uncategorised = params.get('uncategorised') === 'true'
   filters.postedOnly = params.get('postedOnly') === 'true'
   filters.analyticsOnly = params.get('analyticsOnly') === 'true'
   const requestedPage = Number(params.get('page'))

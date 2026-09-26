@@ -157,6 +157,23 @@ public sealed class OverviewProjector(FinyteDbContext dbContext) : IOverviewProj
                 expenseMinorUnits > 0 ? Math.Round((decimal)x.Value.AmountMinorUnits / expenseMinorUnits * 100, 1) : 0))
             .DefaultIfEmpty(new OverviewMonthlySpendByTagResponse(null, "Untagged", "#94a3b8", 0, 0))
             .ToList();
+        var categorySpend = await transactionQuery
+            .Where(x => x.Amount < 0)
+            .GroupBy(x => x.CategoryOverride != null && x.CategoryOverride.Trim() != "" ? x.CategoryOverride.Trim()
+                : x.SecondaryCategory != null && x.SecondaryCategory.Trim() != "" ? x.SecondaryCategory.Trim()
+                : x.PrimaryCategory != null && x.PrimaryCategory.Trim() != "" ? x.PrimaryCategory.Trim()
+                : x.CategoryFromRule != null && x.CategoryFromRule.Trim() != "" ? x.CategoryFromRule.Trim()
+                : TransactionCategories.Uncategorised)
+            .Select(x => new { Category = x.Key, Amount = x.Sum(y => -y.Amount) })
+            .ToListAsync(cancellationToken);
+        var monthlySpendByCategory = categorySpend
+            .Select(x => new OverviewMonthlySpendByCategoryResponse(
+                x.Category,
+                ToMinorUnits(x.Amount),
+                expenseMinorUnits > 0 ? Math.Round((decimal)ToMinorUnits(x.Amount) / expenseMinorUnits * 100, 1) : 0))
+            .OrderByDescending(x => x.AmountMinorUnits)
+            .ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
         var transactionWatermark = await transactionQuery
             .Select(x => (DateTimeOffset?)(x.PostedAt ?? x.CreatedAt))
             .MaxAsync(cancellationToken);
@@ -177,7 +194,8 @@ public sealed class OverviewProjector(FinyteDbContext dbContext) : IOverviewProj
             dailyCashFlow,
             monthlySpendByTag,
             new OverviewFreshnessResponse(now, sourceWatermark, IsRefreshing: false),
-            balanceCoverage);
+            balanceCoverage,
+            monthlySpendByCategory);
         if (includeInternalTransfers)
         {
             return response;

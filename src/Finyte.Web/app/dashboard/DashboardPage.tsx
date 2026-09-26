@@ -13,6 +13,7 @@ import { DashboardModuleFrame } from './components/DashboardModuleFrame'
 import { getOverview, getOverviewQueryKey, refreshOverview } from './overviewApi'
 import { CashFlowModule } from './modules/CashFlowModule'
 import { CashFlowRaceModule } from './modules/CashFlowRaceModule'
+import { SpendByCategoryChart } from './modules/SpendByCategoryChart'
 import { SpendByTagChart } from './modules/SpendByTagChart'
 import { transactionLink } from './transactionLinks'
 import type { DashboardMetric, OverviewAccountOption, OverviewResponse } from './types'
@@ -109,6 +110,10 @@ export function DashboardPage() {
       <div className="overview-grid">
         <CashFlowModule overview={overview} />
 
+        <DashboardModuleFrame eyebrow={formatMonth(overview.monthKey)} title="Spend by category">
+          <SpendByCategoryChart categories={overview.monthlySpendByCategory ?? []} currencyCode={overview.currency} overview={overview} />
+        </DashboardModuleFrame>
+
         <DashboardModuleFrame eyebrow={formatMonth(overview.monthKey)} title="Spend by tag">
           <SpendByTagChart tags={overview.monthlySpendByTag} currencyCode={overview.currency} overview={overview} />
         </DashboardModuleFrame>
@@ -173,5 +178,6 @@ function createEmptyOverview(accountId: string | null, selectedAccountId: string
     monthlySpendByTag: [{ tagId: null, name: 'Untagged', color: '#94a3b8', amountMinorUnits: 0, percentage: 0 }],
     freshness: { calculatedAt: new Date().toISOString(), sourceWatermark: null, isRefreshing: false, isStale: false, hasFailed: false, lastError: null },
     balanceCoverage: null,
+    monthlySpendByCategory: [],
   }
 }

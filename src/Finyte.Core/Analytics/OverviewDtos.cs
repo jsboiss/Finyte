@@ -11,7 +11,10 @@ public sealed record OverviewResponse(
     IReadOnlyList<OverviewDailyCashFlowResponse> DailyCashFlow,
     IReadOnlyList<OverviewMonthlySpendByTagResponse> MonthlySpendByTag,
     OverviewFreshnessResponse Freshness,
-    OverviewBalanceCoverageResponse? BalanceCoverage = null);
+    OverviewBalanceCoverageResponse? BalanceCoverage = null,
+    IReadOnlyList<OverviewMonthlySpendByCategoryResponse>? MonthlySpendByCategory = null);
+
+public sealed record OverviewMonthlySpendByCategoryResponse(string Name, long AmountMinorUnits, decimal Percentage);
 
 public sealed record OverviewBalanceCoverageResponse(
     int CoveredAccounts,

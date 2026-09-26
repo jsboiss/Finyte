@@ -2402,3 +2402,14 @@ td {
 .category-editor { align-items: center; display: flex; flex-wrap: wrap; gap: 6px; }
 .category-editor input { min-width: 140px; }
 .category-editor button { font-size: 13px; min-height: 32px; padding: 0 10px; }
+.category-chart { display: grid; gap: 12px; }
+.category-bars { display: grid; gap: 10px; list-style: none; margin: 0; padding: 0; }
+.category-bars a { color: inherit; display: grid; gap: 4px; text-decoration: none; }
+.category-bars a:hover .category-bar-fill, .category-bars a:focus-visible .category-bar-fill { background: #8fdcb0; }
+.category-bar-label { display: flex; gap: 12px; justify-content: space-between; }
+.category-bar-label strong { font-variant-numeric: tabular-nums; }
+.category-bar-track { background: #26282b; border-radius: 999px; display: block; height: 8px; overflow: hidden; }
+.category-bar-fill { background: #7ccf9f; display: block; height: 100%; }
+.category-bars small { color: #9aa0a6; font-size: 11px; }
+.category-total { align-items: center; color: #9aa0a6; display: flex; font-size: 12px; gap: 6px; margin: 0; }
+.category-empty { color: #9aa0a6; margin: 0; }

@@ -11,6 +11,7 @@ public sealed record TransactionSearch
     public DateOnly? To { get; init; }
     public string? Search { get; init; }
     public string? Category { get; init; }
+    public bool Uncategorised { get; init; }
     public Guid[] TagIds { get; init; } = [];
     public string TagMatch { get; init; } = "any";
     public bool Untagged { get; init; }
@@ -72,6 +73,11 @@ public sealed record TransactionSearch
             errors["untagged"] = ["Untagged cannot be combined with selected tags."];
         }
 
+        if (Uncategorised && !string.IsNullOrWhiteSpace(Category))
+        {
+            errors["uncategorised"] = ["Uncategorised cannot be combined with a category search."];
+        }
+
         if (TagMatch is not ("any" or "all"))
         {
             errors["tagMatch"] = ["Tag match must be any or all."];
@@ -131,11 +137,22 @@ public sealed record TransactionSearch
                 || (x.Reference != null && x.Reference.ToLower().Contains(search)));
         }
 
-        if (!string.IsNullOrWhiteSpace(Category))
+        if (Uncategorised)
+        {
+            query = query.Where(x => (x.CategoryOverride ?? "").Trim() == ""
+                && (x.SecondaryCategory ?? "").Trim() == ""
+                && (x.PrimaryCategory ?? "").Trim() == ""
+                && (x.CategoryFromRule ?? "").Trim() == "");
+        }
+        else if (!string.IsNullOrWhiteSpace(Category))
         {
             var category = Category.Trim().ToLowerInvariant();
-            query = query.Where(x => (x.PrimaryCategory != null && x.PrimaryCategory.ToLower().Contains(category))
-                || (x.SecondaryCategory != null && x.SecondaryCategory.ToLower().Contains(category)));
+            query = query.Where(x => (x.CategoryOverride ?? "").Trim() != ""
+                ? x.CategoryOverride!.ToLower().Contains(category)
+                : (x.SecondaryCategory ?? "").Trim() != "" || (x.PrimaryCategory ?? "").Trim() != ""
+                    ? (x.PrimaryCategory != null && x.PrimaryCategory.ToLower().Contains(category))
+                        || (x.SecondaryCategory != null && x.SecondaryCategory.ToLower().Contains(category))
+                    : x.CategoryFromRule != null && x.CategoryFromRule.ToLower().Contains(category));
         }
 
         var tagIds = TagIds.Distinct().ToArray();
