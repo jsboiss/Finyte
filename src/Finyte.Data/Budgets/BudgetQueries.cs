@@ -26,8 +26,10 @@ public static class BudgetQueries
             var tagIds = budget.Tags.Select(x => x.TagId).ToArray();
             query = query.Where(x => (x.CategoryOverride != null && x.CategoryOverride.Trim() != ""
                     ? categories.Contains(x.CategoryOverride.Trim().ToLower())
-                    : categories.Contains((x.PrimaryCategory ?? "").Trim().ToLower())
-                        || categories.Contains((x.SecondaryCategory ?? "").Trim().ToLower()))
+                    : (x.PrimaryCategory ?? "").Trim() != "" || (x.SecondaryCategory ?? "").Trim() != ""
+                        ? categories.Contains((x.PrimaryCategory ?? "").Trim().ToLower())
+                            || categories.Contains((x.SecondaryCategory ?? "").Trim().ToLower())
+                        : categories.Contains((x.CategoryFromRule ?? "").Trim().ToLower()))
                 || x.TagAssignments.Any(y => tagIds.Contains(y.TagId) && y.Tag != null && y.Tag.TenantId == budget.TenantId));
         }
         return query;

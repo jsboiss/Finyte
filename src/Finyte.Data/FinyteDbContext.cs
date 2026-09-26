@@ -250,6 +250,9 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
             x.Property(y => y.CategoryOverride)
                 .HasMaxLength(128);
 
+            x.Property(y => y.CategoryFromRule)
+                .HasMaxLength(128);
+
             x.Property(y => y.MerchantName)
                 .HasMaxLength(256);
 
@@ -359,6 +362,9 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
             x.Property(y => y.MerchantName)
                 .HasMaxLength(256)
                 .IsRequired();
+
+            x.Property(y => y.Category)
+                .HasMaxLength(128);
 
             x.Property(y => y.MerchantKey)
                 .HasMaxLength(256)

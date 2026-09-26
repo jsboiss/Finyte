@@ -36,6 +36,7 @@ type MerchantTagRule = {
   tag: TransactionTag
   matchingWords?: string
   usesLegacyMatchingWords?: boolean
+  category?: string | null
 }
 
 type CreateTagInput = {
@@ -90,6 +91,7 @@ type CreateMerchantRuleInput = {
   ruleId?: string
   merchantName: string
   tagId: string
+  category: string | null
 }
 
 const queryClient = new QueryClient()
@@ -333,6 +335,7 @@ function TransactionsPage() {
   const [tagName, setTagName] = useState('')
   const [tagColor, setTagColor] = useState('#64748b')
   const [merchantName, setMerchantName] = useState('')
+  const [merchantCategory, setMerchantCategory] = useState('')
   const [merchantTagId, setMerchantTagId] = useState('')
   const [editingMerchantRuleId, setEditingMerchantRuleId] = useState<string>()
   const { page: transactionPage, filters } = transactionSearch
@@ -427,6 +430,7 @@ function TransactionsPage() {
     mutationFn: (input: CreateMerchantRuleInput) => createMerchantRule(input),
     onSuccess: async () => {
       setMerchantName('')
+      setMerchantCategory('')
       setEditingMerchantRuleId(undefined)
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['merchant-tags'] }),
@@ -623,19 +627,22 @@ function TransactionsPage() {
                 <option value="">Select tag</option>
                 {(tagsQuery.data ?? []).map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
               </select>
-              <button disabled={!merchantName.trim() || !merchantTagId || createMerchantRuleMutation.isPending} onClick={() => createMerchantRuleMutation.mutate({ ruleId: editingMerchantRuleId, merchantName: merchantName.trim(), tagId: merchantTagId })} type="button">
+              <input aria-label="Merchant rule category" list="merchant-rule-categories" maxLength={128} onChange={x => setMerchantCategory(x.target.value)} placeholder="Category (optional)" value={merchantCategory} />
+              <datalist id="merchant-rule-categories">{categorySuggestions.map(x => <option key={x} value={x} />)}</datalist>
+              <button disabled={!merchantName.trim() || !merchantTagId || createMerchantRuleMutation.isPending} onClick={() => createMerchantRuleMutation.mutate({ ruleId: editingMerchantRuleId, merchantName: merchantName.trim(), tagId: merchantTagId, category: merchantCategory.trim() || null })} type="button">
                 <Plus aria-hidden="true" />
                 {editingMerchantRuleId ? 'Save rule' : 'Add rule'}
               </button>
-              {editingMerchantRuleId && <button onClick={() => { setEditingMerchantRuleId(undefined); setMerchantName('') }} type="button">Cancel</button>}
+              {editingMerchantRuleId && <button onClick={() => { setEditingMerchantRuleId(undefined); setMerchantName(''); setMerchantCategory('') }} type="button">Cancel</button>}
             </div>
             <div className="tag-pill-list">
               {(merchantRulesQuery.data ?? []).map(x => (
                 <span className="merchant-rule-pill" key={x.id}>
                   {x.merchantName}
+                  {x.category && <small>Categorises as {x.category} when the import has no category.</small>}
                   {x.usesLegacyMatchingWords && <small>Saved matching words: “{x.matchingWords}”. Edit and save to use all words in the rule name.</small>}
                   <TagPill tag={x.tag} />
-                  <button aria-label={`Edit rule for ${x.merchantName}`} onClick={() => { setEditingMerchantRuleId(x.id); setMerchantName(x.merchantName); setMerchantTagId(x.tag.id) }} type="button">Edit</button>
+                  <button aria-label={`Edit rule for ${x.merchantName}`} onClick={() => { setEditingMerchantRuleId(x.id); setMerchantName(x.merchantName); setMerchantTagId(x.tag.id); setMerchantCategory(x.category ?? '') }} type="button">Edit</button>
                   <button aria-label={`Delete rule for ${x.merchantName}`} disabled={deleteMerchantRuleMutation.isPending} onClick={() => deleteMerchantRuleMutation.mutate(x.id)} type="button">
                     <Trash2 aria-hidden="true" />
                   </button>

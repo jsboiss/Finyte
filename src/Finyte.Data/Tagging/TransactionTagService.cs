@@ -54,6 +54,18 @@ public sealed class TransactionTagService(FinyteDbContext dbContext)
                 && MerchantTagMatcher.Matches(transaction.MerchantName, transaction.Description, x.MerchantKey))
             .GroupBy(x => x.TagId).ToDictionary(x => x.Key, x => x.First());
         var changed = false;
+        // Rules arrive longest key first, so the most specific matching rule supplies the category.
+        var categoryFromRule = rules
+            .FirstOrDefault(x => x.TenantId == transaction.TenantId && !excludedIds.Contains(x.TagId)
+                && !string.IsNullOrWhiteSpace(x.Category)
+                && MerchantTagMatcher.Matches(transaction.MerchantName, transaction.Description, x.MerchantKey))
+            ?.Category?.Trim();
+
+        if (transaction.CategoryFromRule != categoryFromRule)
+        {
+            transaction.CategoryFromRule = categoryFromRule;
+            changed = true;
+        }
 
         foreach (var assignment in transaction.TagAssignments.ToList())
         {

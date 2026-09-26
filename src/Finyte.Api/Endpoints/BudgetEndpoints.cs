@@ -40,6 +40,7 @@ public static class BudgetEndpoints
         var categories = await transactions.Select(x => x.PrimaryCategory)
             .Union(transactions.Select(x => x.SecondaryCategory))
             .Union(transactions.Select(x => x.CategoryOverride))
+            .Union(transactions.Select(x => x.CategoryFromRule))
             .Where(x => x != null && x != "").ToListAsync(cancellationToken);
         return categories.Where(x => !string.IsNullOrWhiteSpace(x))
             .Select(x => x!.Trim())

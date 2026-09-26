@@ -85,6 +85,58 @@ public sealed class TransactionCategoryOverrideTests
         Assert.Equal("Department stores", await CategoryOf(client, seed.TransactionId));
     }
 
+
+    [Fact]
+    public async Task AMerchantRuleCategorisesAnUploadedTransactionThatArrivedWithoutOne()
+    {
+        await using var factory = new FinyteApiFactory();
+        using var client = factory.CreateClient();
+        var seed = await Seed(factory, client, importedWithoutCategory: true);
+
+        Assert.Equal("Uncategorised", await CategoryOf(client, seed.TransactionId));
+
+        await CreateRule(client, "Kmart", "Transport");
+
+        Assert.Equal("Transport", await CategoryOf(client, seed.TransactionId));
+        Assert.False(await HasOverride(client, seed.TransactionId));
+    }
+
+    [Fact]
+    public async Task AGuessNeverDisplacesTheCategoryTheBankSupplied()
+    {
+        await using var factory = new FinyteApiFactory();
+        using var client = factory.CreateClient();
+        var seed = await Seed(factory, client);
+
+        await CreateRule(client, "Kmart", "Transport");
+
+        Assert.Equal("Department stores", await CategoryOf(client, seed.TransactionId));
+    }
+
+    [Fact]
+    public async Task AnOverrideStillBeatsAGuess()
+    {
+        await using var factory = new FinyteApiFactory();
+        using var client = factory.CreateClient();
+        var seed = await Seed(factory, client, importedWithoutCategory: true);
+        await CreateRule(client, "Kmart", "Transport");
+
+        (await client.PutAsJsonAsync($"/api/transactions/{seed.TransactionId}/category", new { category = "Home" })).EnsureSuccessStatusCode();
+        Assert.Equal("Home", await CategoryOf(client, seed.TransactionId));
+
+        (await client.PutAsJsonAsync($"/api/transactions/{seed.TransactionId}/category", new { category = (string?)null })).EnsureSuccessStatusCode();
+        Assert.Equal("Transport", await CategoryOf(client, seed.TransactionId));
+    }
+
+    private static async Task CreateRule(HttpClient client, string merchantName, string category)
+    {
+        var tag = await client.PostAsJsonAsync("/api/tags", new { name = $"{category} tag", color = "#123456" });
+        tag.EnsureSuccessStatusCode();
+        var tagId = (await tag.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        var rule = await client.PostAsJsonAsync("/api/merchant-tags", new { merchantName, tagId, category });
+        Assert.True(rule.IsSuccessStatusCode, await rule.Content.ReadAsStringAsync());
+    }
+
     private static async Task<string> CategoryOf(HttpClient client, Guid transactionId)
     {
         return (await ItemOf(client, transactionId)).GetProperty("category").GetString()!;
@@ -118,7 +170,7 @@ public sealed class TransactionCategoryOverrideTests
         return (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("spent").GetDecimal();
     }
 
-    private static async Task<SeedResult> Seed(FinyteApiFactory factory, HttpClient client)
+    private static async Task<SeedResult> Seed(FinyteApiFactory factory, HttpClient client, bool importedWithoutCategory = false)
     {
         var provision = await client.PostAsJsonAsync("/api/auth/family", new { name = "Category family" });
         provision.EnsureSuccessStatusCode();
@@ -140,7 +192,7 @@ public sealed class TransactionCategoryOverrideTests
         {
             TenantId = tenantId, Account = account, FiskilTransactionId = Guid.NewGuid().ToString("N"),
             Amount = -45m, Currency = "AUD", Description = "Kmart 4821", MerchantName = "KMART",
-            PrimaryCategory = "Department stores", Status = "posted",
+            PrimaryCategory = importedWithoutCategory ? null : "Department stores", Status = "posted",
             PostedAt = new DateTimeOffset(2026, 8, 10, 0, 0, 0, TimeSpan.Zero), CreatedAt = now
         };
         dbContext.Transactions.Add(transaction);

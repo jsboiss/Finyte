@@ -128,7 +128,7 @@ public static partial class TransactionEndpoints
                 GetPostedDate(x.PostedAt ?? x.CreatedAt),
                 x.Description ?? "",
                 x.MerchantName,
-                TransactionCategories.Effective(x.CategoryOverride, x.SecondaryCategory, x.PrimaryCategory),
+                TransactionCategories.Effective(x.CategoryOverride, x.SecondaryCategory, x.PrimaryCategory, x.CategoryFromRule),
                 x.CategoryOverride != null,
                 ToMinorUnits(x.Amount),
                 x.Currency,
@@ -374,7 +374,7 @@ public static partial class TransactionEndpoints
                 x.Id,
                 x.MerchantName,
                 new TransactionTagResponse(x.TagId, x.Tag == null ? "" : x.Tag.Name, x.Tag == null ? "#64748b" : x.Tag.Color),
-                x.MerchantKey, x.MerchantKey != MerchantTagMatcher.Normalize(x.MerchantName)))
+                x.MerchantKey, x.MerchantKey != MerchantTagMatcher.Normalize(x.MerchantName), x.Category))
             .ToListAsync(cancellationToken);
 
         return TypedResults.Ok<IReadOnlyList<MerchantTagRuleResponse>>(rules);
@@ -394,6 +394,12 @@ public static partial class TransactionEndpoints
         if (string.IsNullOrEmpty(merchantKey) || merchantName!.Length > 256)
         {
             return TypedResults.BadRequest("Merchant name must contain letters or numbers and be at most 256 characters.");
+        }
+
+        var category = request.Category?.Trim();
+        if (category is { Length: 0 } || category?.Length > 128)
+        {
+            return TypedResults.BadRequest("A rule category must contain 1 to 128 characters, or be omitted.");
         }
 
         var currentTenant = await tenantResolver.Resolve(httpContext.User, cancellationToken);
@@ -419,6 +425,7 @@ public static partial class TransactionEndpoints
             TenantId = currentTenant.TenantId,
             MerchantName = merchantName,
             MerchantKey = merchantKey,
+            Category = category,
             TagId = tag.Id,
             CreatedAt = DateTimeOffset.UtcNow
         };
@@ -432,7 +439,7 @@ public static partial class TransactionEndpoints
             await databaseTransaction.CommitAsync(cancellationToken);
         }
 
-        var response = new MerchantTagRuleResponse(rule.Id, rule.MerchantName, new TransactionTagResponse(tag.Id, tag.Name, tag.Color));
+        var response = new MerchantTagRuleResponse(rule.Id, rule.MerchantName, new TransactionTagResponse(tag.Id, tag.Name, tag.Color), Category: rule.Category);
         return TypedResults.Created($"/api/merchant-tags/{rule.Id}", response);
     }
 
@@ -483,6 +490,12 @@ public static partial class TransactionEndpoints
         {
             return TypedResults.BadRequest("Merchant name must contain letters or numbers and be at most 256 characters.");
         }
+
+        var category = request.Category?.Trim();
+        if (category is { Length: 0 } || category?.Length > 128)
+        {
+            return TypedResults.BadRequest("A rule category must contain 1 to 128 characters, or be omitted.");
+        }
         var currentTenant = await tenantResolver.Resolve(httpContext.User, cancellationToken);
         await using var databaseTransaction = await tagService.BeginMutation(currentTenant.TenantId, cancellationToken);
         var rules = await tagService.GetRules(currentTenant.TenantId, cancellationToken);
@@ -498,6 +511,7 @@ public static partial class TransactionEndpoints
         }
         rule.MerchantName = merchantName!;
         rule.MerchantKey = merchantKey;
+        rule.Category = category;
         rule.TagId = tag.Id;
         rule.Tag = tag;
         await tagService.ReconcileTenant(currentTenant.TenantId, cancellationToken);
@@ -507,7 +521,7 @@ public static partial class TransactionEndpoints
         {
             await databaseTransaction.CommitAsync(cancellationToken);
         }
-        return TypedResults.Ok(new MerchantTagRuleResponse(rule.Id, rule.MerchantName, new TransactionTagResponse(tag.Id, tag.Name, tag.Color)));
+        return TypedResults.Ok(new MerchantTagRuleResponse(rule.Id, rule.MerchantName, new TransactionTagResponse(tag.Id, tag.Name, tag.Color), Category: rule.Category));
     }
 
     private static string NormalizeColor(string? color)
@@ -566,7 +580,7 @@ public static partial class TransactionEndpoints
     private sealed record SetTransactionTagsRequest(IReadOnlyList<Guid>? TagIds, IReadOnlyList<Guid>? ManualTagIds = null);
 
     private sealed record MerchantTagRuleResponse(Guid Id, string MerchantName, TransactionTagResponse Tag,
-        string? MatchingWords = null, bool UsesLegacyMatchingWords = false);
+        string? MatchingWords = null, bool UsesLegacyMatchingWords = false, string? Category = null);
 
-    private sealed record CreateMerchantTagRuleRequest(string MerchantName, Guid TagId);
+    private sealed record CreateMerchantTagRuleRequest(string MerchantName, Guid TagId, string? Category = null);
 }
