@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Options;
@@ -271,7 +272,8 @@ public sealed class FiskilBankingClient(
 
     private static DateTimeOffset? GetDateTimeOffset(JsonElement x, string propertyName)
     {
-        return DateTimeOffset.TryParse(GetString(x, propertyName), out var y) ? y : null;
+        // Keep the provider's offset so FinancialCalendar can read the bank's own calendar day.
+        return DateTimeOffset.TryParse(GetString(x, propertyName), CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var y) ? y : null;
     }
 
     private sealed record QueryParam(string Name, string Value);

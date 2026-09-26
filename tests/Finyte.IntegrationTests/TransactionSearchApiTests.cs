@@ -219,7 +219,7 @@ public sealed class TransactionSearchApiTests
             var dbContext = scope.ServiceProvider.GetRequiredService<FinyteDbContext>();
             var account = await dbContext.Accounts.FindAsync(seed.AccountId);
             Assert.NotNull(account);
-            var duplicate = CreateTransaction(account, "Morning coffee", -5m, new DateTimeOffset(2026, 6, 1, 0, 0, 0, TimeSpan.Zero));
+            var duplicate = CreateTransaction(account, "Morning coffee", -5m, new DateTimeOffset(2026, 6, 1, 0, 0, 0, TimeSpan.FromHours(10)));
             duplicate.Id = Guid.Parse("ffffffff-ffff-ffff-ffff-ffffffffffff");
             dbContext.Transactions.Add(duplicate);
             await dbContext.SaveChangesAsync();
@@ -295,7 +295,7 @@ public sealed class TransactionSearchApiTests
             MinAmount = -100m, MaxAmount = 100m, Currency = "AUD", Sort = "amount"
         };
 
-        var sql = filters.Order(filters.Apply(dbContext.Transactions, Guid.NewGuid())).Skip(25).Take(25).ToQueryString();
+        var sql = filters.Order(filters.Apply(dbContext.Transactions, Guid.NewGuid(), TestCalendar.Default)).Skip(25).Take(25).ToQueryString();
 
         Assert.Contains("ORDER BY", sql);
         Assert.Contains("LIMIT", sql);
@@ -335,7 +335,7 @@ public sealed class TransactionSearchApiTests
         var secondTag = new TransactionTag { TenantId = user.TenantId, Name = "Shared", Color = "#123456", CreatedAt = now };
         var foreignTag = new TransactionTag { TenantId = foreignAccount.TenantId, Name = "Food", Color = "#123456", CreatedAt = now };
         dbContext.TransactionTags.AddRange(firstTag, secondTag, foreignTag);
-        var firstDate = new DateTimeOffset(2026, 6, 1, 0, 0, 0, TimeSpan.Zero);
+        var firstDate = new DateTimeOffset(2026, 6, 1, 0, 0, 0, TimeSpan.FromHours(10));
         var first = CreateTransaction(account, "Morning coffee", -5m, firstDate);
         first.SecondaryCategory = "Food & drink";
         first.TagAssignments = [Assignment(firstTag), Assignment(secondTag)];

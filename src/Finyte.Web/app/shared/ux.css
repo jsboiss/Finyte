@@ -217,3 +217,4 @@ button, a, input, select, summary { touch-action: manipulation; }
   .imports-page .import-upload-form { grid-template-columns: minmax(0,1fr); }
   .import-upload-form > button[type=submit] { width: 100%; justify-content: center; }
 }
+.family-time-zone { display: grid; gap: 6px; max-width: 360px; }

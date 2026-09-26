@@ -1,11 +1,13 @@
 using System.Text.Json;
 using Finyte.Core.Accounts;
 using Finyte.Core.Analytics;
+using Finyte.Core.Scheduling;
+using Finyte.Data.Tenancy;
 using Microsoft.EntityFrameworkCore;
 
 namespace Finyte.Data.Analytics;
 
-public sealed class ProjectionDispatcher(FinyteDbContext dbContext, IOverviewProjector overviewProjector) : IProjectionDispatcher
+public sealed class ProjectionDispatcher(FinyteDbContext dbContext, IOverviewProjector overviewProjector, TenantCalendars calendars) : IProjectionDispatcher
 {
     private static JsonSerializerOptions JsonOptions { get; } = new(JsonSerializerDefaults.Web);
 
@@ -24,19 +26,20 @@ public sealed class ProjectionDispatcher(FinyteDbContext dbContext, IOverviewPro
                 cancellationToken);
 
         var now = DateTimeOffset.UtcNow;
+        var calendar = await calendars.For(scope.TenantId, cancellationToken);
 
         if (projection is null)
         {
             projection = await CreatePendingProjection(scope, cancellationToken);
         }
-        else if (NeedsRebuild(projection, scope, sourceVersion, now))
+        else if (NeedsRebuild(projection, scope, sourceVersion, now, calendar))
         {
             MarkPending(projection, now);
             await dbContext.SaveChangesAsync(cancellationToken);
         }
 
         var response = Deserialize(projection.PayloadJson);
-        var isStale = projection.SourceVersion < sourceVersion || IsElapsedDaysStale(projection, scope, now);
+        var isStale = projection.SourceVersion < sourceVersion || IsElapsedDaysStale(projection, scope, now, calendar);
         var isRefreshing = projection.Status is ProjectionStatus.Pending or ProjectionStatus.Running || isStale;
         return response with
         {
@@ -50,7 +53,7 @@ public sealed class ProjectionDispatcher(FinyteDbContext dbContext, IOverviewPro
         };
     }
 
-    private static bool NeedsRebuild(OverviewProjection projection, OverviewProjectionScope scope, long sourceVersion, DateTimeOffset now)
+    private static bool NeedsRebuild(OverviewProjection projection, OverviewProjectionScope scope, long sourceVersion, DateTimeOffset now, FinancialCalendar calendar)
     {
         if (projection.Status == ProjectionStatus.Failed)
         {
@@ -62,14 +65,14 @@ public sealed class ProjectionDispatcher(FinyteDbContext dbContext, IOverviewPro
             return false;
         }
 
-        return projection.SourceVersion < sourceVersion || IsElapsedDaysStale(projection, scope, now);
+        return projection.SourceVersion < sourceVersion || IsElapsedDaysStale(projection, scope, now, calendar);
     }
 
-    private static bool IsElapsedDaysStale(OverviewProjection projection, OverviewProjectionScope scope, DateTimeOffset now)
+    private static bool IsElapsedDaysStale(OverviewProjection projection, OverviewProjectionScope scope, DateTimeOffset now, FinancialCalendar calendar)
     {
-        var today = DateOnly.FromDateTime(now.UtcDateTime);
-        return scope.MonthKey == $"{today.Year:D4}-{today.Month:D2}"
-            && DateOnly.FromDateTime(projection.CalculatedAt.UtcDateTime) < today;
+        var today = calendar.ToDate(now);
+        return scope.MonthKey == FinancialCalendar.MonthKey(today)
+            && calendar.ToDate(projection.CalculatedAt) < today;
     }
 
     public async Task<OverviewResponse> RebuildOverview(OverviewProjectionScope scope, CancellationToken cancellationToken)

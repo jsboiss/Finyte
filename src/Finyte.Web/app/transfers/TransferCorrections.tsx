@@ -5,9 +5,10 @@ import { isAxiosError } from 'axios'
 import { ArrowRightLeft } from '../shared/Icons'
 import { useState } from 'react'
 import { httpClient } from '../api/httpClient'
+import { dateLabel, shiftDate, todayDate } from '../shared/calendar'
 import { exactAmount } from '../shared/formatters'
 
-type TransferLeg = { id: string; accountId: string; accountName: string; description: string; amount: number; currency: string; postedAt: string | null }
+type TransferLeg = { id: string; accountId: string; accountName: string; description: string; amount: number; currency: string; postedAt: string | null; postedDate: string | null }
 type TransferReview = {
   debit: TransferLeg
   credit: TransferLeg
@@ -28,8 +29,8 @@ const views = [
 export function TransferCorrections({ initialView = 'confirmed' }: { initialView?: string }) {
   const queryClient = useQueryClient()
   const [status, setStatus] = useState(initialView)
-  const [from, setFrom] = useState(() => new Date(Date.now() - 89 * 86400000).toISOString().slice(0, 10))
-  const [to, setTo] = useState(() => new Date().toISOString().slice(0, 10))
+  const [from, setFrom] = useState(() => shiftDate(todayDate(), -89))
+  const [to, setTo] = useState(todayDate)
   const [page, setPage] = useState(1)
   const [notice, setNotice] = useState('')
   const reviews = useQuery({
@@ -101,7 +102,7 @@ export function TransferCorrections({ initialView = 'confirmed' }: { initialView
 }
 
 function TransferTransaction({ leg, label }: { leg: TransferLeg; label: string }) {
-  return <div className="transfer-leg"><span>{label} · {leg.accountName}</span><strong>{exactAmount(leg.amount, leg.currency)}</strong><p>{leg.description}</p><time dateTime={leg.postedAt ?? undefined}>{leg.postedAt ? leg.postedAt.slice(0, 10) : 'No posting date'}</time></div>
+  return <div className="transfer-leg"><span>{label} · {leg.accountName}</span><strong>{exactAmount(leg.amount, leg.currency)}</strong><p>{leg.description}</p><time dateTime={leg.postedDate ?? undefined}>{leg.postedDate ? dateLabel(leg.postedDate) : 'No posting date'}</time></div>
 }
 
 function readError(error: Error) {

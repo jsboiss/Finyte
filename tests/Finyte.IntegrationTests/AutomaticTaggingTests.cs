@@ -49,7 +49,7 @@ public sealed class AutomaticTaggingTests
 
         Assert.True((await syncService.SyncTransactions(syncRun, CancellationToken.None)).HasChanges);
         Assert.False((await syncService.SyncTransactions(syncRun, CancellationToken.None)).HasChanges);
-        var importService = new TransactionFileImportService(dbContext, new ProjectionInvalidator(dbContext), tagService);
+        var importService = new TransactionFileImportService(dbContext, new ProjectionInvalidator(dbContext, TestCalendar.Tenants(dbContext)), tagService, TestCalendar.Tenants(dbContext));
         const string content = "<OFX><BANKTRANLIST><STMTTRN><DTPOSTED>20260908<TRNAMT>-4.50<FITID>coffee-one<NAME>Coffee Brisbane</STMTTRN></BANKTRANLIST></OFX>";
         using var firstStream = new MemoryStream(Encoding.UTF8.GetBytes(content));
         await importService.Import(tenant.Id, importAccount.Id, "transactions.ofx", firstStream, CancellationToken.None);

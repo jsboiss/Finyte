@@ -1,4 +1,5 @@
 using Finyte.Api.Tenancy;
+using Finyte.Data.Tenancy;
 using Finyte.Data.Billing;
 using Finyte.Data.Transfers;
 using Microsoft.EntityFrameworkCore;
@@ -17,14 +18,15 @@ public static class InternalTransferEndpoints
 
     private static async Task<IResult> GetReview(string? status, DateOnly? from, DateOnly? to, int? page,
         TenantResolver tenantResolver, HttpContext httpContext, IBillingAccess billingAccess,
-        InternalTransferService service, CancellationToken cancellationToken)
+        InternalTransferService service, TenantCalendars calendars, CancellationToken cancellationToken)
     {
         var tenant = await tenantResolver.Resolve(httpContext.User, cancellationToken);
+        var calendar = await calendars.For(tenant.TenantId, cancellationToken);
         if (!await billingAccess.HasAccess(tenant.TenantId, cancellationToken))
         {
             return Results.Problem("An active subscription is required to review transfers.", statusCode: 402);
         }
-        var end = to ?? DateOnly.FromDateTime(DateTime.UtcNow);
+        var end = to ?? calendar.Today;
         if (end < DateOnly.MinValue.AddDays(93) || end > DateOnly.MaxValue.AddDays(-4))
         {
             return Results.BadRequest("Choose a supported date range.");

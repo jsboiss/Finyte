@@ -19,7 +19,7 @@ public sealed class ProjectionDispatcherTests
         dbContext.AddRange(tenant, projection);
         await dbContext.SaveChangesAsync();
         var projector = new RecordingOverviewProjector();
-        var dispatcher = new ProjectionDispatcher(dbContext, projector);
+        var dispatcher = new ProjectionDispatcher(dbContext, projector, TestCalendar.Tenants(dbContext));
 
         var response = await dispatcher.GetOrRebuildOverview(
             new OverviewProjectionScope(tenant.Id, null, projection.MonthKey), CancellationToken.None);
@@ -37,7 +37,7 @@ public sealed class ProjectionDispatcherTests
         dbContext.AddRange(tenant, projection);
         await dbContext.SaveChangesAsync();
         var projector = new RecordingOverviewProjector();
-        var dispatcher = new ProjectionDispatcher(dbContext, projector);
+        var dispatcher = new ProjectionDispatcher(dbContext, projector, TestCalendar.Tenants(dbContext));
 
         var response = await dispatcher.GetOrRebuildOverview(
             new OverviewProjectionScope(tenant.Id, null, projection.MonthKey), CancellationToken.None);
@@ -56,7 +56,7 @@ public sealed class ProjectionDispatcherTests
         dbContext.Add(tenant);
         await dbContext.SaveChangesAsync();
         var projector = new RecordingOverviewProjector();
-        var dispatcher = new ProjectionDispatcher(dbContext, projector);
+        var dispatcher = new ProjectionDispatcher(dbContext, projector, TestCalendar.Tenants(dbContext));
 
         var response = await dispatcher.GetOrRebuildOverview(
             new OverviewProjectionScope(tenant.Id, null, "2026-06"), CancellationToken.None);
@@ -74,7 +74,7 @@ public sealed class ProjectionDispatcherTests
         var projection = CreateProjection(tenant.Id, sourceVersion: 0);
         dbContext.AddRange(tenant, projection);
         await dbContext.SaveChangesAsync();
-        var dispatcher = new ProjectionDispatcher(dbContext, new FailingOverviewProjector());
+        var dispatcher = new ProjectionDispatcher(dbContext, new FailingOverviewProjector(), TestCalendar.Tenants(dbContext));
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => dispatcher.RebuildOverview(
             new OverviewProjectionScope(tenant.Id, null, projection.MonthKey), CancellationToken.None));

@@ -7,6 +7,7 @@ import { getAccounts, type Account as AccountResponse } from '../accounts/accoun
 import { BillingAccessPanel } from '../billing/BillingAccessPanel'
 import { getBillingAccess } from '../billing/billingApi'
 import { AppSelect } from '../shared/AppSelect'
+import { currentMonth } from '../shared/calendar'
 import { compactCurrency, formatMonth } from '../shared/formatters'
 import { DashboardMetricGrid } from './components/DashboardMetricGrid'
 import { DashboardModuleFrame } from './components/DashboardModuleFrame'
@@ -156,7 +157,7 @@ function LockedDashboard() {
 }
 
 function createEmptyOverview(accountId: string | null, selectedAccountId: string, accounts?: AccountResponse[]): OverviewResponse {
-  const monthKey = new Date().toISOString().slice(0, 7)
+  const monthKey = currentMonth()
   const label = accountId
     ? accounts?.find(x => x.id === selectedAccountId)?.name ?? 'Selected account'
     : 'All accounts'

@@ -1,15 +1,20 @@
 using Finyte.Core.Accounts;
+using Finyte.Core.Scheduling;
+using Finyte.Data.Tenancy;
 using Finyte.Data.Analytics;
 using Microsoft.EntityFrameworkCore;
 
 namespace Finyte.Data.Transfers;
 
-public sealed class InternalTransferService(FinyteDbContext dbContext, IProjectionInvalidator projectionInvalidator)
+public sealed class InternalTransferService(FinyteDbContext dbContext, IProjectionInvalidator projectionInvalidator, TenantCalendars calendars)
 {
     public async Task<TransferReviewPage> GetReview(Guid tenantId, string status, DateOnly from, DateOnly to, int page, CancellationToken cancellationToken)
     {
-        var fromTimestamp = new DateTimeOffset(from.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
-        var toTimestamp = new DateTimeOffset(to.AddDays(1).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+        var calendar = await calendars.For(tenantId, cancellationToken);
+        var fromTimestamp = calendar.StartOf(from);
+        var toTimestamp = calendar.EndExclusive(to);
+        var loadFrom = calendar.StartOf(from.AddDays(-3));
+        var loadTo = calendar.EndExclusive(to.AddDays(3));
         var decisions = dbContext.InternalTransfers.AsNoTracking().Where(x => x.TenantId == tenantId);
         List<TransferReview> reviews;
         if (status == "suggested")
@@ -17,12 +22,12 @@ public sealed class InternalTransferService(FinyteDbContext dbContext, IProjecti
             // Keep confirmed legs reserved even when stale, until the user releases or reviews the pair.
             var reserved = decisions.Where(x => x.Status == "confirmed" || x.Status == "needs-review");
             var transactions = await dbContext.Transactions.AsNoTracking().Include(x => x.Account)
-                .Where(x => x.TenantId == tenantId && x.PostedAt >= fromTimestamp.AddDays(-3)
-                    && x.PostedAt < toTimestamp.AddDays(3) && x.Amount != 0
+                .Where(x => x.TenantId == tenantId && x.PostedAt >= loadFrom
+                    && x.PostedAt < loadTo && x.Amount != 0
                     && (x.Status == null || x.Status == "" || x.Status.ToLower() == "posted")
                     && !reserved.Any(y => y.DebitTransactionId == x.Id || y.CreditTransactionId == x.Id))
                 .ToListAsync(cancellationToken);
-            var candidates = FindCandidates(transactions);
+            var candidates = FindCandidates(transactions, calendar);
             var transactionIds = transactions.Select(x => x.Id).ToArray();
             var relevantDecisions = await decisions.Where(x => transactionIds.Contains(x.DebitTransactionId) && transactionIds.Contains(x.CreditTransactionId))
                 .Select(x => new { x.DebitTransactionId, x.CreditTransactionId }).ToListAsync(cancellationToken);
@@ -30,7 +35,7 @@ public sealed class InternalTransferService(FinyteDbContext dbContext, IProjecti
             var counts = candidates.SelectMany(x => new[] { x.Debit.Id, x.Credit.Id }).GroupBy(x => x).ToDictionary(x => x.Key, x => x.Count());
             reviews = candidates.Where(x => !decisionKeys.Contains((x.Debit.Id, x.Credit.Id))
                     && x.Debit.PostedAt >= fromTimestamp && x.Debit.PostedAt < toTimestamp)
-                .Select(x => new TransferReview(ToLeg(x.Debit), ToLeg(x.Credit), "suggested",
+                .Select(x => new TransferReview(ToLeg(x.Debit, calendar), ToLeg(x.Credit, calendar), "suggested",
                     counts[x.Debit.Id] > 1 || counts[x.Credit.Id] > 1,
                     "Equal amounts in the same currency, on different family accounts, posted within three days. This does not prove a transfer.", null, null))
                 .ToList();
@@ -49,7 +54,7 @@ public sealed class InternalTransferService(FinyteDbContext dbContext, IProjecti
                 .Include(x => x.DebitTransaction).ThenInclude(x => x.Account)
                 .Include(x => x.CreditTransaction).ThenInclude(x => x.Account).ToListAsync(cancellationToken);
             reviews = rows
-                .Select(x => new TransferReview(ToLeg(x.DebitTransaction), ToLeg(x.CreditTransaction), status, false,
+                .Select(x => new TransferReview(ToLeg(x.DebitTransaction, calendar), ToLeg(x.CreditTransaction, calendar), status, false,
                     status == "needs-review" ? "Transfer evidence changed or a competing payment appeared. Both transactions count in totals until reviewed."
                     : status == "confirmed" ? x.ReviewedByUserId == AutomaticTransferService.Reviewer ? "Automatically matched: unique equal amounts between your accounts, within three days, with transfer evidence. Excluded from spending and income." : "Confirmed by a family member. Excluded from spending and income."
                     : "Dismissed by a family member. This pair will not be suggested again unless returned to review.",
@@ -101,7 +106,7 @@ public sealed class InternalTransferService(FinyteDbContext dbContext, IProjecti
         }
         else
         {
-            if (!IsCandidate(debit, credit))
+            if (!IsCandidate(debit, credit, await calendars.For(tenantId, cancellationToken)))
             {
                 throw new InvalidOperationException("These transactions no longer match. Refresh the review list.");
             }
@@ -150,18 +155,18 @@ public sealed class InternalTransferService(FinyteDbContext dbContext, IProjecti
         }
     }
 
-    public static IReadOnlyList<TransferCandidate> FindCandidates(IReadOnlyList<Transaction> transactions)
+    public static IReadOnlyList<TransferCandidate> FindCandidates(IReadOnlyList<Transaction> transactions, FinancialCalendar calendar)
     {
-        var credits = transactions.Where(x => x.Amount > 0 && IsPosted(x)).ToLookup(x => (x.TenantId, x.Amount, x.Currency, DateOnly.FromDateTime(x.PostedAt!.Value.UtcDateTime).DayNumber));
+        var credits = transactions.Where(x => x.Amount > 0 && IsPosted(x)).ToLookup(x => (x.TenantId, x.Amount, x.Currency, calendar.ToDate(x.PostedAt!.Value).DayNumber));
         var candidates = new List<TransferCandidate>();
         foreach (var debit in transactions.Where(x => x.Amount < 0 && IsPosted(x)))
         {
-            var dayNumber = DateOnly.FromDateTime(debit.PostedAt!.Value.UtcDateTime).DayNumber;
+            var dayNumber = calendar.ToDate(debit.PostedAt!.Value).DayNumber;
             for (var offset = -3; offset <= 3; offset++)
             {
                 foreach (var credit in credits[(debit.TenantId, -debit.Amount, debit.Currency, dayNumber + offset)])
                 {
-                    if (IsCandidate(debit, credit))
+                    if (IsCandidate(debit, credit, calendar))
                     {
                         candidates.Add(new TransferCandidate(debit, credit));
                     }
@@ -171,12 +176,12 @@ public sealed class InternalTransferService(FinyteDbContext dbContext, IProjecti
         return candidates;
     }
 
-    private static bool IsCandidate(Transaction debit, Transaction credit)
+    private static bool IsCandidate(Transaction debit, Transaction credit, FinancialCalendar calendar)
     {
         return IsPosted(debit) && IsPosted(credit) && debit.TenantId == credit.TenantId
             && debit.AccountId != credit.AccountId && debit.Amount < 0 && credit.Amount == -debit.Amount
             && debit.Currency == credit.Currency
-            && Math.Abs((debit.PostedAt!.Value.UtcDateTime.Date - credit.PostedAt!.Value.UtcDateTime.Date).Days) <= 3;
+            && Math.Abs(calendar.ToDate(debit.PostedAt!.Value).DayNumber - calendar.ToDate(credit.PostedAt!.Value).DayNumber) <= 3;
     }
 
     private static bool IsPosted(Transaction transaction)
@@ -185,12 +190,13 @@ public sealed class InternalTransferService(FinyteDbContext dbContext, IProjecti
             || string.Equals(transaction.Status, "posted", StringComparison.OrdinalIgnoreCase));
     }
 
-    private static TransferLeg ToLeg(Transaction transaction) => new(transaction.Id, transaction.AccountId,
-        transaction.Account is null ? "Account" : AccountPreferences.DisplayName(transaction.Account), transaction.Description ?? "Transaction", transaction.Amount, transaction.Currency, transaction.PostedAt);
+    private static TransferLeg ToLeg(Transaction transaction, FinancialCalendar calendar) => new(transaction.Id, transaction.AccountId,
+        transaction.Account is null ? "Account" : AccountPreferences.DisplayName(transaction.Account), transaction.Description ?? "Transaction", transaction.Amount, transaction.Currency, transaction.PostedAt,
+        transaction.PostedAt is { } postedAt ? calendar.ToDate(postedAt) : null);
 }
 
 public sealed record TransferCandidate(Transaction Debit, Transaction Credit);
-public sealed record TransferLeg(Guid Id, Guid AccountId, string AccountName, string Description, decimal Amount, string Currency, DateTimeOffset? PostedAt);
+public sealed record TransferLeg(Guid Id, Guid AccountId, string AccountName, string Description, decimal Amount, string Currency, DateTimeOffset? PostedAt, DateOnly? PostedDate);
 public sealed record TransferReview(TransferLeg Debit, TransferLeg Credit, string Status, bool IsAmbiguous, string Explanation, DateTimeOffset? ReviewedAt, string? ReviewedByUserId);
 public sealed record TransferReviewPage(IReadOnlyList<TransferReview> Items, int TotalCount, int Page, int PageSize);
 public sealed record TransferDecisionRequest(Guid DebitTransactionId, Guid CreditTransactionId, string Action,
