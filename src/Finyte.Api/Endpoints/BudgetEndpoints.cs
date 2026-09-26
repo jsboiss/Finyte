@@ -40,8 +40,10 @@ public static class BudgetEndpoints
         var categories = await transactions.Select(x => x.PrimaryCategory)
             .Union(transactions.Select(x => x.SecondaryCategory))
             .Where(x => x != null && x != "").ToListAsync(cancellationToken);
-        return categories.Where(x => !string.IsNullOrWhiteSpace(x) && x.Length <= 120 && x == x.Trim())
-            .Select(x => x!).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToArray();
+        return categories.Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x!.Trim())
+            .Where(x => x.Length <= 120)
+            .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
     private static async Task<IResult> GetCategories(TenantResolver tenantResolver, HttpContext httpContext, FinyteDbContext dbContext, CancellationToken cancellationToken)

@@ -56,6 +56,7 @@ public sealed class BudgetApiTests
                 await scope.ServiceProvider.GetRequiredService<FinyteDbContext>().Database.MigrateAsync();
             }
             await VerifyScopeAndPaging(factory);
+            await VerifyPaddedCategories(factory, "org_padded-categories");
             var seed = await Seed(factory, client, "org_budget-cascade");
             var concurrentBudget = await Create(client, Request());
             var concurrentRequest = Request() with { ExpectedVersion = 0, Limit = 75 };
@@ -238,6 +239,13 @@ public sealed class BudgetApiTests
     }
 
     [Fact]
+    public async Task PaddedCategoriesAreSelectableAndCountTowardsSpending()
+    {
+        await using var factory = new FinyteApiFactory();
+        await VerifyPaddedCategories(factory, "org_padded-categories");
+    }
+
+    [Fact]
     public async Task PreviewRejectsMissingCriteriaAndUsesAccountScopeWithoutSaving()
     {
         await using var factory = new FinyteApiFactory();
@@ -300,6 +308,26 @@ public sealed class BudgetApiTests
         await Seed(factory, other, "org_category-isolation");
         Assert.DoesNotContain("Family-only category", (await other.GetFromJsonAsync<string[]>("/api/budgets/categories"))!);
         Assert.Equal(HttpStatusCode.BadRequest, (await other.PostAsJsonAsync("/api/budgets/preview?date=2025-09-09", request with { Categories = ["Family-only category"] })).StatusCode);
+    }
+
+    private static async Task VerifyPaddedCategories(FinyteApiFactory factory, string organization)
+    {
+        using var client = factory.CreateClient();
+        var seed = await Seed(factory, client, organization);
+        using (var scope = factory.Services.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<FinyteDbContext>();
+            var transaction = await dbContext.Transactions.SingleAsync(x => x.TenantId == seed.TenantId && x.Amount == -7);
+            transaction.PrimaryCategory = "  Utilities  ";
+            await dbContext.SaveChangesAsync();
+        }
+        var categories = (await client.GetFromJsonAsync<string[]>("/api/budgets/categories"))!;
+        Assert.Contains("Utilities", categories);
+        Assert.DoesNotContain(categories, x => x != x.Trim());
+        var request = Request() with { MatchMode = "selected", Categories = ["Utilities"] };
+        var response = await client.PostAsJsonAsync("/api/budgets/preview?date=2025-09-09", request);
+        Assert.True(response.IsSuccessStatusCode, await response.Content.ReadAsStringAsync());
+        Assert.Equal(7, (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("spent").GetDecimal());
     }
 
     private static async Task<BudgetResponse> Create(HttpClient client, BudgetInput request)
