@@ -48,16 +48,9 @@ like a bug in the override.
 
 ## Browser checks
 
-None — the app needs a running backend and database. The images are the real `CategoryEditor` through a
-temporary Vite harness with the production stylesheets, captured at 402px, the width jsboiss uses.
-
-Before a correction:
-
-![Category before correction](before.png)
-
-After, showing the edited marker:
-
-![Category after correction](corrected.png)
+None — the app needs a running backend and database. Screenshots are attached to the pull request rather than
+committed here. What was captured: the real `CategoryEditor` through a temporary Vite harness with the
+production stylesheets at 402px, showing a category before a correction and after one, with the edited marker.
 
 The inline edit form, the datalist of existing categories and the "Use imported" reset are not captured.
 
