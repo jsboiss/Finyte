@@ -59,11 +59,10 @@ right word there, and the surface already says the credits it is compared agains
 
 None — the app cannot run here without a backend.
 
-The screenshot is the real `CashFlowChart` in `summary` mode rendered through a temporary Vite harness with the
-production stylesheets and fixture points. Captured at 620px rather than a phone viewport, for the panel
-overflow reason recorded in `docs/issue-63/README.md`.
-
-![Cash flow summary with money in and money out](cash-flow-summary.png)
+Screenshots are attached to the pull request rather than committed here. What was captured: the real
+`CashFlowChart` in `summary` mode through a temporary Vite harness with the production stylesheets and fixture
+points, at 620px rather than a phone viewport, for the panel overflow reason recorded in
+`docs/issue-63/README.md`.
 
 The first capture caught a real miss: `Money in` was still paired with `Expenses`, because the summary tile
 label is separate from the legend. Fixed and recaptured. The remaining help text and the two docs are not
