@@ -1,6 +1,7 @@
 using System.Data;
 using Finyte.Api.Tenancy;
 using Finyte.Core.Budgets;
+using Finyte.Data.Tenancy;
 using Finyte.Data;
 using Finyte.Data.Billing;
 using Finyte.Data.Budgets;
@@ -40,8 +41,10 @@ public static class BudgetEndpoints
         var categories = await transactions.Select(x => x.PrimaryCategory)
             .Union(transactions.Select(x => x.SecondaryCategory))
             .Where(x => x != null && x != "").ToListAsync(cancellationToken);
-        return categories.Where(x => !string.IsNullOrWhiteSpace(x) && x.Length <= 120 && x == x.Trim())
-            .Select(x => x!).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToArray();
+        return categories.Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x!.Trim())
+            .Where(x => x.Length <= 120)
+            .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
     private static async Task<IResult> GetCategories(TenantResolver tenantResolver, HttpContext httpContext, FinyteDbContext dbContext, CancellationToken cancellationToken)
@@ -50,7 +53,7 @@ public static class BudgetEndpoints
         return Results.Ok(await AvailableCategories(dbContext, tenant.TenantId, cancellationToken));
     }
 
-    private static async Task<IResult> Preview(BudgetRequest request, DateOnly date, TenantResolver tenantResolver, HttpContext httpContext, FinyteDbContext dbContext, CancellationToken cancellationToken)
+    private static async Task<IResult> Preview(BudgetRequest request, DateOnly date, TenantResolver tenantResolver, HttpContext httpContext, FinyteDbContext dbContext, TenantCalendars calendars, CancellationToken cancellationToken)
     {
         var error = Validate(request);
         if (error != null || !BudgetPeriods.SupportedDate(date))
@@ -58,6 +61,7 @@ public static class BudgetEndpoints
             return Results.BadRequest(error ?? "Choose a preview date from 1901 through 9990.");
         }
         var tenant = await tenantResolver.Resolve(httpContext.User, cancellationToken);
+        var calendar = await calendars.For(tenant.TenantId, cancellationToken);
         await using var snapshot = dbContext.Database.IsRelational()
             ? await dbContext.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken) : null;
         error = await ValidateReferences(dbContext, tenant.TenantId, request, cancellationToken);
@@ -68,18 +72,19 @@ public static class BudgetEndpoints
         var budget = new Budget { TenantId = tenant.TenantId, Name = request.Name! };
         Apply(budget, request);
         var period = BudgetPeriods.Containing(budget.Frequency, budget.AnchorDate, date);
-        var query = (await BudgetQueries.Transactions(dbContext, budget, cancellationToken, includeOtherCurrencies: true)).InPeriod(period);
+        var query = (await BudgetQueries.Transactions(dbContext, budget, calendar, cancellationToken, includeOtherCurrencies: true)).InPeriod(period, calendar);
         var totals = await query.GroupBy(x => x.Currency)
             .Select(x => new { Currency = x.Key, Spent = x.Sum(y => -y.Amount), Count = x.Count() }).ToListAsync(cancellationToken);
         var included = totals.SingleOrDefault(x => x.Currency == budget.Currency);
         var items = await query.Where(x => x.Currency == budget.Currency).OrderByDescending(x => x.PostedAt).ThenBy(x => x.Id).Take(5)
             .Select(x => new { x.Id, accountName = x.Account == null ? "Account" : x.Account.CustomName ?? x.Account.Name,
                 x.PostedAt, x.Description, x.MerchantName, x.Amount, x.Currency }).ToListAsync(cancellationToken);
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var itemRows = items.Select(x => new { x.Id, x.accountName, x.PostedAt, postedDate = x.PostedAt is { } postedAt ? calendar.ToDate(postedAt) : (DateOnly?)null, x.Description, x.MerchantName, x.Amount, x.Currency }).ToList();
+        var today = calendar.Today;
         return Results.Ok(new { period.From, period.To, budget.Currency, spent = included?.Spent ?? 0,
             transactionCount = included?.Count ?? 0, observedThrough = period.From > today ? (DateOnly?)null : period.To < today ? period.To : today,
             excludedCurrencies = totals.Where(x => x.Currency != budget.Currency).OrderBy(x => x.Currency)
-                .Select(x => new ExcludedCurrencyResponse(x.Currency, x.Count)), items });
+                .Select(x => new ExcludedCurrencyResponse(x.Currency, x.Count)), items = itemRows });
     }
 
     private static async Task<IResult> GetBudgets(TenantResolver tenantResolver, HttpContext httpContext, FinyteDbContext dbContext, CancellationToken cancellationToken)
@@ -178,15 +183,16 @@ public static class BudgetEndpoints
         return Results.NoContent();
     }
 
-    private static async Task<IResult> GetPeriods(Guid budgetId, DateOnly? date, int? count, TenantResolver tenantResolver, HttpContext httpContext, FinyteDbContext dbContext, CancellationToken cancellationToken)
+    private static async Task<IResult> GetPeriods(Guid budgetId, DateOnly? date, int? count, TenantResolver tenantResolver, HttpContext httpContext, FinyteDbContext dbContext, TenantCalendars calendars, CancellationToken cancellationToken)
     {
-        var selectedDate = date ?? DateOnly.FromDateTime(DateTime.UtcNow);
         var periodCount = count ?? 6;
-        if (!BudgetPeriods.SupportedDate(selectedDate) || periodCount is < 1 or > 12)
+        if ((date.HasValue && !BudgetPeriods.SupportedDate(date.Value)) || periodCount is < 1 or > 12)
         {
             return Results.BadRequest("Use a date from 1901 through 9990 and between 1 and 12 periods.");
         }
         var tenant = await tenantResolver.Resolve(httpContext.User, cancellationToken);
+        var calendar = await calendars.For(tenant.TenantId, cancellationToken);
+        var selectedDate = date ?? calendar.Today;
         await using var snapshot = dbContext.Database.IsRelational()
             ? await dbContext.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken) : null;
         var budget = await Definitions(dbContext, tenant.TenantId).AsNoTracking().SingleOrDefaultAsync(x => x.Id == budgetId, cancellationToken);
@@ -194,20 +200,22 @@ public static class BudgetEndpoints
         {
             return Results.NotFound();
         }
-        var query = await BudgetQueries.Transactions(dbContext, budget, cancellationToken, includeOtherCurrencies: true);
+        var query = await BudgetQueries.Transactions(dbContext, budget, calendar, cancellationToken, includeOtherCurrencies: true);
         var history = BudgetPeriods.History(budget.Frequency, budget.AnchorDate, selectedDate, periodCount).ToList();
-        var from = new DateTimeOffset(history.Min(x => x.From).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
-        var to = new DateTimeOffset(history.Max(x => x.EndExclusive).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+        var from = calendar.StartOf(history.Min(x => x.From));
+        var to = calendar.StartOf(history.Max(x => x.EndExclusive));
+        var timeZoneId = calendar.TimeZoneId;
         // One SQL aggregation across the bounded history, never a materialized transaction ledger.
-        var daily = await query.Where(x => x.PostedAt >= from && x.PostedAt < to)
-            .GroupBy(x => new { x.PostedAt!.Value.Year, x.PostedAt.Value.Month, x.PostedAt.Value.Day, x.Currency })
-            .Select(x => new { x.Key.Year, x.Key.Month, x.Key.Day, x.Key.Currency, Spent = x.Sum(y => -y.Amount), Count = x.Count() })
-            .ToListAsync(cancellationToken);
+        var daily = (await query.Where(x => x.PostedAt >= from && x.PostedAt < to)
+            .GroupBy(x => new { Date = TimeZoneInfo.ConvertTimeBySystemTimeZoneId(x.PostedAt!.Value.UtcDateTime, timeZoneId).Date, x.Currency })
+            .Select(x => new { x.Key.Date, x.Key.Currency, Spent = x.Sum(y => -y.Amount), Count = x.Count() })
+            .ToListAsync(cancellationToken))
+            .Select(x => new { Date = DateOnly.FromDateTime(x.Date), x.Currency, x.Spent, x.Count }).ToList();
         var periods = new List<PeriodResponse>();
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var today = calendar.Today;
         foreach (var period in history)
         {
-            var days = daily.Where(x => new DateOnly(x.Year, x.Month, x.Day) >= period.From && new DateOnly(x.Year, x.Month, x.Day) <= period.To).ToList();
+            var days = daily.Where(x => x.Date >= period.From && x.Date <= period.To).ToList();
             var included = days.Where(x => x.Currency == budget.Currency).ToList();
             var spent = included.Sum(x => x.Spent);
             var excluded = days.Where(x => x.Currency != budget.Currency).GroupBy(x => x.Currency)
@@ -219,7 +227,7 @@ public static class BudgetEndpoints
         return Results.Ok(new { budgetId, budget.Version, budget.Currency, date = selectedDate, periods });
     }
 
-    private static async Task<IResult> GetTransactions(Guid budgetId, DateOnly date, int? page, int? pageSize, TenantResolver tenantResolver, HttpContext httpContext, FinyteDbContext dbContext, CancellationToken cancellationToken)
+    private static async Task<IResult> GetTransactions(Guid budgetId, DateOnly date, int? page, int? pageSize, TenantResolver tenantResolver, HttpContext httpContext, FinyteDbContext dbContext, TenantCalendars calendars, CancellationToken cancellationToken)
     {
         var currentPage = page ?? 1;
         var size = pageSize ?? 25;
@@ -228,6 +236,7 @@ public static class BudgetEndpoints
             return Results.BadRequest("Use a date from 1901 through 9990, a positive page and a page size from 1 to 100.");
         }
         var tenant = await tenantResolver.Resolve(httpContext.User, cancellationToken);
+        var calendar = await calendars.For(tenant.TenantId, cancellationToken);
         await using var snapshot = dbContext.Database.IsRelational()
             ? await dbContext.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken) : null;
         var budget = await Definitions(dbContext, tenant.TenantId).AsNoTracking().SingleOrDefaultAsync(x => x.Id == budgetId, cancellationToken);
@@ -236,7 +245,7 @@ public static class BudgetEndpoints
             return Results.NotFound();
         }
         var period = BudgetPeriods.Containing(budget.Frequency, budget.AnchorDate, date);
-        var query = (await BudgetQueries.Transactions(dbContext, budget, cancellationToken)).InPeriod(period);
+        var query = (await BudgetQueries.Transactions(dbContext, budget, calendar, cancellationToken)).InPeriod(period, calendar);
         var totalCount = await query.CountAsync(cancellationToken);
         var items = await query.OrderByDescending(x => x.PostedAt).ThenBy(x => x.Id)
             .Skip((currentPage - 1) * size).Take(size)
@@ -245,7 +254,9 @@ public static class BudgetEndpoints
                 x.Id, x.AccountId, accountName = x.Account == null ? "Account" : x.Account.CustomName ?? x.Account.Name,
                 x.PostedAt, x.Description, x.MerchantName, x.PrimaryCategory, x.SecondaryCategory, x.Amount, x.Currency
             }).ToListAsync(cancellationToken);
-        return Results.Ok(new { budgetId, budget.Version, period.From, period.To, page = currentPage, pageSize = size, totalCount, items });
+        var itemRows = items.Select(x => new { x.Id, x.AccountId, x.accountName, x.PostedAt, postedDate = x.PostedAt is { } postedAt ? calendar.ToDate(postedAt) : (DateOnly?)null,
+            x.Description, x.MerchantName, x.PrimaryCategory, x.SecondaryCategory, x.Amount, x.Currency }).ToList();
+        return Results.Ok(new { budgetId, budget.Version, period.From, period.To, page = currentPage, pageSize = size, totalCount, items = itemRows });
     }
 
     private static IQueryable<Budget> Definitions(FinyteDbContext dbContext, Guid tenantId) =>

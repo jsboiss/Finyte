@@ -2,6 +2,8 @@ using Finyte.Core.Accounts;
 using Finyte.Core.Analytics;
 using Finyte.Core.Billing;
 using Finyte.Core.ProviderSync;
+using Finyte.Core.Scheduling;
+using Finyte.Data.Tenancy;
 using Finyte.Core.Tenancy;
 using Finyte.Data;
 using Finyte.Data.Analytics;
@@ -32,15 +34,16 @@ public static class DevelopmentDataSeeder
     }
 }
 
-public sealed class DevelopmentDataSeedRunner(FinyteDbContext dbContext, IOverviewProjector overviewProjector)
+public sealed class DevelopmentDataSeedRunner(FinyteDbContext dbContext, IOverviewProjector overviewProjector, TenantCalendars calendars)
 {
     public async Task Seed(CancellationToken cancellationToken)
     {
         var now = DateTimeOffset.UtcNow;
         var tenant = await GetOrCreateTenant(now, cancellationToken);
+        var calendar = await calendars.For(tenant.Id, cancellationToken);
         await SeedBilling(tenant.Id, now, cancellationToken);
         var accounts = await SeedAccounts(tenant.Id, now, cancellationToken);
-        await SeedTransactions(tenant.Id, accounts, now, cancellationToken);
+        await SeedTransactions(tenant.Id, accounts, calendar, cancellationToken);
         var tags = await SeedTags(tenant.Id, now, cancellationToken);
         await SeedTransactionTags(tenant.Id, tags, now, cancellationToken);
         await SeedMerchantRules(tenant.Id, tags, now, cancellationToken);
@@ -48,11 +51,11 @@ public sealed class DevelopmentDataSeedRunner(FinyteDbContext dbContext, IOvervi
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        await overviewProjector.Rebuild(new OverviewProjectionScope(tenant.Id, null, GetCurrentMonthKey(now)), cancellationToken);
+        await overviewProjector.Rebuild(new OverviewProjectionScope(tenant.Id, null, calendar.CurrentMonthKey), cancellationToken);
 
         foreach (var account in accounts)
         {
-            await overviewProjector.Rebuild(new OverviewProjectionScope(tenant.Id, account.Id, GetCurrentMonthKey(now)), cancellationToken);
+            await overviewProjector.Rebuild(new OverviewProjectionScope(tenant.Id, account.Id, calendar.CurrentMonthKey), cancellationToken);
         }
     }
 
@@ -222,13 +225,13 @@ public sealed class DevelopmentDataSeedRunner(FinyteDbContext dbContext, IOvervi
         return accounts;
     }
 
-    private async Task SeedTransactions(Guid tenantId, IReadOnlyList<Account> accounts, DateTimeOffset now, CancellationToken cancellationToken)
+    private async Task SeedTransactions(Guid tenantId, IReadOnlyList<Account> accounts, FinancialCalendar calendar, CancellationToken cancellationToken)
     {
         var accountMap = accounts.ToDictionary(x => x.FiskilAccountId!);
         var existingTransactions = await dbContext.Transactions
             .Where(x => x.TenantId == tenantId && x.FiskilTransactionId.StartsWith("dev_"))
             .ToDictionaryAsync(x => x.FiskilTransactionId, cancellationToken);
-        var seeds = CreateTransactionSeeds(now, accountMap);
+        var seeds = CreateTransactionSeeds(calendar.StartOf(new DateOnly(calendar.Today.Year, calendar.Today.Month, 1)), accountMap);
 
         foreach (var seed in seeds)
         {
@@ -453,9 +456,8 @@ public sealed class DevelopmentDataSeedRunner(FinyteDbContext dbContext, IOvervi
         }
     }
 
-    private static IReadOnlyList<TransactionSeed> CreateTransactionSeeds(DateTimeOffset now, IReadOnlyDictionary<string, Account> accounts)
+    private static IReadOnlyList<TransactionSeed> CreateTransactionSeeds(DateTimeOffset monthStart, IReadOnlyDictionary<string, Account> accounts)
     {
-        var monthStart = new DateTimeOffset(now.Year, now.Month, 1, 0, 0, 0, TimeSpan.Zero);
 
         return
         [
@@ -506,11 +508,6 @@ public sealed class DevelopmentDataSeedRunner(FinyteDbContext dbContext, IOvervi
             merchantName,
             reference,
             postedAt);
-    }
-
-    private static string GetCurrentMonthKey(DateTimeOffset now)
-    {
-        return $"{now.Year:D4}-{now.Month:D2}";
     }
 
     private sealed record AccountSeed(

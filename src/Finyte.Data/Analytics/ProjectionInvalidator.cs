@@ -1,19 +1,23 @@
 using Finyte.Core.Analytics;
+using Finyte.Core.Scheduling;
+using Finyte.Data.Tenancy;
 using Microsoft.EntityFrameworkCore;
 
 namespace Finyte.Data.Analytics;
 
-public sealed class ProjectionInvalidator(FinyteDbContext dbContext) : IProjectionInvalidator
+public sealed class ProjectionInvalidator(FinyteDbContext dbContext, TenantCalendars calendars) : IProjectionInvalidator
 {
-    public Task AccountBalanceChanged(Guid tenantId, Guid accountId, CancellationToken cancellationToken)
+    public async Task AccountBalanceChanged(Guid tenantId, Guid accountId, CancellationToken cancellationToken)
     {
-        return MarkChanged(tenantId, accountId, GetCurrentMonthKey(), includeAllAccounts: true, cancellationToken);
+        var calendar = await calendars.For(tenantId, cancellationToken);
+        await MarkChanged(tenantId, accountId, calendar.CurrentMonthKey, includeAllAccounts: true, cancellationToken);
     }
 
-    public Task TransactionChanged(Guid tenantId, Guid accountId, DateTimeOffset? postedAt, CancellationToken cancellationToken)
+    public async Task TransactionChanged(Guid tenantId, Guid accountId, DateTimeOffset? postedAt, CancellationToken cancellationToken)
     {
-        var monthKey = postedAt is null ? GetCurrentMonthKey() : ToMonthKey(postedAt.Value);
-        return MarkChanged(tenantId, accountId, monthKey, includeAllAccounts: true, cancellationToken);
+        var calendar = await calendars.For(tenantId, cancellationToken);
+        var monthKey = postedAt is null ? calendar.CurrentMonthKey : FinancialCalendar.MonthKey(calendar.ToDate(postedAt.Value));
+        await MarkChanged(tenantId, accountId, monthKey, includeAllAccounts: true, cancellationToken);
     }
 
     public async Task OverviewRequested(Guid tenantId, Guid? accountId, string monthKey, CancellationToken cancellationToken)
@@ -71,16 +75,5 @@ public sealed class ProjectionInvalidator(FinyteDbContext dbContext) : IProjecti
             projection.InvalidatedAt = now;
             projection.UpdatedAt = now;
         }
-    }
-
-    private static string GetCurrentMonthKey()
-    {
-        return ToMonthKey(DateTimeOffset.UtcNow);
-    }
-
-    private static string ToMonthKey(DateTimeOffset value)
-    {
-        var utc = value.UtcDateTime;
-        return $"{utc.Year:D4}-{utc.Month:D2}";
     }
 }

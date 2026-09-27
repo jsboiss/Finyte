@@ -10,7 +10,7 @@ public sealed record RecurringDiscoveryDecisionRequest(string CandidateKey, stri
 public sealed record RecurringAliasResponse(Guid Id, string Field, string Value);
 
 public sealed record RecurringTransactionEvidence(Guid Id, Guid AccountId, string AccountName, decimal Amount, string Currency,
-    DateTimeOffset? PostedAt, string? MerchantName, string? Description, string? Reference, string? Status, string Fingerprint);
+    DateTimeOffset? PostedAt, DateOnly? PostedDate, string? MerchantName, string? Description, string? Reference, string? Status, string Fingerprint);
 public sealed record RecurringSeriesResponse(Guid Id, string Name, Guid AccountId, string AccountName, string Currency, string Cadence,
     DateOnly AnchorDate, decimal ExpectedAmount, string AmountMode, string State, int Version, IReadOnlyList<RecurringAliasResponse> Aliases,
     DateOnly? NextDueDate, string NextDueStatus, int NeedsReviewCount);

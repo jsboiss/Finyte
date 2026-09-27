@@ -1,11 +1,12 @@
 using System.Text.RegularExpressions;
 using Finyte.Core.Accounts;
+using Finyte.Data.Tenancy;
 using Finyte.Data.Analytics;
 using Microsoft.EntityFrameworkCore;
 
 namespace Finyte.Data.Transfers;
 
-public sealed partial class AutomaticTransferService(FinyteDbContext dbContext, IProjectionInvalidator projectionInvalidator)
+public sealed partial class AutomaticTransferService(FinyteDbContext dbContext, IProjectionInvalidator projectionInvalidator, TenantCalendars calendars)
 {
     public static string Reviewer => "system:automatic-transfer-v1";
 
@@ -17,10 +18,11 @@ public sealed partial class AutomaticTransferService(FinyteDbContext dbContext, 
         }
         // A changed row can affect a leg three days away, its partner another three
         // days away, and that partner's competitors another three days away.
-        var focusFrom = from.HasValue ? Timestamp(from.Value, -3) : DateTimeOffset.MinValue;
-        var focusTo = to.HasValue ? Timestamp(to.Value, 4) : DateTimeOffset.MaxValue;
-        var loadFrom = from.HasValue ? Timestamp(from.Value, -9) : DateTimeOffset.MinValue;
-        var loadTo = to.HasValue ? Timestamp(to.Value, 10) : DateTimeOffset.MaxValue;
+        var calendar = await calendars.For(tenantId, cancellationToken);
+        var focusFrom = from.HasValue ? calendar.StartOf(Shift(from.Value, -3)) : DateTimeOffset.MinValue;
+        var focusTo = to.HasValue ? calendar.EndExclusive(Shift(to.Value, 3)) : DateTimeOffset.MaxValue;
+        var loadFrom = from.HasValue ? calendar.StartOf(Shift(from.Value, -9)) : DateTimeOffset.MinValue;
+        var loadTo = to.HasValue ? calendar.EndExclusive(Shift(to.Value, 9)) : DateTimeOffset.MaxValue;
         await using var transaction = dbContext.Database.IsRelational() && dbContext.Database.CurrentTransaction is null
             ? await dbContext.Database.BeginTransactionAsync(cancellationToken) : null;
         if (dbContext.Database.IsNpgsql())
@@ -46,7 +48,7 @@ public sealed partial class AutomaticTransferService(FinyteDbContext dbContext, 
             .SelectMany(x => new[] { x.DebitTransactionId, x.CreditTransactionId }).ToHashSet();
         var rows = await rowQuery.AsNoTracking().Where(x => !manualReservations.Contains(x.Id)).ToListAsync(cancellationToken);
         var focusIds = rows.Where(x => x.PostedAt >= focusFrom && x.PostedAt < focusTo).Select(x => x.Id).ToHashSet();
-        var candidates = InternalTransferService.FindCandidates(rows);
+        var candidates = InternalTransferService.FindCandidates(rows, calendar);
         // Count all equal-amount candidates, including those without transfer words. Never choose a winner in a tie.
         var counts = candidates.SelectMany(x => new[] { x.Debit.Id, x.Credit.Id }).GroupBy(x => x).ToDictionary(x => x.Key, x => x.Count());
         var eligible = candidates.Where(x => counts[x.Debit.Id] == 1 && counts[x.Credit.Id] == 1 && HasEvidence(x.Debit, x.Credit))
@@ -104,10 +106,10 @@ public sealed partial class AutomaticTransferService(FinyteDbContext dbContext, 
         return changed;
     }
 
-    private static DateTimeOffset Timestamp(DateOnly date, int offset)
+    private static DateOnly Shift(DateOnly date, int offset)
     {
         var day = Math.Clamp((long)date.DayNumber + offset, DateOnly.MinValue.DayNumber, DateOnly.MaxValue.DayNumber);
-        return new DateTimeOffset(DateOnly.FromDayNumber((int)day).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+        return DateOnly.FromDayNumber((int)day);
     }
 
     public static bool HasEvidence(Transaction debit, Transaction credit)

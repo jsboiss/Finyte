@@ -16,7 +16,7 @@ export type PayCycleBreakdown = {
   undatedTransactionCount: number; unpostedTransactionCount: number; otherCurrencyTransactionCount: number
   transactions: { page: number; pageSize: number; totalCount: number; kind: string | null; items: {
     id: string; accountId: string; accountName: string; description: string | null; merchantName: string | null
-    amount: number; postedAt: string; kind: string; category: string
+    amount: number; postedAt: string; postedDate: string; kind: string; category: string
   }[] }
 }
 export const kinds = [

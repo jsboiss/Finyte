@@ -80,6 +80,7 @@ type Family = {
   id: string
   organizationId: string
   name: string
+  timeZoneId: string
   canManage: boolean
   isDevelopment: boolean
   members: FamilyMember[]
@@ -980,6 +981,13 @@ function SettingsPage() {
     mutationFn: removeFamilyMember,
     onSuccess: (_result, memberId) => queryClient.setQueryData<Family>(['family'], x => x ? { ...x, members: x.members.filter(y => y.id !== memberId) } : x),
   })
+  const timeZoneMutation = useMutation({
+    mutationFn: updateFamilyTimeZone,
+    onSuccess: async settings => {
+      queryClient.setQueryData<Family>(['family'], x => x ? { ...x, timeZoneId: settings.timeZoneId } : x)
+      await queryClient.invalidateQueries()
+    },
+  })
   const family = familyQuery.data
 
   const switchDevelopmentMember = (userId: string) => {
@@ -1038,6 +1046,21 @@ function SettingsPage() {
       {family && (
         <section className="panel family-members-panel">
           <div className="family-section-heading">
+            <div className="family-icon"><CalendarDays aria-hidden="true" /></div>
+            <div><p>Dates</p><h2>Household time zone</h2><span>Every day, month, budget period and pay cycle is measured in this calendar.</span></div>
+          </div>
+          {family.canManage
+            ? <label className="family-time-zone">Time zone<select value={family.timeZoneId} disabled={timeZoneMutation.isPending} onChange={x => timeZoneMutation.mutate(x.target.value)}>
+                {timeZoneOptions(family.timeZoneId).map(x => <option key={x} value={x}>{x.replaceAll('_', ' ')}</option>)}
+              </select></label>
+            : <p>{family.timeZoneId.replaceAll('_', ' ')}. Only the owner can change this.</p>}
+          <Help title="Why a time zone matters"><p>Your bank records the moment a transaction posted. Which day that moment falls on depends on the time zone, so a purchase just after midnight in Sydney would land on the previous day in London. Changing the zone recalculates every report; nothing about your transactions is altered.</p></Help>
+          {timeZoneMutation.isError && <p className="family-error" role="alert">Unable to change the time zone.</p>}
+        </section>
+      )}
+      {family && (
+        <section className="panel family-members-panel">
+          <div className="family-section-heading">
             <div className="family-icon"><Users aria-hidden="true" /></div>
             <div><p>People</p><h2>Family members</h2><span>{family.members.length} active {family.members.length === 1 ? 'member' : 'members'}</span></div>
           </div>
@@ -1076,6 +1099,16 @@ function SettingsPage() {
 
 async function getFamily() {
   return httpClient<Family>({ method: 'GET', url: '/api/family' })
+}
+
+async function updateFamilyTimeZone(timeZoneId: string) {
+  return httpClient<{ timeZoneId: string }>({ data: { timeZoneId }, headers: { 'Content-Type': 'application/json' }, method: 'PUT', url: '/api/family/settings' })
+}
+
+function timeZoneOptions(current: string) {
+  const supported = typeof Intl.supportedValuesOf === 'function' ? Intl.supportedValuesOf('timeZone') : []
+  const fallback = ['Australia/Sydney', 'Australia/Melbourne', 'Australia/Brisbane', 'Australia/Adelaide', 'Australia/Perth', 'Australia/Hobart', 'Australia/Darwin', 'Pacific/Auckland']
+  return [...new Set([current, ...(supported.length > 0 ? supported : fallback)])]
 }
 
 async function inviteFamilyMember(email: string) {
