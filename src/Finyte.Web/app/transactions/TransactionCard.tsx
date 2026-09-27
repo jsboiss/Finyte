@@ -32,7 +32,7 @@ export function TransactionCard({ tags, transaction }: TransactionCardProps) {
         <div className="transaction-card-heading">
           <div className="transaction-card-description">
             <strong>{transaction.description}</strong>
-            {transaction.isInternalTransfer && <Link className="transfer-badge" to="/transactions" search={previous => ({ ...previous, transferView: 'confirmed' })}>Internal transfer · excluded from totals</Link>}
+            {transaction.isInternalTransfer && <Link className="transfer-badge" to="/transactions" search={previous => ({ ...previous, transferView: 'confirmed' })}>Internal transfer</Link>}
             {transaction.merchantName && transaction.merchantName.toLowerCase() !== transaction.description?.toLowerCase() && <span>{transaction.merchantName}</span>}
           </div>
           <TransactionAmount amountMinorUnits={transaction.amountMinorUnits} className="transaction-card-amount" currencyCode={transaction.currency} />

@@ -470,7 +470,7 @@ function TransactionsPage() {
       cell: x => (
         <div className="transaction-description">
           <strong>{x.getValue()}</strong>
-          {x.row.original.isInternalTransfer && <Link className="transfer-badge" to="/transactions" search={previous => ({ ...previous, transferView: 'confirmed' })}>Internal transfer · excluded from totals</Link>}
+          {x.row.original.isInternalTransfer && <Link className="transfer-badge" to="/transactions" search={previous => ({ ...previous, transferView: 'confirmed' })}>Internal transfer</Link>}
           {x.row.original.merchantName && x.row.original.merchantName.toLowerCase() !== x.getValue()?.toLowerCase() && <span>{x.row.original.merchantName}</span>}
         </div>
       ),
