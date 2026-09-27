@@ -61,17 +61,18 @@ public sealed class OverviewProjector(FinyteDbContext dbContext, TenantCalendars
         // Account preferences control all-account income/spending, never balances or direct inspection.
         var accountIds = accountRows.Where(x => scope.AccountId != null || AccountPreferences.IncludeInAnalytics(x)).Select(x => x.Id).ToList();
         var currency = AccountPreferences.AnalyticsCurrency(accountRows, scope.AccountId);
-        var reportedBalances = accountRows.Where(x => AccountPreferences.HasReportedBalance(x)).ToList();
+        var currencyAccounts = accountRows.Where(x => x.Currency == currency).ToList();
+        var reportedBalances = currencyAccounts.Where(x => AccountPreferences.HasReportedBalance(x)).ToList();
         var accountBalanceMinorUnits = reportedBalances.Sum(x => ToMinorUnits(x.CurrentBalance));
         var balanceCoverage = new OverviewBalanceCoverageResponse(
             reportedBalances.Count,
-            accountRows.Count,
-            accountRows.Where(x => !AccountPreferences.HasReportedBalance(x)).Select(AccountPreferences.DisplayName).ToList());
+            currencyAccounts.Count,
+            currencyAccounts.Where(x => !AccountPreferences.HasReportedBalance(x)).Select(AccountPreferences.DisplayName).ToList());
         var accountLabel = scope.AccountId is null
             ? "All accounts"
             : accountRows.FirstOrDefault() is { } account ? AccountPreferences.DisplayName(account) : "Selected account";
 
-        var transactionQuery = dbContext.Transactions
+        var monthQuery = dbContext.Transactions
             .AsNoTracking()
             .Where(x => x.TenantId == scope.TenantId
                 && accountIds.Contains(x.AccountId)
@@ -80,8 +81,19 @@ public sealed class OverviewProjector(FinyteDbContext dbContext, TenantCalendars
                 && (x.Status == null || x.Status == "" || x.Status.ToLower() == "posted"));
         if (!includeInternalTransfers)
         {
-            transactionQuery = transactionQuery.ExcludeInternalTransfers(dbContext, scope.TenantId);
+            monthQuery = monthQuery.ExcludeInternalTransfers(dbContext, scope.TenantId);
         }
+
+        var transactionQuery = monthQuery.Where(x => x.Currency == currency);
+        var excludedCurrencies = await monthQuery
+            .Where(x => x.Currency != currency)
+            .GroupBy(x => x.Currency)
+            .Select(x => new { Currency = x.Key, Count = x.Count() })
+            .ToListAsync(cancellationToken);
+        var currencyScope = new OverviewCurrencyScopeResponse(
+            accountRows.Count - currencyAccounts.Count,
+            excludedCurrencies.Sum(x => x.Count),
+            excludedCurrencies.Select(x => x.Currency).OrderBy(x => x, StringComparer.Ordinal).ToList());
         var totals = await transactionQuery
             .GroupBy(x => 1)
             .Select(x => new TransactionTotals(
@@ -163,7 +175,7 @@ public sealed class OverviewProjector(FinyteDbContext dbContext, TenantCalendars
         var transactionWatermark = await transactionQuery
             .Select(x => (DateTimeOffset?)(x.PostedAt ?? x.CreatedAt))
             .MaxAsync(cancellationToken);
-        var accountWatermark = accountRows
+        var accountWatermark = currencyAccounts
             .Select(x => (DateTimeOffset?)(x.BalanceAsOf ?? x.CreatedAt))
             .Max();
         var sourceWatermark = transactionWatermark is null || accountWatermark > transactionWatermark
@@ -180,7 +192,8 @@ public sealed class OverviewProjector(FinyteDbContext dbContext, TenantCalendars
             dailyCashFlow,
             monthlySpendByTag,
             new OverviewFreshnessResponse(now, sourceWatermark, IsRefreshing: false),
-            balanceCoverage);
+            balanceCoverage,
+            currencyScope);
         if (includeInternalTransfers)
         {
             return response;

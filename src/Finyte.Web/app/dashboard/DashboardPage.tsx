@@ -78,7 +78,9 @@ export function DashboardPage() {
 
   return (
     <section className="page">
-      <div className="overview-controls"><div className="page-title"><h1>Dashboard</h1><Help title="About these totals"><p>Spending and income {includeInternalTransfers ? 'include' : 'exclude'} matched internal transfers. Balances include all account movements.</p>
+      <div className="overview-controls"><div className="page-title"><h1>Dashboard</h1><Help title="About these totals"><p>Every total on this page counts {overview.currency} only. Money in and money out {includeInternalTransfers ? 'include' : 'exclude'} matched internal transfers. Balances include all account movements.</p>
+        <p>Money in is every credit that is not a matched internal transfer. It is not verified salary, and refunds are not deducted from spending.</p>
+        {currencyExclusionNote(overview) && <p>{currencyExclusionNote(overview)}</p>}
         {accountId === null && (accountsQuery.data?.filter(x => !x.includeInAnalytics).length ?? 0) > 0 && <p>{accountsQuery.data?.filter(x => !x.includeInAnalytics).length} accounts excluded from combined spending and income.</p>}
         <label className="transfer-comparison-toggle"><input type="checkbox" checked={includeInternalTransfers} onChange={x => setIncludeInternalTransfers(x.target.checked)} /><span>Include confirmed internal transfers</span></label>
         <p><Link to="/accounts">Account preferences</Link></p>
@@ -119,6 +121,17 @@ export function DashboardPage() {
       </div>
     </section>
   )
+}
+
+function currencyExclusionNote(overview: OverviewResponse) {
+  const scope = overview.currencyScope
+  if (!scope || (scope.excludedAccounts === 0 && scope.excludedTransactions === 0)) {
+    return null
+  }
+
+  const accounts = scope.excludedAccounts === 1 ? '1 account' : `${scope.excludedAccounts} accounts`
+  const transactions = scope.excludedTransactions === 1 ? '1 transaction' : `${scope.excludedTransactions} transactions`
+  return `Not counted here: ${accounts} and ${transactions} held in ${scope.excludedCurrencies.join(', ')}. Amounts in different currencies are never added together or converted.`
 }
 
 function balanceMetric(overview: OverviewResponse, hasBalances: boolean): DashboardMetric {
@@ -177,5 +190,6 @@ function createEmptyOverview(accountId: string | null, selectedAccountId: string
     monthlySpendByTag: [{ tagId: null, name: 'Untagged', color: '#94a3b8', amountMinorUnits: 0, percentage: 0 }],
     freshness: { calculatedAt: new Date().toISOString(), sourceWatermark: null, isRefreshing: false, isStale: false, hasFailed: false, lastError: null },
     balanceCoverage: null,
+    currencyScope: null,
   }
 }

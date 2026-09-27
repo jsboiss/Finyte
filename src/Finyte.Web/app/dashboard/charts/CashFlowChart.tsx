@@ -37,7 +37,7 @@ const CashFlowSummary = memo(function CashFlowSummary({ points, currencyCode, ov
 
   return (
     <div className="cash-flow-summary">
-      <nav className="bucket-links" aria-label="Review cash flow"><a href={transactionLink(overview, 'credit', (points.length ? { from: points[0].from, to: points.at(-1)!.to } : monthRange(overview.monthKey)))}>Income transactions</a><a href={transactionLink(overview, 'debit', (points.length ? { from: points[0].from, to: points.at(-1)!.to } : monthRange(overview.monthKey)))}>Expense transactions</a></nav>
+      <nav className="bucket-links" aria-label="Review cash flow"><a href={transactionLink(overview, 'credit', (points.length ? { from: points[0].from, to: points.at(-1)!.to } : monthRange(overview.monthKey)))}>Money in</a><a href={transactionLink(overview, 'debit', (points.length ? { from: points[0].from, to: points.at(-1)!.to } : monthRange(overview.monthKey)))}>Money out</a></nav>
       <div className="cash-flow-summary-net">
         <span>Net cash flow</span>
         <strong className={net >= 0 ? 'amount-positive' : 'amount-negative'}>{signedCompactCurrency(net, currencyCode)}</strong>

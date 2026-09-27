@@ -11,12 +11,18 @@ public sealed record OverviewResponse(
     IReadOnlyList<OverviewDailyCashFlowResponse> DailyCashFlow,
     IReadOnlyList<OverviewMonthlySpendByTagResponse> MonthlySpendByTag,
     OverviewFreshnessResponse Freshness,
-    OverviewBalanceCoverageResponse? BalanceCoverage = null);
+    OverviewBalanceCoverageResponse? BalanceCoverage = null,
+    OverviewCurrencyScopeResponse? CurrencyScope = null);
 
 public sealed record OverviewBalanceCoverageResponse(
     int CoveredAccounts,
     int TotalAccounts,
     IReadOnlyList<string> MissingAccounts);
+
+public sealed record OverviewCurrencyScopeResponse(
+    int ExcludedAccounts,
+    int ExcludedTransactions,
+    IReadOnlyList<string> ExcludedCurrencies);
 
 public sealed record OverviewScopeResponse(Guid? AccountId, string Label);
 
