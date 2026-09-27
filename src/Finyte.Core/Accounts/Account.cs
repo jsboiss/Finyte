@@ -12,6 +12,7 @@ public sealed class Account
     public string? CustomName { get; set; }
     public string? AccountTypeOverride { get; set; }
     public bool? IncludeInAnalyticsOverride { get; set; }
+    public List<string> TransferNicknames { get; set; } = [];
     public int PreferencesVersion { get; set; }
     public int ManualBalanceVersion { get; set; }
     public string? ProductName { get; set; }

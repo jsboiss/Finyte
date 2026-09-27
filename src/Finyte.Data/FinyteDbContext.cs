@@ -155,6 +155,7 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
 
             x.Property(y => y.CustomName).HasMaxLength(120);
             x.Property(y => y.AccountTypeOverride).HasMaxLength(32);
+            x.Property(y => y.TransferNicknames).HasColumnType("text[]");
             x.Property(y => y.PreferencesVersion).IsConcurrencyToken();
             x.Property(y => y.ManualBalanceVersion).IsConcurrencyToken();
 
@@ -712,6 +713,11 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
 
             x.Property(y => y.FinancialDataVersion)
                 .IsConcurrencyToken();
+
+            x.Property(y => y.TimeZoneId)
+                .HasMaxLength(64)
+                .HasDefaultValue("Australia/Sydney")
+                .IsRequired();
 
             x.Property(y => y.CreatedAt)
                 .IsRequired();

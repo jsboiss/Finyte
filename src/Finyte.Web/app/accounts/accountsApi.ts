@@ -14,6 +14,7 @@ export type Account = {
   accountTypeOverride: string | null
   defaultIncludeInAnalytics: boolean
   includeInAnalyticsOverride: boolean | null
+  transferNicknames: string[]
   includeInAnalytics: boolean
   isProviderManaged: boolean
   productName: string | null

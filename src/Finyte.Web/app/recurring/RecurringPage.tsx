@@ -5,10 +5,23 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { getAccounts, type Account } from '../accounts/accountsApi'
 import { httpClient } from '../api/httpClient'
+import { dateLabel, shiftDate, todayDate } from '../shared/calendar'
 import { cadences, getSeries, label, money, recurringError, recurringUrl, type AliasField, type Candidate, type Discovery, type Occurrence, type Page, type Range, type Review, type Series, type Snapshot } from './recurringApi'
 import './Recurring.css'
 
-const day = (offset = 0) => new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10)
+const day = (offset = 0) => shiftDate(todayDate(), offset)
+
+function nextPaymentSummary(item: Series) {
+  if (!item.nextDueDate) { return label(item.nextDueStatus) }
+  const date = dateLabel(item.nextDueDate)
+  switch (item.nextDueStatus) {
+    case 'upcoming': return `Next expected payment ${date}`
+    case 'due': return `Next expected payment ${date} · payment window open`
+    case 'no-payment-found': return `No payment found for ${date} in imported data`
+    case 'needs-review': return `Payment for ${date} needs review`
+    default: return `${date} · ${label(item.nextDueStatus)}`
+  }
+}
 
 export function RecurringPage() {
   const client = useQueryClient()
@@ -49,7 +62,7 @@ export function RecurringPage() {
         {series.data?.items.length === 0 && !creating && <section className="panel"><h2>Find your regular payments</h2><p className="recurring-muted">1. Find patterns. 2. Review the payments. 3. Track the series.</p><div className="recurring-actions"><button onClick={() => setView('discover')} type="button">Discover patterns</button></div></section>}
         <div className="recurring-list">{series.data?.items.map(item => <article className="panel" key={item.id}>
           <div className="recurring-heading"><div><h2>{item.name}</h2><p className="recurring-muted">{item.accountName} · {label(item.cadence)} · {money(item.expectedAmount, item.currency)} expected {item.amountMode === 'variable' && '· Variable bill'}</p></div><span className="recurring-status">{label(item.state)}</span></div>
-          <p>{item.nextDueDate ? `Scheduled ${item.nextDueDate} · ${label(item.nextDueStatus)}` : label(item.nextDueStatus)}</p>
+          <p>{nextPaymentSummary(item)}</p>
           {item.needsReviewCount > 0 && <p className="recurring-warning">{item.needsReviewCount} previous confirmations changed and need review.</p>}
           <div className="recurring-actions"><button aria-label={`Review ${item.name}`} onClick={() => { setSelectedId(item.id); setSelectedDate(undefined); setCreating(false); setNotice('') }} type="button">Review payments</button></div>
         </article>)}</div>
@@ -93,11 +106,11 @@ function SeriesEditor({ series, discovery, accounts, onCancel, onSaved }: { seri
       <label>Expected amount<input required type="number" min="0.01" max="9999999999999.99" step="0.01" value={amount} onChange={event => setAmount(event.target.value)} /></label>
       <label>Amount pattern<select value={mode} onChange={event => setMode(event.target.value)}><option value="fixed">Usually fixed</option><option value="variable">Variable bill</option></select></label>
       <label>Frequency<select value={cadence} disabled={Boolean(discovery)} onChange={event => setCadence(event.target.value)}>{cadences.map(item => <option key={item} value={item}>{label(item)}</option>)}</select></label>
-      <label>Schedule anchor<input required type="date" min="1900-01-01" max="9998-12-31" disabled={Boolean(discovery)} value={anchorDate} onChange={event => setAnchorDate(event.target.value)} /></label>
+      <label>First scheduled payment<input required type="date" min="1900-01-01" max="9998-12-31" disabled={Boolean(discovery)} value={anchorDate} onChange={event => setAnchorDate(event.target.value)} /></label>
       {series && <label>State<select value={state} onChange={event => setState(event.target.value)}>{['active', 'paused', 'cancelled'].map(item => <option key={item} value={item}>{item}</option>)}</select></label>}
-      {!series && <><label>Recognise this field<select value={aliasField} onChange={event => setAliasField(event.target.value as AliasField)}><option value="merchant">Merchant name</option><option value="description">Full description</option></select></label><label>Approved billing name (optional)<input maxLength={512} value={alias} onChange={event => setAlias(event.target.value)} /></label></>}
+      {!series && <><label>Match future payments by<select value={aliasField} onChange={event => setAliasField(event.target.value as AliasField)}><option value="merchant">Merchant name</option><option value="description">Full description</option></select></label><label>Approved billing name (optional)<input maxLength={512} value={alias} onChange={event => setAlias(event.target.value)} /></label></>}
     </fieldset>
-    <Help><p className="recurring-muted">The anchor is the first scheduled date to track. An anchor on the last day of a month repeats at month end; other days return to their original day after a short month. Late postings do not move the schedule. Expected amounts remain under your control when prices change.</p></Help>
+    <Help><p className="recurring-muted">Tracking starts from the first scheduled payment date. A date on the last day of a month repeats at month end; other days return to their original day after a short month. Late postings do not move the schedule. Dates are the calendar days your bank reports. Expected amounts remain under your control when prices change.</p></Help>
     {series && <Help><p className="recurring-muted">Changing the schedule can make previous confirmations need review. Pausing or cancelling preserves payment history. To move accounts, create a separate series for the new account.</p></Help>}
     {discovery && <div className="recurring-ledger"><h3>Confirm the payments that belong together</h3>{discovery.transactions.map(item => <label className="recurring-payment" key={item.snapshot.id}><span className="recurring-check"><input type="checkbox" checked={historyIds.has(item.snapshot.id)} onChange={event => setHistoryIds(previous => { const next = new Set(previous); if (event.target.checked) { next.add(item.snapshot.id) } else { next.delete(item.snapshot.id) } return next })} />Include payment for {item.occurrenceDate}</span><SnapshotView snapshot={item.snapshot} /></label>)}</div>}
     {mutation.error && <p role="alert">{recurringError(mutation.error)}</p>}
@@ -128,7 +141,7 @@ function DiscoveryList({ range, dismissed, accounts, onTracked, onChanged, accou
 function SeriesDetail({ series, accounts, onBack, onChanged, initialDate }: { initialDate?: string; series: Series; accounts: Account[]; onBack: () => void; onChanged: (message?: string) => Promise<void> }) {
   const [editing, setEditing] = useState(false)
   const [view, setView] = useState('candidates')
-  const [range, setRange] = useState<Range>(() => initialDate ? { from: new Date(Date.parse(initialDate) - 3 * 86400000).toISOString().slice(0, 10), to: new Date(Date.parse(initialDate) + 3 * 86400000).toISOString().slice(0, 10) } : { from: day(-100), to: day(35) })
+  const [range, setRange] = useState<Range>(() => initialDate ? { from: shiftDate(initialDate, -3), to: shiftDate(initialDate, 3) } : { from: day(-100), to: day(35) })
   const [page, setPage] = useState(1)
   const [occurrenceDate, setOccurrenceDate] = useState(initialDate ?? '')
   const occurrences = useQuery({ queryKey: ['recurring', series.id, 'occurrences', range], queryFn: () => httpClient<{ items: Occurrence[] }>({ url: `${recurringUrl}/${series.id}/occurrences`, params: range }), enabled: Boolean(range.from && range.to) })
@@ -199,7 +212,7 @@ function CandidateCard({ candidate, occurrences, busy, seriesId, onReview }: { c
 }
 
 function SnapshotView({ snapshot }: { snapshot: Snapshot }) {
-  return <div><div className="recurring-heading"><strong>{money(Math.abs(snapshot.amount), snapshot.currency)}</strong><time dateTime={snapshot.postedAt ?? undefined}>{snapshot.postedAt ? new Date(snapshot.postedAt).toISOString().slice(0, 10) : 'No posting date'}</time></div><p>{snapshot.merchantName ?? snapshot.description ?? 'Unnamed payment'}</p>{snapshot.description && snapshot.description !== snapshot.merchantName && <p className="recurring-muted">{snapshot.description}</p>}<p className="recurring-muted">{snapshot.accountName}{snapshot.reference && ` · Reference: ${snapshot.reference}`}</p></div>
+  return <div><div className="recurring-heading"><strong>{money(Math.abs(snapshot.amount), snapshot.currency)}</strong><time dateTime={snapshot.postedDate ?? undefined}>{snapshot.postedDate ? dateLabel(snapshot.postedDate) : 'No posting date'}</time></div><p>{snapshot.merchantName ?? snapshot.description ?? 'Unnamed payment'}</p>{snapshot.description && snapshot.description !== snapshot.merchantName && <p className="recurring-muted">{snapshot.description}</p>}<p className="recurring-muted">{snapshot.accountName}{snapshot.reference && ` · Reference: ${snapshot.reference}`}</p></div>
 }
 
 function Evidence({ items }: { items: string[] }) {

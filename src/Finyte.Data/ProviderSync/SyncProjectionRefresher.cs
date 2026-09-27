@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Finyte.Core.ProviderSync;
+using Finyte.Data.Tenancy;
 using Finyte.Data.Analytics;
 using Microsoft.EntityFrameworkCore;
 
@@ -21,7 +22,8 @@ public interface ISyncProjectionRefresher
 
 public sealed class SyncProjectionRefresher(
     FinyteDbContext dbContext,
-    IProjectionInvalidator projectionInvalidator) : ISyncProjectionRefresher
+    IProjectionInvalidator projectionInvalidator,
+    TenantCalendars calendars) : ISyncProjectionRefresher
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 

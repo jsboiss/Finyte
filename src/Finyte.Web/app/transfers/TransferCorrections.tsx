@@ -5,6 +5,7 @@ import { isAxiosError } from 'axios'
 import { ArrowRightLeft } from '../shared/Icons'
 import { useState } from 'react'
 import { httpClient } from '../api/httpClient'
+import { dateLabel, shiftDate, todayDate } from '../shared/calendar'
 import { exactAmount } from '../shared/formatters'
 import { reclassifyTransfers, reviewTransfer, transferQueryKeys, transferSourceLabel, type TransferAction, type TransferPage, type TransferRow } from './transfersApi'
 
@@ -16,8 +17,8 @@ const views = [
 export function TransferCorrections({ initialView = 'transfers' }: { initialView?: string }) {
   const queryClient = useQueryClient()
   const [view, setView] = useState(views.some(x => x.id === initialView) ? initialView : 'transfers')
-  const [from, setFrom] = useState(() => new Date(Date.now() - 89 * 86400000).toISOString().slice(0, 10))
-  const [to, setTo] = useState(() => new Date().toISOString().slice(0, 10))
+  const [from, setFrom] = useState(() => shiftDate(todayDate(), -89))
+  const [to, setTo] = useState(todayDate)
   const [page, setPage] = useState(1)
   const [notice, setNotice] = useState('')
   const rows = useQuery({
@@ -79,7 +80,7 @@ export function TransferCorrections({ initialView = 'transfers' }: { initialView
 }
 
 function TransferTransaction({ row }: { row: TransferRow }) {
-  return <div className="transfer-leg"><span>{row.amount < 0 ? 'Money out' : 'Money in'} · {row.accountName}</span><strong>{exactAmount(row.amount, row.currency)}</strong><p>{row.description}</p><time dateTime={row.postedAt ?? undefined}>{row.postedAt ? row.postedAt.slice(0, 10) : 'No posting date'}</time></div>
+  return <div className="transfer-leg"><span>{row.amount < 0 ? 'Money out' : 'Money in'} · {row.accountName}</span><strong>{exactAmount(row.amount, row.currency)}</strong><p>{row.description}</p><time dateTime={row.postedDate ?? undefined}>{row.postedDate ? dateLabel(row.postedDate) : 'No posting date'}</time></div>
 }
 
 function readError(error: Error) {

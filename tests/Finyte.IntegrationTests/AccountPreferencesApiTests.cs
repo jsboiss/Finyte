@@ -29,8 +29,8 @@ public sealed class AccountPreferencesApiTests
         account.Currency = "USD";
         account.IncludeInAnalyticsOverride = false;
         await dbContext.SaveChangesAsync();
-        var projector = new OverviewProjector(dbContext);
-        var pending = await new ProjectionDispatcher(dbContext, projector).GetOrRebuildOverview(
+        var projector = new OverviewProjector(dbContext, TestCalendar.Tenants(dbContext));
+        var pending = await new ProjectionDispatcher(dbContext, projector, TestCalendar.Tenants(dbContext)).GetOrRebuildOverview(
             new OverviewProjectionScope(seed.TenantId, null, "2026-09"), CancellationToken.None);
         Assert.Equal("AUD", pending.Currency);
         var combined = await projector.Rebuild(new OverviewProjectionScope(seed.TenantId, null, "2026-09"), CancellationToken.None);
@@ -76,7 +76,7 @@ public sealed class AccountPreferencesApiTests
             });
             await dbContext.SaveChangesAsync();
             var bankingClient = new AccountBankingClient();
-            await new FiskilBankingSyncService(dbContext, bankingClient, new Finyte.Data.Tagging.TransactionTagService(dbContext), new Finyte.Data.Transfers.InternalTransferService(dbContext, new Finyte.Data.Analytics.ProjectionInvalidator(dbContext))).SyncAccounts(new ProviderSyncRun
+            await new FiskilBankingSyncService(dbContext, bankingClient, new Finyte.Data.Tagging.TransactionTagService(dbContext), new Finyte.Data.Transfers.InternalTransferService(dbContext, new Finyte.Data.Analytics.ProjectionInvalidator(dbContext, TestCalendar.Tenants(dbContext)), TestCalendar.Tenants(dbContext))).SyncAccounts(new ProviderSyncRun
             {
                 TenantId = seed.TenantId, Provider = "fiskil", Dataset = "accounts", Status = "running", EndUserId = "end-user", CreatedAt = DateTimeOffset.UtcNow
             }, CancellationToken.None);
@@ -132,7 +132,7 @@ public sealed class AccountPreferencesApiTests
         using (var scope = factory.Services.CreateScope())
         {
             var dbContext = scope.ServiceProvider.GetRequiredService<FinyteDbContext>();
-            var before = await new OverviewProjector(dbContext).Rebuild(new OverviewProjectionScope(seed.TenantId, null, "2026-09"), CancellationToken.None);
+            var before = await new OverviewProjector(dbContext, TestCalendar.Tenants(dbContext)).Rebuild(new OverviewProjectionScope(seed.TenantId, null, "2026-09"), CancellationToken.None);
             Assert.Equal(35000, before.CurrentMonthSpendMinorUnits);
             Assert.Equal(-1900000, before.AccountBalanceMinorUnits);
         }
@@ -145,7 +145,7 @@ public sealed class AccountPreferencesApiTests
             var dbContext = scope.ServiceProvider.GetRequiredService<FinyteDbContext>();
             Assert.Equal(ProjectionStatus.Pending, (await dbContext.OverviewProjections.SingleAsync()).Status);
             Assert.True((await dbContext.Tenants.SingleAsync()).FinancialDataVersion > 0);
-            var projector = new OverviewProjector(dbContext);
+            var projector = new OverviewProjector(dbContext, TestCalendar.Tenants(dbContext));
             var combined = await projector.Rebuild(new OverviewProjectionScope(seed.TenantId, null, "2026-09"), CancellationToken.None);
             var direct = await projector.Rebuild(new OverviewProjectionScope(seed.TenantId, seed.AccountId, "2026-09"), CancellationToken.None);
             Assert.Equal(5000, combined.CurrentMonthSpendMinorUnits);

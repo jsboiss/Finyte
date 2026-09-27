@@ -1,11 +1,12 @@
 using System.Data;
 using Finyte.Core.Accounts;
 using Finyte.Core.PayCycles;
+using Finyte.Data.Tenancy;
 using Microsoft.EntityFrameworkCore;
 
 namespace Finyte.Data.PayCycles;
 
-public sealed class PayCycleQueries(FinyteDbContext dbContext, TimeProvider timeProvider)
+public sealed class PayCycleQueries(FinyteDbContext dbContext, TenantCalendars calendars)
 {
     public static IReadOnlyList<string> Kinds { get; } = ["external-credit", "spending", "savings-out", "savings-in", "transfer-out", "transfer-in", "within-scope", "zero"];
 
@@ -26,7 +27,8 @@ public sealed class PayCycleQueries(FinyteDbContext dbContext, TimeProvider time
         {
             return null;
         }
-        var today = DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime);
+        var calendar = await calendars.For(tenantId, cancellationToken);
+        var today = calendar.Today;
         var period = PayCycleCalendar.Resolve(profile.Frequency, profile.AnchorDate, date ?? today);
         var observedThrough = period.From > today ? (DateOnly?)null : period.ToExclusive.AddDays(-1) < today ? period.ToExclusive.AddDays(-1) : today;
         var scopeIds = profile.AccountIds.Concat(profile.SavingsAccountIds).Distinct().ToArray();
@@ -34,8 +36,8 @@ public sealed class PayCycleQueries(FinyteDbContext dbContext, TimeProvider time
             .OrderBy(x => x.CustomName ?? x.Name).ThenBy(x => x.Id).ToListAsync(cancellationToken);
         var accountIds = accounts.Where(x => profile.AccountIds.Contains(x.Id)).Select(x => x.Id).ToArray();
         var savingsIds = accounts.Where(x => profile.SavingsAccountIds.Contains(x.Id)).Select(x => x.Id).ToArray();
-        var from = new DateTimeOffset(period.From.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
-        var to = new DateTimeOffset((observedThrough?.AddDays(1) ?? period.From).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
+        var from = calendar.StartOf(period.From);
+        var to = calendar.StartOf(observedThrough?.AddDays(1) ?? period.From);
         var scoped = dbContext.Transactions.AsNoTracking().Where(x => x.TenantId == tenantId && accountIds.Contains(x.AccountId));
         var dated = scoped.Where(x => x.PostedAt >= from && x.PostedAt < to);
         var posted = dated.Where(x => x.Status == null || x.Status == "" || x.Status.ToLower() == "posted");
@@ -68,7 +70,7 @@ public sealed class PayCycleQueries(FinyteDbContext dbContext, TimeProvider time
         var credits = totals.GetValueOrDefault("external-credit");
         var result = new PayCycleBreakdownResponse(ToResponse(profile), period.From, period.ToExclusive.AddDays(-1),
             observedThrough, NavigationDate(period.From.AddDays(-1)), NavigationDate(period.ToExclusive),
-            period.From > today ? "future" : period.ToExclusive <= today ? "completed" : "current", "UTC",
+            period.From > today ? "future" : period.ToExclusive <= today ? "completed" : "current", calendar.TimeZoneId,
             accounts.Where(x => accountIds.Contains(x.Id)).Select(x => AccountResponse(x)).ToList(),
             accounts.Where(x => savingsIds.Contains(x.Id)).Select(x => AccountResponse(x)).ToList(),
             scopeIds.Except(accounts.Select(x => x.Id)).ToList(),
@@ -78,7 +80,7 @@ public sealed class PayCycleQueries(FinyteDbContext dbContext, TimeProvider time
                 groups.Sum(x => x.Amount), profile.ExpectedIncome is { } expected ? credits - expected : null, groups.Sum(x => x.Count)),
             categories.OrderByDescending(x => x.Amount).ThenBy(x => x.Name).ToList(), undatedCount, unpostedCount, currencyCount,
             new PayCycleTransactionPage(page, pageSize, count, kind, rows.Select(x => new PayCycleTransactionResponse(
-                x.Id, x.AccountId, x.AccountName, x.Description, x.MerchantName, x.Amount, x.PostedAt, x.Kind, x.Category)).ToList()));
+                x.Id, x.AccountId, x.AccountName, x.Description, x.MerchantName, x.Amount, x.PostedAt, calendar.ToDate(x.PostedAt), x.Kind, x.Category)).ToList()));
         if (snapshot is not null)
         {
             await snapshot.CommitAsync(cancellationToken);

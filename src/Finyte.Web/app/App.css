@@ -2398,14 +2398,21 @@ td {
 .app-drawer:has(.transaction-filters-panel) > .drawer-content { overflow-y: auto; min-height: 0; }
 .transaction-date-cell { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .options-menu { position: relative; display: inline-flex; }
-.options-menu-button { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: #a7aaa8; }
+.options-menu-button { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; min-height: 0; padding: 0; border: 0; border-radius: 6px; background: transparent; color: #a7aaa8; }
 .options-menu-button:hover, .options-menu-button[aria-expanded="true"] { background: #2f3336; color: #e6e9e7; }
-.options-menu-popover { position: absolute; top: 28px; z-index: 20; display: grid; gap: 2px; min-width: 200px; padding: 6px; border: 1px solid #44494b; border-radius: 8px; background: #1f2224; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4); }
-.options-menu-popover.is-left { left: 0; }
-.options-menu-popover.is-right { right: 0; }
+.options-menu-popover { position: fixed; z-index: 60; display: grid; gap: 2px; min-width: 200px; max-width: min(320px, calc(100vw - 16px)); padding: 6px; border: 1px solid #44494b; border-radius: 8px; background: #1f2224; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4); }
 .options-menu-heading, .options-menu-note { margin: 0; padding: 4px 8px; font-size: 12px; color: #a7aaa8; }
-.options-menu-item { text-align: left; padding: 6px 8px; border: 0; border-radius: 6px; background: transparent; color: #e6e9e7; font-size: 13px; }
+.options-menu-item { min-height: 36px; text-align: left; padding: 6px 8px; border: 0; border-radius: 6px; background: transparent; color: #e6e9e7; font-size: 13px; }
 .options-menu-item:hover { background: #2f3336; }
+.mark-transfer-form { display: grid; gap: 14px; }
+.mark-transfer-form > label { display: grid; gap: 6px; font-size: 13px; color: #a7aaa8; }
+.mark-transfer-form select { width: 100%; }
+.mark-transfer-description { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+.mark-transfer-form .mark-transfer-rule { display: flex; align-items: center; gap: 10px; color: #e6e9e7; }
+.mark-transfer-rule input { width: 18px; height: 18px; min-height: 0; margin: 0; }
+.mark-transfer-note { margin: 0; font-size: 12px; color: #a7aaa8; }
+.mark-transfer-actions { display: flex; gap: 8px; }
+.mark-transfer-actions button { flex: 1; }
 .transaction-card-account-header .options-menu { flex: 0 0 auto; }
 .transaction-title { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; min-width: 0; }
 .transaction-title strong { min-width: 0; }

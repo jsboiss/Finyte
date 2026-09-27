@@ -39,6 +39,14 @@ namespace Finyte.Data.Migrations
                 """);
 
             migrationBuilder.Sql("""
+                UPDATE transactions t
+                SET "InternalTransferSource" = 'excluded'
+                FROM internal_transfers it
+                WHERE it."Status" = 'dismissed' AND t."InternalTransferSource" IS NULL
+                    AND (it."DebitTransactionId" = t."Id" OR it."CreditTransactionId" = t."Id")
+                """);
+
+            migrationBuilder.Sql("""
                 UPDATE tenants SET "FinancialDataVersion" = "FinancialDataVersion" + 1
                 """);
 

@@ -56,12 +56,13 @@ function AccountEditor({ editor, onCancel, onSaved, onReload }: {
   const [name, setName] = useState(account.customName ?? '')
   const [type, setType] = useState(account.accountTypeOverride ?? '')
   const [analytics, setAnalytics] = useState(account.includeInAnalyticsOverride === null ? 'default' : account.includeInAnalyticsOverride ? 'include' : 'exclude')
+  const [nicknames, setNicknames] = useState(account.transferNicknames.join(', '))
   const effectiveType = type || account.inferredAccountType
   const included = analytics === 'default' ? defaultAnalytics(effectiveType) : analytics === 'include'
   const mutation = useMutation({
     mutationFn: () => httpClient<Account>({
       method: 'PUT', url: `/api/accounts/${account.id}/preferences`,
-      data: { customName: name.trim() || null, accountTypeOverride: type || null, includeInAnalyticsOverride: analytics === 'default' ? null : analytics === 'include', expectedVersion: account.preferencesVersion },
+      data: { customName: name.trim() || null, accountTypeOverride: type || null, includeInAnalyticsOverride: analytics === 'default' ? null : analytics === 'include', transferNicknames: nicknames.split(',').map(x => x.trim()).filter(Boolean), expectedVersion: account.preferencesVersion },
     }),
     onSuccess: onSaved,
   })
@@ -83,6 +84,9 @@ function AccountEditor({ editor, onCancel, onSaved, onReload }: {
           <option value="include">Always include</option><option value="exclude">Always exclude</option>
         </select></label>
         <p role="status"><strong>{included ? 'Included' : 'Excluded'}</strong> in combined spending and income.</p>
+
+        <label>Transfer nicknames<input value={nicknames} placeholder="mortgage, home loan" onChange={event => setNicknames(event.target.value)} disabled={mutation.isPending} /></label>
+        <small>How other banks describe transfers to this account, separated by commas. A transaction on another account whose description names one of these is treated as an internal transfer to this account.</small>
 
       <div className="account-actions"><button type="submit" disabled={mutation.isPending}>{mutation.isPending ? 'Saving…' : 'Save changes'}</button><button type="button" disabled={mutation.isPending} onClick={onCancel}>Cancel</button></div>
       {mutation.error && <p role="alert">{errorMessage(mutation.error)} {isAxiosError(mutation.error) && mutation.error.response?.status === 409 && <button type="button" onClick={() => void onReload()}>Discard edits and reload</button>}</p>}

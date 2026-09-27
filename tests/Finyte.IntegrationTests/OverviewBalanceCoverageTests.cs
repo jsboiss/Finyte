@@ -26,7 +26,7 @@ public sealed class OverviewBalanceCoverageTests
         var missing = new Account { TenantId = tenant.Id, Name = "Missing", CurrentBalance = 200m, CreatedAt = now };
         dbContext.AddRange(tenant, reported, providerZero, importedZero, legacy, missing);
         await dbContext.SaveChangesAsync();
-        var projector = new OverviewProjector(dbContext);
+        var projector = new OverviewProjector(dbContext, TestCalendar.Tenants(dbContext));
 
         var result = await projector.Rebuild(new OverviewProjectionScope(tenant.Id, null, now.ToString("yyyy-MM")), CancellationToken.None);
 

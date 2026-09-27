@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using Finyte.Api.Tenancy;
 using Finyte.Core.Accounts;
+using Finyte.Data.Tenancy;
 using Finyte.Data;
 using Finyte.Data.Analytics;
 using Finyte.Data.Billing;
@@ -60,6 +61,7 @@ public static partial class TransactionEndpoints
         HttpContext httpContext,
         IBillingAccess billingAccess,
         FinyteDbContext dbContext,
+        TenantCalendars calendars,
         CancellationToken cancellationToken)
     {
         var currentTenant = await tenantResolver.Resolve(httpContext.User, cancellationToken);
@@ -68,6 +70,7 @@ public static partial class TransactionEndpoints
         {
             return TypedResults.Problem("An active subscription is required to view transactions.", statusCode: StatusCodes.Status402PaymentRequired);
         }
+        var calendar = await calendars.For(currentTenant.TenantId, cancellationToken);
 
         var filters = new TransactionSearch
         {
@@ -100,7 +103,7 @@ public static partial class TransactionEndpoints
 
         var currentPage = filters.Page;
         var take = filters.PageSize;
-        var query = filters.Apply(dbContext.Transactions.AsNoTracking(), currentTenant.TenantId);
+        var query = filters.Apply(dbContext.Transactions.AsNoTracking(), currentTenant.TenantId, calendar);
         if (filters.AnalyticsOnly && filters.AccountId == null)
         {
             var accounts = await dbContext.Accounts.AsNoTracking().Where(x => x.TenantId == currentTenant.TenantId).ToListAsync(cancellationToken);
@@ -123,7 +126,7 @@ public static partial class TransactionEndpoints
                 x.Id,
                 x.AccountId,
                 x.Account == null ? "Account" : x.Account.CustomName ?? x.Account.Name,
-                GetPostedDate(x.PostedAt ?? x.CreatedAt),
+                calendar.ToDate(x.PostedAt ?? x.CreatedAt).ToString("yyyy-MM-dd"),
                 x.Description ?? "",
                 x.MerchantName,
                 GetCategory(x.PrimaryCategory, x.SecondaryCategory),
@@ -504,11 +507,6 @@ public static partial class TransactionEndpoints
     private static long ToMinorUnits(decimal amount)
     {
         return (long)Math.Round(amount * 100, MidpointRounding.AwayFromZero);
-    }
-
-    private static string GetPostedDate(DateTimeOffset postedAt)
-    {
-        return postedAt.UtcDateTime.ToString("yyyy-MM-dd");
     }
 
     [GeneratedRegex("^#[0-9a-fA-F]{6}$")]

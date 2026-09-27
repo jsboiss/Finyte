@@ -21,7 +21,11 @@ public sealed class InternalTransferTests
     [InlineData("Transfer to xx6486 CommBank app", true)]
     [InlineData("Transfer to 12346486", true)]
     [InlineData("NetBank transfer 062-000 12346486 rent", true)]
+    [InlineData("Transfer to ****6486", true)]
+    [InlineData("Transfer to 12346486 6486", true)]
     [InlineData("Woolworths Card xx6486 Value Date: 01/09/2026", false)]
+    [InlineData("WOOLWORTHS METRO 6486", false)]
+    [InlineData("BPAY 6486 invoice", false)]
     [InlineData("Transfer to xx9999", false)]
     [InlineData("Transfer to savings", false)]
     [InlineData("Transfer to xx0449", false)]
@@ -35,6 +39,45 @@ public sealed class InternalTransferTests
         var counterparty = InternalTransferDetector.Detect(transaction, [everyday, savings]);
 
         Assert.Equal(expected ? savings.Id : null, counterparty);
+    }
+
+    [Theory]
+    [InlineData("Transfer To J Citizen CommBank App mortgage", true)]
+    [InlineData("TRANSFER TO HOME LOAN OFFSET", true)]
+    [InlineData("Transfer to mortgages r us", false)]
+    [InlineData("Home loans expo ticket", false)]
+    public void DetectorMatchesUserTransferNicknamesAsWholePhrases(string description, bool expected)
+    {
+        var tenantId = Guid.NewGuid();
+        var everyday = new Account { TenantId = tenantId, Name = "Everyday", AccountNumber = "12340449" };
+        var mortgage = new Account { TenantId = tenantId, Name = "Mortgage", TransferNicknames = ["mortgage", " Home  loan "] };
+        var transaction = Transaction(tenantId, everyday.Id, -100, 1, description);
+
+        Assert.Equal(expected ? mortgage.Id : null, InternalTransferDetector.Detect(transaction, [everyday, mortgage]));
+    }
+
+    [Theory]
+    [InlineData("Transfer To J Citizen CommBank App mortgage", "Transfer To J Citizen CommBank App mortgage")]
+    [InlineData("Fast Transfer 12/09/2026 To: Home Loan Ref 998877", "Fast Transfer To Home Loan Ref")]
+    [InlineData("Transfer to xx6486", null)]
+    [InlineData("Osko", null)]
+    [InlineData("", null)]
+    public void RulePhraseDropsNumbersAndNeedsSomethingToMatchOn(string description, string? expected)
+    {
+        Assert.Equal(expected, InternalTransferDetector.RulePhrase(description));
+    }
+
+    [Fact]
+    public void MergeRuleShrinksToTheSharedPrefixOfTwoExamples()
+    {
+        var first = InternalTransferDetector.MergeRule([], "Fast Transfer From DELAN DASANAYAKE MUDI food")!;
+        Assert.Equal(["Fast Transfer From DELAN DASANAYAKE MUDI food"], first);
+        Assert.Null(InternalTransferDetector.MergeRule(first, "Fast Transfer From DELAN DASANAYAKE MUDI food"));
+        var second = InternalTransferDetector.MergeRule(first, "Fast Transfer From DELAN DASANAYAKE MUDI rent")!;
+        Assert.Equal(["Fast Transfer From DELAN DASANAYAKE MUDI"], second);
+        Assert.Null(InternalTransferDetector.MergeRule(second, "Fast Transfer From DELAN DASANAYAKE MUDI groceries"));
+        var unrelated = InternalTransferDetector.MergeRule(second, "Fast Transfer From SOMEONE ELSE")!;
+        Assert.Equal(["Fast Transfer From DELAN DASANAYAKE MUDI", "Fast Transfer From SOMEONE ELSE"], unrelated);
     }
 
     [Fact]
@@ -158,6 +201,77 @@ public sealed class InternalTransferTests
         Assert.Equal(2500, (await CashFlow(client)).DailyCashFlow.Sum(x => x.ExpenseMinorUnits));
         var transfers = await GetReview(client);
         Assert.Contains(transfers.Items, x => x.CounterpartyAccountId == cardId && x.Amount == -300);
+    }
+
+    [Fact]
+    public async Task MarkingARowAddsARuleThatClassifiesSimilarRows()
+    {
+        await using var factory = new FinyteApiFactory();
+        using var client = factory.CreateClient();
+        var seed = await Seed(factory, client);
+        Guid mortgageId, firstId, secondId;
+        using (var scope = factory.Services.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<FinyteDbContext>();
+            var mortgage = new Account { TenantId = seed.TenantId, Name = "Home loan", CreatedAt = DateTimeOffset.UtcNow };
+            dbContext.Accounts.Add(mortgage);
+            var first = Transaction(seed.TenantId, seed.DebitAccountId, -800, 21, "Transfer To J Citizen CommBank App mortgage 1234567");
+            var second = Transaction(seed.TenantId, seed.DebitAccountId, -900, 28, "Transfer To J Citizen CommBank App mortgage 7654321");
+            dbContext.Transactions.AddRange(first, second);
+            await dbContext.SaveChangesAsync();
+            (mortgageId, firstId, secondId) = (mortgage.Id, first.Id, second.Id);
+        }
+        Assert.Equal(172500, (await CashFlow(client)).DailyCashFlow.Sum(x => x.ExpenseMinorUnits));
+
+        (await Decide(client, firstId, "mark", mortgageId)).EnsureSuccessStatusCode();
+
+        Assert.Equal(2500, (await CashFlow(client)).DailyCashFlow.Sum(x => x.ExpenseMinorUnits));
+        var rows = (await GetReview(client)).Items;
+        Assert.Equal("manual", rows.Single(x => x.Id == firstId).Source);
+        Assert.Equal("detected", rows.Single(x => x.Id == secondId).Source);
+        Assert.Equal(mortgageId, rows.Single(x => x.Id == secondId).CounterpartyAccountId);
+        var account = (await client.GetFromJsonAsync<JsonElement>("/api/accounts"))!.EnumerateArray().Single(x => x.GetProperty("id").GetGuid() == mortgageId);
+        Assert.Equal(["Transfer To J Citizen CommBank App mortgage"], account.GetProperty("transferNicknames").EnumerateArray().Select(x => x.GetString()).ToArray());
+        Assert.Equal(1, account.GetProperty("preferencesVersion").GetInt32());
+
+        (await Decide(client, secondId, "mark", mortgageId)).EnsureSuccessStatusCode();
+        Assert.Equal(1, (await client.GetFromJsonAsync<JsonElement>("/api/accounts"))!.EnumerateArray().Single(x => x.GetProperty("id").GetGuid() == mortgageId).GetProperty("preferencesVersion").GetInt32());
+
+        (await Decide(client, seed.OtherId, "mark", mortgageId, createRule: false)).EnsureSuccessStatusCode();
+        Assert.Equal("manual", (await GetReview(client)).Items.Single(x => x.Id == seed.OtherId).Source);
+        Assert.Equal(1, (await client.GetFromJsonAsync<JsonElement>("/api/accounts"))!.EnumerateArray().Single(x => x.GetProperty("id").GetGuid() == mortgageId).GetProperty("preferencesVersion").GetInt32());
+    }
+
+    [Fact]
+    public async Task SavingTransferNicknamesReclassifiesOtherAccountsRows()
+    {
+        await using var factory = new FinyteApiFactory();
+        using var client = factory.CreateClient();
+        var seed = await Seed(factory, client);
+        Guid mortgageId;
+        using (var scope = factory.Services.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<FinyteDbContext>();
+            var mortgage = new Account { TenantId = seed.TenantId, Name = "Home loan", CreatedAt = DateTimeOffset.UtcNow };
+            dbContext.Accounts.Add(mortgage);
+            dbContext.Transactions.Add(Transaction(seed.TenantId, seed.DebitAccountId, -800, 21, "Transfer To J Citizen CommBank App mortgage"));
+            await dbContext.SaveChangesAsync();
+            mortgageId = mortgage.Id;
+        }
+        Assert.Equal(82500, (await CashFlow(client)).DailyCashFlow.Sum(x => x.ExpenseMinorUnits));
+
+        var tooMany = await client.PutAsJsonAsync($"/api/accounts/{mortgageId}/preferences", new { transferNicknames = Enumerable.Range(1, 11).Select(x => $"nick {x}").ToArray(), expectedVersion = 0 });
+        Assert.Equal(HttpStatusCode.BadRequest, tooMany.StatusCode);
+        var saved = await client.PutAsJsonAsync($"/api/accounts/{mortgageId}/preferences", new { transferNicknames = new[] { " Mortgage ", "mortgage", "" }, expectedVersion = 0 });
+        saved.EnsureSuccessStatusCode();
+        Assert.Equal(["Mortgage"], (await saved.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("transferNicknames").EnumerateArray().Select(x => x.GetString()).ToArray());
+
+        Assert.Equal(2500, (await CashFlow(client)).DailyCashFlow.Sum(x => x.ExpenseMinorUnits));
+        Assert.Contains((await GetReview(client)).Items, x => x.CounterpartyAccountId == mortgageId && x.Amount == -800 && x.Source == "detected");
+
+        var cleared = await client.PutAsJsonAsync($"/api/accounts/{mortgageId}/preferences", new { transferNicknames = Array.Empty<string>(), expectedVersion = 1 });
+        cleared.EnsureSuccessStatusCode();
+        Assert.Equal(82500, (await CashFlow(client)).DailyCashFlow.Sum(x => x.ExpenseMinorUnits));
     }
 
     [PostgreSqlFact]
@@ -295,7 +409,7 @@ public sealed class InternalTransferTests
             dbContext.Accounts.Add(excludedAccount);
             dbContext.Transactions.AddRange(pending, undated, Transaction(seed.TenantId, excludedAccount.Id, -200, 10, "Loan fee"));
             await dbContext.SaveChangesAsync();
-            var projector = new OverviewProjector(dbContext);
+            var projector = new OverviewProjector(dbContext, TestCalendar.Tenants(dbContext));
             var projectionScope = new OverviewProjectionScope(seed.TenantId, null, "2026-08");
             var normal = await projector.Rebuild(projectionScope, CancellationToken.None);
             var comparison = await projector.ReadIncludingTransfers(projectionScope, CancellationToken.None);
@@ -331,8 +445,8 @@ public sealed class InternalTransferTests
     private static async Task<CashFlowRangeResponse> CashFlow(HttpClient client) =>
         (await client.GetFromJsonAsync<CashFlowRangeResponse>("/api/cash-flow?from=2026-08-01&to=2026-09-30"))!;
 
-    private static Task<HttpResponseMessage> Decide(HttpClient client, Guid transactionId, string action, Guid? counterpartyAccountId = null) =>
-        client.PostAsJsonAsync("/api/internal-transfers/review", new TransferDecisionRequest(transactionId, action, counterpartyAccountId));
+    private static Task<HttpResponseMessage> Decide(HttpClient client, Guid transactionId, string action, Guid? counterpartyAccountId = null, bool? createRule = null) =>
+        client.PostAsJsonAsync("/api/internal-transfers/review", new TransferDecisionRequest(transactionId, action, counterpartyAccountId, createRule));
 
     private static Transaction Transaction(Guid tenantId, Guid accountId, decimal amount, int day, string description) => new()
     {
@@ -365,7 +479,7 @@ public sealed class InternalTransferTests
         var other = Transaction(tenantId, debitAccount.Id, -25, 15, "Woolworths Card xx6486 Value Date: 14/08/2026");
         dbContext.Transactions.AddRange(debit, credit, other);
         await dbContext.SaveChangesAsync();
-        await new InternalTransferService(dbContext, new ProjectionInvalidator(dbContext)).Reclassify(tenantId, CancellationToken.None);
+        await new InternalTransferService(dbContext, new ProjectionInvalidator(dbContext, TestCalendar.Tenants(dbContext)), TestCalendar.Tenants(dbContext)).Reclassify(tenantId, CancellationToken.None);
         return new TransferSeed(tenantId, debitAccount.Id, creditAccount.Id, debit.Id, credit.Id, other.Id);
     }
 

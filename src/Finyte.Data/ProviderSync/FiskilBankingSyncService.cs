@@ -174,6 +174,9 @@ public sealed class FiskilBankingSyncService(FinyteDbContext dbContext, IFiskilB
                 .Include(x => x.TagAssignments).Include(x => x.TagExclusions)
                 .FirstOrDefaultAsync(x => x.TenantId == tenantId && x.FiskilTransactionId == transaction.Id, cancellationToken);
 
+        // timestamptz only accepts UTC instants.
+        var postedAtUtc = transaction.PostedAt?.ToUniversalTime();
+        var executedAtUtc = transaction.ExecutedAt?.ToUniversalTime();
         if (localTransaction is null)
         {
             localTransaction = new Transaction
@@ -185,8 +188,8 @@ public sealed class FiskilBankingSyncService(FinyteDbContext dbContext, IFiskilB
                 Currency = transaction.Currency ?? "AUD",
                 Description = transaction.Description,
                 Status = transaction.Status,
-                PostedAt = transaction.PostedAt,
-                ExecutedAt = transaction.ExecutedAt,
+                PostedAt = postedAtUtc,
+                ExecutedAt = executedAtUtc,
                 PrimaryCategory = transaction.PrimaryCategory,
                 SecondaryCategory = transaction.SecondaryCategory,
                 MerchantName = transaction.MerchantName,
@@ -207,8 +210,8 @@ public sealed class FiskilBankingSyncService(FinyteDbContext dbContext, IFiskilB
         changed |= SetIfChanged(localTransaction.Currency, transaction.Currency ?? "AUD", x => localTransaction.Currency = x);
         changed |= SetIfChanged(localTransaction.Description, transaction.Description, x => localTransaction.Description = x);
         changed |= SetIfChanged(localTransaction.Status, transaction.Status, x => localTransaction.Status = x);
-        changed |= SetIfChanged(localTransaction.PostedAt, transaction.PostedAt, x => localTransaction.PostedAt = x);
-        changed |= SetIfChanged(localTransaction.ExecutedAt, transaction.ExecutedAt, x => localTransaction.ExecutedAt = x);
+        changed |= SetIfChanged(localTransaction.PostedAt, postedAtUtc, x => localTransaction.PostedAt = x);
+        changed |= SetIfChanged(localTransaction.ExecutedAt, executedAtUtc, x => localTransaction.ExecutedAt = x);
         changed |= SetIfChanged(localTransaction.PrimaryCategory, transaction.PrimaryCategory, x => localTransaction.PrimaryCategory = x);
         changed |= SetIfChanged(localTransaction.SecondaryCategory, transaction.SecondaryCategory, x => localTransaction.SecondaryCategory = x);
         changed |= SetIfChanged(localTransaction.MerchantName, transaction.MerchantName, x => localTransaction.MerchantName = x);

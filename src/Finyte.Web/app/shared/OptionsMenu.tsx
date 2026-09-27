@@ -1,4 +1,5 @@
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { Ellipsis } from './Icons'
 
 type OptionsMenuProps = {
@@ -13,13 +14,37 @@ const CloseContext = createContext<() => void>(() => {})
 
 export function OptionsMenu({ label, align = 'left', trigger, className, children }: OptionsMenuProps) {
   const [open, setOpen] = useState(false)
-  const root = useRef<HTMLSpanElement>(null)
+  const [position, setPosition] = useState<CSSProperties>()
+  const button = useRef<HTMLButtonElement>(null)
+  const popover = useRef<HTMLDivElement>(null)
+
+  useLayoutEffect(() => {
+    if (!open || !button.current) {
+      return
+    }
+    const place = () => {
+      const rect = button.current!.getBoundingClientRect()
+      const top = rect.bottom + 4
+      setPosition(align === 'right'
+        ? { top, right: Math.max(8, window.innerWidth - rect.right) }
+        : { top, left: Math.max(8, rect.left) })
+    }
+    place()
+    window.addEventListener('resize', place)
+    window.addEventListener('scroll', place, true)
+    return () => { window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true) }
+  }, [open, align])
 
   useEffect(() => {
     if (!open) {
       return
     }
-    const onPointer = (event: MouseEvent) => { if (!root.current?.contains(event.target as Node)) { setOpen(false) } }
+    const onPointer = (event: MouseEvent) => {
+      const target = event.target as Node
+      if (!button.current?.contains(target) && !popover.current?.contains(target)) {
+        setOpen(false)
+      }
+    }
     const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') { setOpen(false) } }
     document.addEventListener('mousedown', onPointer)
     document.addEventListener('keydown', onKey)
@@ -27,9 +52,14 @@ export function OptionsMenu({ label, align = 'left', trigger, className, childre
   }, [open])
 
   return (
-    <span className="options-menu" ref={root}>
-      <button type="button" className={className ? `options-menu-button ${className}` : 'options-menu-button'} title={label} aria-label={label} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(x => !x)}>{trigger ?? <Ellipsis size={16} />}</button>
-      {open && <div className={`options-menu-popover is-${align}`} role="menu"><CloseContext.Provider value={() => setOpen(false)}>{children}</CloseContext.Provider></div>}
+    <span className="options-menu">
+      <button ref={button} type="button" className={className ? `options-menu-button ${className}` : 'options-menu-button'} title={label} aria-label={label} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(x => !x)}>{trigger ?? <Ellipsis size={16} />}</button>
+      {open && position && createPortal(
+        <div ref={popover} className={`options-menu-popover is-${align}`} role="menu" style={position}>
+          <CloseContext.Provider value={() => setOpen(false)}>{children}</CloseContext.Provider>
+        </div>,
+        document.body,
+      )}
     </span>
   )
 }

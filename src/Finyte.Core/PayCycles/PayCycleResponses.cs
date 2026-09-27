@@ -21,4 +21,4 @@ public sealed record PayCycleCategory(string Name, decimal Amount, int Transacti
 public sealed record PayCycleTransactionPage(int Page, int PageSize, int TotalCount, string? Kind, IReadOnlyList<PayCycleTransactionResponse> Items);
 
 public sealed record PayCycleTransactionResponse(Guid Id, Guid AccountId, string AccountName, string? Description,
-    string? MerchantName, decimal Amount, DateTimeOffset PostedAt, string Kind, string Category);
+    string? MerchantName, decimal Amount, DateTimeOffset PostedAt, DateOnly PostedDate, string Kind, string Category);

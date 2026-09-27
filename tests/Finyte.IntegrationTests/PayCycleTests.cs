@@ -103,7 +103,7 @@ public sealed class PayCycleTests
         Assert.Equal(new DateOnly(2026, 9, 14), data.To);
         Assert.Equal(new DateOnly(2026, 9, 8), data.ObservedThrough);
         Assert.Equal("current", data.PeriodStatus);
-        Assert.Equal("UTC", data.DateBasis);
+        Assert.Equal("Australia/Sydney", data.DateBasis);
         Assert.Equal(1000, data.Totals.ExternalCredits);
         Assert.Equal(100, data.Totals.Spending);
         Assert.Equal(300, data.Totals.SavingsTransfersOut);
