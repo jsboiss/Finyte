@@ -80,5 +80,8 @@
 .recurring-page .recurring-badges:empty { display: none; }
 .recurring-page .recurring-switch { display: flex; align-items: center; gap: 8px; grid-column: 1 / -1; font-size: 13px; color: var(--recurring-muted); }
 @media (max-width: 768px) {
-  .recurring-page .recurring-columns, .recurring-page .recurring-summary { grid-template-columns: minmax(0, 1fr); }
+  .recurring-page .recurring-columns { grid-template-columns: minmax(0, 1fr); }
+  .recurring-page .recurring-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .recurring-page .recurring-summary > div:first-child { grid-column: 1 / -1; }
+  .recurring-page .recurring-summary strong { font-size: 20px; }
 }
