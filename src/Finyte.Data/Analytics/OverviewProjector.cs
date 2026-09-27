@@ -200,7 +200,7 @@ public sealed class OverviewProjector(FinyteDbContext dbContext, TenantCalendars
             new OverviewFreshnessResponse(now, sourceWatermark, IsRefreshing: false),
             balanceCoverage,
             currencyScope);
-        if (includeInternalTransfers)
+        if (includeInternalTransfers || scope.AccountIds is not null)
         {
             return response;
         }

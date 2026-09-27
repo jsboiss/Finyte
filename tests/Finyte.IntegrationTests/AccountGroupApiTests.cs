@@ -78,6 +78,30 @@ public sealed class AccountGroupApiTests
     }
 
     [Fact]
+    public async Task ViewingAGroupNeverOverwritesTheAllAccountsCache()
+    {
+        await using var baseFactory = new FinyteApiFactory();
+        await using var factory = WithClock(baseFactory);
+        using var client = factory.CreateClient();
+        var seed = await Seed(factory, client);
+        var created = await client.PostAsJsonAsync("/api/account-groups", new { name = "Shared", accountIds = new[] { seed.Joint, seed.Solo } });
+        var group = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+
+        Assert.Equal("Shared", (await client.GetFromJsonAsync<OverviewResponse>($"/api/overview?groupId={group}"))!.Scope.Label);
+        Assert.Equal("2 accounts", (await client.GetFromJsonAsync<OverviewResponse>($"/api/overview?accountIds={seed.Joint}&accountIds={seed.Loan}"))!.Scope.Label);
+        (await client.PostAsync($"/api/overview/refresh?groupId={group}", null)).EnsureSuccessStatusCode();
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<FinyteDbContext>();
+            Assert.Empty(dbContext.OverviewProjections.Where(x => x.PayloadJson.Contains("Shared") || x.PayloadJson.Contains("2 accounts")));
+        }
+        var all = (await client.GetFromJsonAsync<OverviewResponse>("/api/overview"))!;
+        Assert.Equal("All accounts", all.Scope.Label);
+        Assert.Null(all.Scope.AccountIds);
+    }
+
+    [Fact]
     public async Task TransactionsFilterBySeveralAccounts()
     {
         await using var baseFactory = new FinyteApiFactory();

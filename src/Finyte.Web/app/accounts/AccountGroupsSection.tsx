@@ -12,7 +12,7 @@ export function AccountGroupsSection({ accounts }: { accounts: Account[] }) {
   const client = useQueryClient()
   const groups = useQuery({ queryKey: ['account-groups'], queryFn: getAccountGroups })
   const [draft, setDraft] = useState<Draft | null>(null)
-  const refresh = () => client.invalidateQueries({ queryKey: ['account-groups'] })
+  const refresh = () => Promise.all(['account-groups', 'overview', 'cash-flow'].map(key => client.invalidateQueries({ queryKey: [key] })))
   const save = useMutation({ mutationFn: saveAccountGroup, onSuccess: async () => { setDraft(null); await refresh() } })
   const remove = useMutation({ mutationFn: deleteAccountGroup, onSuccess: refresh })
   const names = (group: AccountGroup) => group.accountIds.map(id => accounts.find(x => x.id === id)?.name).filter(Boolean).join(', ')

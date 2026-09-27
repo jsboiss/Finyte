@@ -2,6 +2,7 @@ import { Help } from '../shared/Help'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useSearch } from '@tanstack/react-router'
 import { RefreshCcw } from '../shared/Icons'
+import { isAxiosError } from 'axios'
 import { useState } from 'react'
 import { getAccountGroups } from '../accounts/accountGroupsApi'
 import { getAccounts, type Account as AccountResponse } from '../accounts/accountsApi'
@@ -50,6 +51,7 @@ export function DashboardPage() {
   const overviewQuery = useQuery({
     queryKey: getOverviewQueryKey(selectedScope, includeInternalTransfers),
     queryFn: () => getOverview(selectedScope, includeInternalTransfers),
+    retry: (count, error) => !(isAxiosError(error) && error.response?.status === 404) && count < 3,
     enabled: hasBillingAccess,
     refetchInterval: x => refreshInterval(x.state.data?.freshness),
     staleTime: 60_000,
@@ -80,6 +82,9 @@ export function DashboardPage() {
 
   if (billingAccessQuery.isLoading || (hasBillingAccess && overviewQuery.isPending)) {
     return <section className="page"><p role="status">Loading dashboard…</p></section>
+  }
+  if (hasBillingAccess && overviewQuery.isError && selectedScope !== allAccountsScope && isAxiosError(overviewQuery.error) && overviewQuery.error.response?.status === 404) {
+    return <section className="page"><h1>Dashboard</h1><p role="alert">This view is no longer available. The group may have been deleted or have no accounts left.</p><button type="button" onClick={() => setScope(allAccountsScope)}>View all accounts</button></section>
   }
   if (billingAccessQuery.isError || (hasBillingAccess && overviewQuery.isError)) {
     return <section className="page"><p role="alert">Unable to load dashboard.</p><button type="button" onClick={() => { void billingAccessQuery.refetch(); void overviewQuery.refetch() }}>Retry</button></section>
