@@ -46,7 +46,7 @@ public sealed class TagSuggestionService(FinyteDbContext dbContext, TenantCalend
             var display = StatementNameCleaner.Clean(group.First().MerchantName ?? group.First().Description);
             var keyword = MerchantKeywordCatalog.Suggest(group.Key);
             // A keyword at the start lets one rule cover every branch of the merchant, e.g. each store of a chain.
-            var ruleName = keyword is { AtStart: true }
+            var ruleName = keyword is { AtStart: true, Generic: false }
                 ? string.Join(' ', display.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(keyword.Keyword.Split(' ').Length))
                 : display;
             var ruleKey = MerchantTagMatcher.Normalize(ruleName);

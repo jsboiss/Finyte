@@ -21,6 +21,21 @@ public sealed class MerchantKeywordCatalogTests
         Assert.Equal(atStart, match.AtStart);
     }
 
+    [Fact]
+    public void TheLeadingBrandWinsOverALongerKeywordLaterInTheName()
+    {
+        var match = MerchantKeywordCatalog.Suggest("ampol woolworths cars sometown");
+        Assert.Equal(("Fuel", "ampol", true), (match!.TagName, match.Keyword, match.AtStart));
+        Assert.Equal("Eating out", MerchantKeywordCatalog.Suggest("dd doordash coles melbourne")!.TagName);
+    }
+
+    [Fact]
+    public void GenericPhrasesNeverCoverEveryMerchantThatStartsWithThem()
+    {
+        Assert.True(MerchantKeywordCatalog.Suggest("transfer to xx1111 commbank app jamie")!.Generic);
+        Assert.False(MerchantKeywordCatalog.Suggest("coles 4492 springfield qld")!.Generic);
+    }
+
     [Theory]
     [InlineData("colesworth trading")]
     [InlineData("parental leave payment")]

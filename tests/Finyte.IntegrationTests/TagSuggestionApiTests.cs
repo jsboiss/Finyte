@@ -87,6 +87,24 @@ public sealed class TagSuggestionApiTests
     }
 
     [Fact]
+    public async Task TransfersAreSuggestedPerRecipientRatherThanAsOneBroadRule()
+    {
+        await using var baseFactory = new FinyteApiFactory();
+        await using var factory = WithClock(baseFactory);
+        using var client = factory.CreateClient();
+        await Seed(factory, client, billing: true);
+        using (var scope = factory.Services.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<FinyteDbContext>();
+            var account = await dbContext.Accounts.SingleAsync(x => x.Name == "Everyday");
+            dbContext.Transactions.AddRange(Row(account, 8, 10, -40m, "Transfer to xx3333 CommBank app Jamie"), Row(account, 8, 11, -60m, "Transfer to xx4444 CommBank app Sam"));
+            await dbContext.SaveChangesAsync();
+        }
+        var transfers = Assert.Single((await client.GetFromJsonAsync<TagSuggestionsResponse>(Url))!.Groups, x => x.TagName == "Transfers");
+        Assert.Equal(["Transfer to xx4444 CommBank app Sam", "Transfer to xx3333 CommBank app Jamie"], transfers.Merchants.Select(x => x.RuleMerchantName));
+    }
+
+    [Fact]
     public async Task TransactionsCarryACleanedMerchantNameForRules()
     {
         await using var baseFactory = new FinyteApiFactory();

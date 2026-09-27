@@ -4,7 +4,7 @@ namespace Finyte.Core.Accounts;
 public static class MerchantKeywordCatalog
 {
     public sealed record StarterTag(string Name, string Color);
-    public sealed record KeywordMatch(string Keyword, string TagName, bool AtStart);
+    public sealed record KeywordMatch(string Keyword, string TagName, bool AtStart, bool Generic);
 
     public static IReadOnlyList<StarterTag> StarterTags { get; } =
     [
@@ -44,15 +44,27 @@ public static class MerchantKeywordCatalog
             return null;
         }
         var padded = $" {normalizedMerchant} ";
+        KeywordMatch? best = null;
         foreach (var (keyword, tag) in Ordered)
         {
-            if (padded.Contains($" {keyword} ", StringComparison.Ordinal))
+            if (!padded.Contains($" {keyword} ", StringComparison.Ordinal))
             {
-                return new KeywordMatch(keyword, tag, padded.StartsWith($" {keyword} ", StringComparison.Ordinal));
+                continue;
+            }
+            var match = new KeywordMatch(keyword, tag, padded.StartsWith($" {keyword} ", StringComparison.Ordinal), IsGeneric(keyword, tag));
+            // The merchant's leading brand beats a longer word later in the name, except that Transfers always comes last.
+            if (best is null || (match.TagName != "Transfers" && (best.TagName == "Transfers" || (match.AtStart && !best.AtStart))))
+            {
+                best = match;
             }
         }
-        return null;
+        return best;
     }
+
+    // A generic phrase starts many unrelated merchants ("transfer to ...", or "uber" before "uber eats"), so a rule for it
+    // must name the whole merchant rather than every merchant beginning with it.
+    private static bool IsGeneric(string keyword, string tag) =>
+        tag == "Transfers" || Ordered.Any(x => x.Keyword.StartsWith($"{keyword} ", StringComparison.Ordinal));
 
     public static StarterTag? Starter(string name) => StarterTags.FirstOrDefault(x => string.Equals(x.Name, name, StringComparison.OrdinalIgnoreCase));
 }
