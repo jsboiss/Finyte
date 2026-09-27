@@ -2406,3 +2406,6 @@ td {
 .result-totals-currency .amount-in { color: #7ccf9f; }
 .result-totals-currency .amount-out { color: #e8927c; }
 .result-totals-note { color: #9aa0a6; font-size: 12px; margin: 0; }
+.transaction-amount-allocated { display: grid; gap: 2px; justify-items: end; }
+.transaction-amount-allocated small { color: #9aa0a6; font-size: 11px; white-space: nowrap; }
+.tag-allocation-note { color: #9aa0a6; font-size: 12px; margin: 0 0 4px; }
