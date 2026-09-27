@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { getAccounts, type Account } from '../accounts/accountsApi'
 import { httpClient } from '../api/httpClient'
-import { cadences, getSeries, label, money, recurringError, recurringUrl, type AliasField, type Candidate, type Discovery, type Occurrence, type Page, type Range, type Review, type Series, type Snapshot } from './recurringApi'
+import { cadences, getSeries, label, money, recurringError, recurringUrl, shortDate, type AliasField, type SeriesKind, type Candidate, type Discovery, type Occurrence, type Page, type Range, type Review, type Series, type Snapshot } from './recurringApi'
 import './Recurring.css'
 
 const day = (offset = 0) => new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10)
@@ -16,6 +16,7 @@ export function RecurringPage() {
   const [search, setSearch] = useState('')
   const [cadence, setCadence] = useState('')
   const [sort, setSort] = useState('name')
+  const [hideEnded, setHideEnded] = useState(true)
   const [view, setView] = useState('tracked')
   const [showDiscoveryFilters, setShowDiscoveryFilters] = useState(false)
   const [selectedDate, setSelectedDate] = useState<string | undefined>()
@@ -58,8 +59,8 @@ export function RecurringPage() {
     </>}
     {view === 'calendar' && <RecurringCalendarView series={series.data?.items ?? []} onSelect={(id, date) => { setSelectedId(id); setSelectedDate(date); setView('tracked') }} />}
     {(view === 'discover' || view === 'dismissed') && <>
-      <section className="panel"><div className="section-title"><h2>Find patterns</h2><Help title="Pattern search help"><p className="recurring-muted">By default, discovery uses accounts included in combined spending and income. Choose a range up to five years. Three years helps reveal annual payments; a shorter range makes a busy account easier to review.</p></Help></div><div className="recurring-form-grid"><label>Account<select value={accountId} onChange={event => setAccountId(event.target.value)}><option value="">All included accounts</option>{accounts.data?.map(account => <option key={account.id} value={account.id}>{account.name}</option>)}</select></label><label>Find a pattern<input type="search" maxLength={120} value={search} onChange={event => setSearch(event.target.value)} placeholder="Billing name" /></label></div><button type="button" className="secondary" onClick={() => setShowDiscoveryFilters(true)}>Dates, frequency and sort</button>{showDiscoveryFilters && <Drawer title="Pattern filters" onClose={() => setShowDiscoveryFilters(false)}><div className="recurring-form-grid"><label>Frequency<select value={cadence} onChange={event => setCadence(event.target.value)}><option value="">All frequencies</option>{cadences.map(item => <option key={item} value={item}>{label(item)}</option>)}</select></label><label>Sort<select value={sort} onChange={event => setSort(event.target.value)}><option value="name">Name</option><option value="amount">Amount within currency</option></select></label></div><RangeEditor range={range} onChange={setRange} /><button type="button" onClick={() => setShowDiscoveryFilters(false)}>Done</button></Drawer>}<small className="recurring-muted">{range.from} – {range.to}{cadence && ` · ${label(cadence)}`}</small></section>
-      <DiscoveryList key={`${view}-${range.from}-${range.to}-${accountId}-${search}-${cadence}-${sort}`} accountId={accountId} search={search} cadence={cadence} sort={sort} range={range} dismissed={view === 'dismissed'} accounts={accounts.data ?? []} onTracked={async item => { setView('tracked'); setSelectedId(item.id); await refresh('Series tracked with the payments you selected.') }} onChanged={refresh} />
+      <section className="panel"><div className="section-title"><h2>Find patterns</h2><Help title="Pattern search help"><p className="recurring-muted">By default, discovery uses accounts included in combined spending and income. Choose a range up to five years. Three years helps reveal annual payments; a shorter range makes a busy account easier to review.</p></Help></div><div className="recurring-form-grid"><label>Account<select value={accountId} onChange={event => setAccountId(event.target.value)}><option value="">All included accounts</option>{accounts.data?.map(account => <option key={account.id} value={account.id}>{account.name}</option>)}</select></label><label>Find a pattern<input type="search" maxLength={120} value={search} onChange={event => setSearch(event.target.value)} placeholder="Billing name" /></label></div><label className="recurring-check"><input type="checkbox" checked={hideEnded} onChange={event => setHideEnded(event.target.checked)} />Hide ended patterns</label><button type="button" className="secondary" onClick={() => setShowDiscoveryFilters(true)}>Dates, frequency and sort</button>{showDiscoveryFilters && <Drawer title="Pattern filters" onClose={() => setShowDiscoveryFilters(false)}><div className="recurring-form-grid"><label>Frequency<select value={cadence} onChange={event => setCadence(event.target.value)}><option value="">All frequencies</option>{cadences.map(item => <option key={item} value={item}>{label(item)}</option>)}</select></label><label>Sort<select value={sort} onChange={event => setSort(event.target.value)}><option value="name">Name</option><option value="amount">Amount within currency</option></select></label></div><RangeEditor range={range} onChange={setRange} /><button type="button" onClick={() => setShowDiscoveryFilters(false)}>Done</button></Drawer>}<small className="recurring-muted">{range.from} – {range.to}{cadence && ` · ${label(cadence)}`}</small></section>
+      <DiscoveryList key={`${view}-${range.from}-${range.to}-${accountId}-${search}-${cadence}-${sort}-${hideEnded}`} hideEnded={hideEnded} accountId={accountId} search={search} cadence={cadence} sort={sort} range={range} dismissed={view === 'dismissed'} accounts={accounts.data ?? []} onTracked={async item => { setView('tracked'); setSelectedId(item.id); await refresh('Series tracked with the payments you selected.') }} onChanged={refresh} />
     </>}
   </section>
 }
@@ -73,13 +74,14 @@ function SeriesEditor({ series, discovery, accounts, onCancel, onSaved }: { seri
   const [amount, setAmount] = useState(String(series?.expectedAmount ?? discovery?.expectedAmount ?? ''))
   const [mode, setMode] = useState(series?.amountMode ?? 'fixed')
   const [state, setState] = useState(series?.state ?? 'active')
+  const [kind, setKind] = useState<SeriesKind>(series?.kind ?? discovery?.suggestedKind ?? 'subscription')
   const [aliasField, setAliasField] = useState<AliasField>(discovery?.aliasField ?? 'merchant')
   const [alias, setAlias] = useState(discovery?.aliasValue ?? '')
   const [historyIds, setHistoryIds] = useState(() => new Set(discovery?.transactions.map(x => x.snapshot.id) ?? []))
   const mutation = useMutation({
     mutationFn: () => httpClient<Series>({ method: series ? 'PUT' : 'POST', url: series ? `${recurringUrl}/${series.id}` : recurringUrl, data: series
-      ? { name, cadence, anchorDate, expectedAmount: Number(amount), amountMode: mode, state, expectedVersion: series.version }
-      : { name, accountId, currency, cadence, anchorDate, expectedAmount: Number(amount), amountMode: mode,
+      ? { name, cadence, anchorDate, expectedAmount: Number(amount), amountMode: mode, state, kind, expectedVersion: series.version }
+      : { name, accountId, currency, cadence, anchorDate, expectedAmount: Number(amount), amountMode: mode, kind,
         aliases: alias.trim() ? [{ field: aliasField, value: alias.trim() }] : [],
         history: discovery?.transactions.filter(x => historyIds.has(x.snapshot.id)).map(x => ({ transactionId: x.snapshot.id, occurrenceDate: x.occurrenceDate, fingerprint: x.snapshot.fingerprint })) ?? [] } }),
     onSuccess: onSaved,
@@ -92,6 +94,7 @@ function SeriesEditor({ series, discovery, accounts, onCancel, onSaved }: { seri
       <label>Currency<input required minLength={3} maxLength={3} pattern="[A-Z]{3}" disabled={Boolean(series || discovery)} value={currency} onChange={event => setCurrency(event.target.value.toUpperCase())} /></label>
       <label>Expected amount<input required type="number" min="0.01" max="9999999999999.99" step="0.01" value={amount} onChange={event => setAmount(event.target.value)} /></label>
       <label>Amount pattern<select value={mode} onChange={event => setMode(event.target.value)}><option value="fixed">Usually fixed</option><option value="variable">Variable bill</option></select></label>
+      <label>Type<select value={kind} onChange={event => setKind(event.target.value as SeriesKind)}><option value="subscription">Subscription</option><option value="bill">Bill or essential</option></select></label>
       <label>Frequency<select value={cadence} disabled={Boolean(discovery)} onChange={event => setCadence(event.target.value)}>{cadences.map(item => <option key={item} value={item}>{label(item)}</option>)}</select></label>
       <label>Schedule anchor<input required type="date" min="1900-01-01" max="9998-12-31" disabled={Boolean(discovery)} value={anchorDate} onChange={event => setAnchorDate(event.target.value)} /></label>
       {series && <label>State<select value={state} onChange={event => setState(event.target.value)}>{['active', 'paused', 'cancelled'].map(item => <option key={item} value={item}>{item}</option>)}</select></label>}
@@ -105,10 +108,10 @@ function SeriesEditor({ series, discovery, accounts, onCancel, onSaved }: { seri
   </form>
 }
 
-function DiscoveryList({ range, dismissed, accounts, onTracked, onChanged, accountId, search, cadence, sort }: { accountId: string; search: string; cadence: string; sort: string; range: Range; dismissed: boolean; accounts: Account[]; onTracked: (item: Series) => Promise<void>; onChanged: (message?: string) => Promise<void> }) {
+function DiscoveryList({ range, dismissed, accounts, onTracked, onChanged, accountId, search, cadence, sort, hideEnded }: { accountId: string; search: string; cadence: string; sort: string; hideEnded: boolean; range: Range; dismissed: boolean; accounts: Account[]; onTracked: (item: Series) => Promise<void>; onChanged: (message?: string) => Promise<void> }) {
   const [page, setPage] = useState(1)
   const [selected, setSelected] = useState<string | null>(null)
-  const discovery = useQuery({ queryKey: ['recurring', 'discovery', range, dismissed, page, accountId, search, cadence, sort], queryFn: () => httpClient<Page<Discovery>>({ url: `${recurringUrl}/discovery`, params: { ...range, dismissed, page, pageSize: 10, accountId: accountId || undefined, search: search || undefined, cadence: cadence || undefined, sort } }), enabled: Boolean(range.from && range.to) })
+  const discovery = useQuery({ queryKey: ['recurring', 'discovery', range, dismissed, page, accountId, search, cadence, sort, hideEnded], queryFn: () => httpClient<Page<Discovery>>({ url: `${recurringUrl}/discovery`, params: { ...range, dismissed, page, pageSize: 10, accountId: accountId || undefined, search: search || undefined, cadence: cadence || undefined, sort, hideEnded } }), enabled: Boolean(range.from && range.to) })
   const decision = useMutation({ mutationFn: (candidateKey: string) => httpClient<void>({ method: 'POST', url: `${recurringUrl}/discovery/decisions`, data: { candidateKey, action: dismissed ? 'reset' : 'dismiss' } }), onSuccess: async () => { setPage(1); await onChanged(dismissed ? 'Pattern returned to discovery.' : 'Pattern dismissed. You can restore it from Dismissed patterns.') } })
   return <div className="recurring-list">
     {discovery.isLoading && <p>Looking for recurring patterns…</p>}
@@ -116,7 +119,8 @@ function DiscoveryList({ range, dismissed, accounts, onTracked, onChanged, accou
     {decision.error && <p role="alert">{recurringError(decision.error)}</p>}
     {discovery.data?.totalCount === 0 && <section className="panel"><h2>{dismissed ? 'No dismissed patterns in this range' : 'No recurring patterns found in this range'}</h2><Help><p className="recurring-muted">A changing billing name, missing history or several charges on similar dates can prevent discovery. You can add a recurring payment yourself and review transactions around its schedule.</p></Help></section>}
     {discovery.data?.items.map(item => <article className="panel discovery-row" key={`${item.key}-${item.transactions[0]?.snapshot.id}`}>
-      <div className="recurring-heading"><div><h2>{item.name}</h2><p className="recurring-muted">{item.accountName} · {label(item.cadence)} · {money(item.expectedAmount, item.currency)}</p></div>
+      <div className="recurring-heading"><div><h2>{item.name}</h2><p className="recurring-muted">{item.accountName} · {label(item.cadence)} · {money(item.expectedAmount, item.currency)}</p>
+        <p className="recurring-badges">{item.isEarly && <span className="recurring-status">Early · 2 payments</span>}{item.isEnded && <span className="recurring-status recurring-warning">Ended · last paid {shortDate(item.transactions[item.transactions.length - 1].occurrenceDate)}</span>}</p></div>
         {selected !== `${item.key}-${item.transactions[0]?.snapshot.id}` && <div className="recurring-actions">{!dismissed && <button type="button" onClick={() => setSelected(`${item.key}-${item.transactions[0]?.snapshot.id}`)}>Review and track</button>}<button type="button" className="secondary" disabled={decision.isPending} onClick={() => decision.mutate(item.key)}>{dismissed ? 'Restore' : 'Dismiss'}</button></div>}
       </div>
       {selected === `${item.key}-${item.transactions[0]?.snapshot.id}` ? <Drawer title="Track recurring payment" onClose={() => setSelected(null)}><SeriesEditor discovery={item} accounts={accounts} onCancel={() => setSelected(null)} onSaved={onTracked} /></Drawer> : <details><summary>Evidence · {item.transactions.length} payments</summary><Evidence items={item.evidence} /><div className="recurring-ledger">{item.transactions.map(payment => <div className="recurring-payment" key={payment.snapshot.id}><SnapshotView snapshot={payment.snapshot} /></div>)}</div></details>}
