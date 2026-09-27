@@ -15,6 +15,9 @@ public sealed class Transaction
     public DateTimeOffset? ExecutedAt { get; set; }
     public string? PrimaryCategory { get; set; }
     public string? SecondaryCategory { get; set; }
+    public string? CategoryConfidence { get; set; }
+    public string? MerchantCategoryCode { get; set; }
+    public string? PaymentType { get; set; }
     public string? MerchantName { get; set; }
     public string? Reference { get; set; }
     public string? RawJson { get; set; }
