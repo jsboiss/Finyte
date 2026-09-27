@@ -1,6 +1,6 @@
 # Pay-cycle breakdowns
 
-Pay cycles use a family's saved payday schedule and explicit account selection. Finance's prototype inferred a recent payday from a similarly sized deposit and assumed fortnightly pay. Finyte instead keeps the schedule independent of bank credits, supports weekly, fortnightly and monthly cycles, and classifies savings movements only from valid, confirmed transfer decisions.
+Pay cycles use a family's saved payday schedule and explicit account selection. Finance's prototype inferred a recent payday from a similarly sized deposit and assumed fortnightly pay. Finyte instead keeps the schedule independent of bank credits, supports weekly, fortnightly and monthly cycles, and classifies savings movements from each row's internal transfer account.
 
 ## Periods and scope
 
@@ -16,14 +16,14 @@ Only rows with a posted timestamp, the profile currency, and status null, empty,
 
 Every counted transaction belongs to exactly one audit bucket:
 
-- `external-credit`: positive rows without a valid confirmed transfer; this includes income, refunds and other credits, not verified salary.
-- `spending`: negative rows without a valid confirmed transfer. Credits do not automatically offset spending.
-- `savings-out` / `savings-in`: confirmed transfers between tracked accounts and saved savings destinations.
-- `transfer-out` / `transfer-in`: confirmed transfers to/from other accounts outside the tracked scope.
-- `within-scope`: a confirmed transfer leg whose counterpart account is also tracked.
-- `zero`: zero-value rows without a confirmed transfer.
+- `external-credit`: positive rows that are not internal transfers; this includes income, refunds and other credits, not verified salary.
+- `spending`: negative rows that are not internal transfers. Credits do not automatically offset spending.
+- `savings-out` / `savings-in`: internal transfers whose other account is a saved savings destination.
+- `transfer-out` / `transfer-in`: internal transfers whose other account is outside the tracked scope.
+- `within-scope`: an internal transfer whose other account is also tracked.
+- `zero`: zero-value rows that are not internal transfers.
 
-Transfer decisions use the existing shared validity query. Suggested, dismissed or stale pairs do not hide ordinary activity. Each leg counts on its own posted date, so different settlement dates can leave a nonzero within-scope movement in a cycle. A counterpart in the next cycle or after today's cutoff never cancels a current debit. Savings out and savings returns are shown separately; net savings is out minus returns, not a savings-account balance.
+Classification reads each row's `InternalTransferAccountId` (see [internal transfers](internal-transfers.md)); nothing is joined to other rows. Each leg counts on its own posted date, so different settlement dates can leave a nonzero within-scope movement in a cycle. A counterpart in the next cycle or after today's cutoff never cancels a current debit. Savings out and savings returns are shown separately; net savings is out minus returns, not a savings-account balance.
 
 `netMovement` is the signed sum of all counted rows: external credits minus spending, savings out and other transfers out, plus savings returns, other transfers in and signed within-scope movement. It describes changes from recorded activity, not available funds or an account balance. `expectedIncomeDifference` is external credits minus optional expected income; it does not claim those credits are salary. Category totals cover only spending, preferring the ledger's secondary category, then primary, then Uncategorised.
 
@@ -60,4 +60,4 @@ Migration `AddPayCycleProfiles` adds only the new profile table. The account cla
 
 For the PostgreSQL migration/query/concurrent-edit regression, set `FINYTE_TEST_POSTGRES` to a disposable PostgreSQL database connection and run `dotnet test tests/Finyte.IntegrationTests`. That test creates and drops its own random `paycycle_test_*` schema, without modifying existing schemas. Without the variable, only this relational test is skipped.
 
-Review follow-up: classification now joins each valid transfer leg once instead of using five correlated existence checks. Aggregates and audit paging remain in SQL, with the repeatable-read snapshot preserved. Undated counts explicitly cover all dates because a transaction without a posted date cannot be assigned to a cycle. Budget and pay-cycle calendars delegate to the same AnchoredPeriods implementation, included identically in both sibling branches.
+Review follow-up: classification reads the transfer account on each row, so no joins are needed. Aggregates and audit paging remain in SQL, with the repeatable-read snapshot preserved. Undated counts explicitly cover all dates because a transaction without a posted date cannot be assigned to a cycle. Budget and pay-cycle calendars delegate to the same AnchoredPeriods implementation, included identically in both sibling branches.

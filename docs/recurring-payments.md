@@ -6,7 +6,7 @@ Recurring payments separate a stable user-owned series from bank transaction des
 
 ## Discovery and calendar
 
-Discovery examines dated, posted negative transactions in accounts currently included in analytics, excluding confirmed internal transfers, future dates, positive credits and transactions already reserved by a confirmed recurring decision. A manually created series may deliberately use any family account. Every profile and transaction query is tenant scoped; accounts and currencies cannot be supplied from another family.
+Discovery examines dated, posted negative transactions in accounts currently included in analytics, excluding internal transfers, future dates, positive credits and transactions already reserved by a confirmed recurring decision. A manually created series may deliberately use any family account. Every profile and transaction query is tenant scoped; accounts and currencies cannot be supplied from another family.
 
 At least three distinct nominal occurrences are required. Detection compares transactions with anchored weekly, fortnightly, monthly, quarterly or yearly schedules, allowing three calendar days either side of each nominal due date. It fits supported calendar schedules, rather than dividing an average gap into a cadence. Amount is evidence and a suggested estimate, not grouping identity. Field-aware merchant/description aliases are normalized conservatively; generic aliases do not automatically establish a merchant. Ambiguous overlaps remain suggestions requiring explicit selection, and disjoint schedules at the same merchant can become separate series.
 

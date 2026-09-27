@@ -76,7 +76,7 @@ public sealed class OverviewProjector(FinyteDbContext dbContext) : IOverviewProj
                 && (x.Status == null || x.Status == "" || x.Status.ToLower() == "posted"));
         if (!includeInternalTransfers)
         {
-            transactionQuery = transactionQuery.ExcludeInternalTransfers(dbContext, scope.TenantId);
+            transactionQuery = transactionQuery.ExcludeInternalTransfers();
         }
         var totals = await transactionQuery
             .GroupBy(x => 1)

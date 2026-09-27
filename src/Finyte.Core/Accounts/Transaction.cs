@@ -18,6 +18,9 @@ public sealed class Transaction
     public string? MerchantName { get; set; }
     public string? Reference { get; set; }
     public string? RawJson { get; set; }
+    public Guid? InternalTransferAccountId { get; set; }
+    public Account? InternalTransferAccount { get; set; }
+    public string? InternalTransferSource { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public ICollection<TransactionTagAssignment> TagAssignments { get; set; } = [];
     public ICollection<TransactionTagExclusion> TagExclusions { get; set; } = [];

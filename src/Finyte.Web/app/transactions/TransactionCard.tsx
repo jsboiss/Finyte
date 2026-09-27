@@ -1,7 +1,7 @@
 import { CreditCard } from '../shared/Icons'
-import { Link } from '@tanstack/react-router'
 import { type CSSProperties, type ReactNode } from 'react'
 import { exactCurrency, formatChartDate } from '../shared/formatters'
+import { TransactionOptions, TransferBadge } from '../transfers/TransferControl'
 import type { Transaction } from './types'
 
 type TransactionAccountChipProps = {
@@ -16,23 +16,24 @@ type TransactionAmountProps = {
 }
 
 type TransactionCardProps = {
+  accounts: { id: string; name: string }[]
   tags: ReactNode
   transaction: Transaction
 }
 
-export function TransactionCard({ tags, transaction }: TransactionCardProps) {
+export function TransactionCard({ accounts, tags, transaction }: TransactionCardProps) {
   return (
     <article className="transaction-card" style={{ '--account-color': getAccountColor(transaction.accountId) } as CSSProperties}>
       <div className="transaction-card-account-header">
         <CreditCard aria-hidden="true" />
         <span>{transaction.accountDisplayName}</span>
         <time dateTime={transaction.postedDate}>{formatChartDate(transaction.postedDate)}</time>
+        <TransactionOptions transaction={transaction} accounts={accounts} align="right" />
       </div>
       <div className="transaction-card-body">
         <div className="transaction-card-heading">
           <div className="transaction-card-description">
-            <strong>{transaction.description}</strong>
-            {transaction.isInternalTransfer && <Link className="transfer-badge" to="/transactions" search={previous => ({ ...previous, transferView: 'confirmed' })}>Internal transfer · excluded from totals</Link>}
+            <span className="transaction-title"><strong>{transaction.description}</strong><TransferBadge transaction={transaction} /></span>
             {transaction.merchantName && transaction.merchantName.toLowerCase() !== transaction.description?.toLowerCase() && <span>{transaction.merchantName}</span>}
           </div>
           <TransactionAmount amountMinorUnits={transaction.amountMinorUnits} className="transaction-card-amount" currencyCode={transaction.currency} />

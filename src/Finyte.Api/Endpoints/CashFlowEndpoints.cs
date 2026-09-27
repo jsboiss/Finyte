@@ -66,7 +66,7 @@ public static class CashFlowEndpoints
                 && (x.Status == null || x.Status == "" || x.Status.ToLower() == "posted"));
         if (includeInternalTransfers != true)
         {
-            transactionQuery = transactionQuery.ExcludeInternalTransfers(dbContext, currentTenant.TenantId);
+            transactionQuery = transactionQuery.ExcludeInternalTransfers();
         }
         var dailyTotals = await transactionQuery
             .GroupBy(x => x.PostedAt!.Value.Date)

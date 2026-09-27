@@ -4,13 +4,15 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Finyte.Core.Accounts;
+using Finyte.Core.Transfers;
+using Finyte.Data.Transfers;
 using Finyte.Data.Analytics;
 using Finyte.Data.Tagging;
 using Microsoft.EntityFrameworkCore;
 
 namespace Finyte.Data.Imports;
 
-public sealed class TransactionFileImportService(FinyteDbContext dbContext, IProjectionInvalidator projectionInvalidator, TransactionTagService tagService)
+public sealed class TransactionFileImportService(FinyteDbContext dbContext, IProjectionInvalidator projectionInvalidator, TransactionTagService tagService, InternalTransferService transferService)
 {
     public async Task<TransactionFileImport> Import(Guid tenantId, Guid accountId, string fileName, Stream stream, CancellationToken cancellationToken)
     {
@@ -53,6 +55,14 @@ public sealed class TransactionFileImportService(FinyteDbContext dbContext, IPro
                 account.BalanceAsOf = balance.AsOf;
                 account.ManualBalanceVersion++;
             }
+            var accountNumberChanged = false;
+            if (!AccountPreferences.IsProviderManaged(account) && string.IsNullOrWhiteSpace(account.AccountNumber)
+                && TransactionFileParser.ParseAccountNumber(content) is { } accountNumber)
+            {
+                account.AccountNumber = accountNumber;
+                accountNumberChanged = true;
+            }
+            var tenantAccounts = await dbContext.Accounts.AsNoTracking().Where(x => x.TenantId == tenantId).ToListAsync(cancellationToken);
 
             var from = new DateTimeOffset(transactions.Min(x => x.PostedDate).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
             var to = new DateTimeOffset(transactions.Max(x => x.PostedDate).ToDateTime(TimeOnly.MaxValue), TimeSpan.Zero);
@@ -112,6 +122,7 @@ public sealed class TransactionFileImportService(FinyteDbContext dbContext, IPro
                     RawJson = JsonSerializer.Serialize(new { source = "file-import", fileName = run.FileName, transaction.BankId })
                 };
                 tagService.Reconcile(entity, rules);
+                InternalTransferDetector.Apply(entity, tenantAccounts);
 
                 dbContext.Transactions.Add(entity);
                 AddIdentity(tenantId, entity.Id, row.ExternalId);
@@ -119,10 +130,9 @@ public sealed class TransactionFileImportService(FinyteDbContext dbContext, IPro
             }
 
             await dbContext.SaveChangesAsync(cancellationToken);
-            if (run.ImportedCount > 0)
+            if (accountNumberChanged)
             {
-                await new Transfers.AutomaticTransferService(dbContext, projectionInvalidator).Reconcile(tenantId, cancellationToken,
-                    DateOnly.FromDateTime(from.UtcDateTime), DateOnly.FromDateTime(to.UtcDateTime));
+                await transferService.Reclassify(tenantId, cancellationToken);
             }
             run.TotalCount = transactions.Count;
             run.Status = "completed";

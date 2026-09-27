@@ -450,7 +450,7 @@ public sealed class RecurringPaymentService(FinyteDbContext dbContext, TimeProvi
     private IQueryable<Transaction> Eligible(Guid tenantId) => dbContext.Transactions.AsNoTracking().Where(x => x.TenantId == tenantId
         && x.Amount < 0 && x.PostedAt != null && x.PostedAt < Timestamp(Today.AddDays(1))
         && (x.Status == null || x.Status == "" || x.Status == "posted" || x.Status == "POSTED"))
-        .ExcludeInternalTransfers(dbContext, tenantId);
+        .ExcludeInternalTransfers();
 
     private async Task<RecurringPaymentSeries> Find(Guid tenantId, Guid seriesId, CancellationToken cancellationToken) =>
         await dbContext.RecurringPaymentSeries.Include(x => x.Aliases).SingleOrDefaultAsync(x => x.TenantId == tenantId && x.Id == seriesId, cancellationToken)

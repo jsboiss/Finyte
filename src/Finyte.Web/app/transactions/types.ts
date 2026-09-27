@@ -20,6 +20,9 @@ export type Transaction = {
   tags: TransactionTag[]
   automaticTagExclusions?: string[]
   isInternalTransfer?: boolean
+  internalTransferAccountId?: string | null
+  internalTransferAccountName?: string | null
+  internalTransferSource?: string | null
 }
 
 export type TransactionPage = {

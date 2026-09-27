@@ -4,6 +4,7 @@ using System.Text.Json;
 using Finyte.Core.Accounts;
 using Finyte.Core.Billing;
 using Finyte.Core.Recurring;
+using Finyte.Core.Transfers;
 using Finyte.Data;
 using Finyte.Data.Transfers;
 using Microsoft.EntityFrameworkCore;
@@ -15,135 +16,53 @@ namespace Finyte.IntegrationTests;
 public sealed class MiscAutomationTests
 {
     [Fact]
-    public async Task BoundedReconciliationKeepsHistoricalDecisionsAndDetectsEdgeCompetitors()
-    {
-        await using var factory = new FinyteApiFactory();
-        await CheckBoundedReconciliation(factory);
-    }
-
-    [PostgreSqlFact]
-    public async Task PostgreSqlBoundedReconciliationKeepsHistoricalDecisionsAndDetectsEdgeCompetitors()
-    {
-        var connection = Environment.GetEnvironmentVariable("FINYTE_TEST_POSTGRES")!;
-        var schema = $"bounded_transfers_{Guid.NewGuid():N}";
-        await using var admin = new Npgsql.NpgsqlConnection(connection);
-        await admin.OpenAsync();
-        await using (var create = new Npgsql.NpgsqlCommand($"CREATE SCHEMA \"{schema}\"", admin))
-        {
-            await create.ExecuteNonQueryAsync();
-        }
-        try
-        {
-            await using var factory = new FinyteApiFactory(new Npgsql.NpgsqlConnectionStringBuilder(connection) { SearchPath = schema }.ConnectionString);
-            using var scope = factory.Services.CreateScope();
-            await scope.ServiceProvider.GetRequiredService<FinyteDbContext>().Database.MigrateAsync();
-            await CheckBoundedReconciliation(factory);
-        }
-        finally
-        {
-            await using var drop = new Npgsql.NpgsqlCommand($"DROP SCHEMA \"{schema}\" CASCADE", admin);
-            await drop.ExecuteNonQueryAsync();
-        }
-    }
-
-    private static async Task CheckBoundedReconciliation(FinyteApiFactory factory)
-    {
-        using var client = factory.CreateClient();
-        var tenantId = await Seed(factory, client);
-        using var scope = factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<FinyteDbContext>();
-        var service = scope.ServiceProvider.GetRequiredService<AutomaticTransferService>();
-        Assert.Equal(1, await service.Reconcile(tenantId, default));
-        var historical = await db.InternalTransfers.SingleAsync();
-        var accounts = await db.Accounts.ToListAsync();
-        var debit = Row(tenantId, accounts[0].Id, -200, "Transfer to savings");
-        debit.PostedAt = new DateTimeOffset(2026, 10, 10, 0, 0, 0, TimeSpan.Zero);
-        var credit = Row(tenantId, accounts[1].Id, 200, "Transfer from main");
-        credit.PostedAt = debit.PostedAt.Value.AddDays(3);
-        var competitor = Row(tenantId, accounts[0].Id, -200, "Card purchase");
-        competitor.PostedAt = debit.PostedAt.Value.AddDays(6);
-        db.Transactions.AddRange(debit, credit, competitor);
-        await db.SaveChangesAsync();
-        Assert.Equal(0, await service.Reconcile(tenantId, default, new(2026, 10, 10), new(2026, 10, 10)));
-        Assert.Equal("confirmed", historical.Status);
-        Assert.Single(await db.InternalTransfers.ToListAsync());
-        competitor.Amount = -300;
-        await db.SaveChangesAsync();
-        Assert.Equal(1, await service.Reconcile(tenantId, default, new(2026, 10, 10), new(2026, 10, 10)));
-        // A newly imported competitor must invalidate a pair even when only its
-        // partner is in the changed window's three-day focus.
-        competitor.Amount = -200;
-        await db.SaveChangesAsync();
-        Assert.Equal(1, await service.Reconcile(tenantId, default, new(2026, 10, 16), new(2026, 10, 16)));
-        Assert.Equal("confirmed", historical.Status);
-        Assert.Equal("needs-review", (await db.InternalTransfers.SingleAsync(x => x.DebitTransactionId == debit.Id)).Status);
-    }
-
-    [Fact]
-    public async Task AutomaticMatchIsIdempotentAndUndoSurvivesReconciliation()
+    public async Task ReclassificationIsIdempotentAndManualDecisionsSurviveIt()
     {
         await using var factory = new FinyteApiFactory();
         using var client = factory.CreateClient();
         var tenantId = await Seed(factory, client);
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<FinyteDbContext>();
-        var service = scope.ServiceProvider.GetRequiredService<AutomaticTransferService>();
-        Assert.Equal(1, await service.Reconcile(tenantId, default));
-        Assert.Equal(0, await service.Reconcile(tenantId, default));
-        Assert.Single(await db.ValidConfirmedTransfers(tenantId).ToListAsync());
-        var pair = await db.InternalTransfers.SingleAsync();
-        await scope.ServiceProvider.GetRequiredService<InternalTransferService>().Review(tenantId, "dev-user",
-            new(pair.DebitTransactionId, pair.CreditTransactionId, "reset", pair.Amount, pair.Currency,
-                pair.DebitAccountId, pair.CreditAccountId, pair.DebitPostedAt, pair.CreditPostedAt), default);
-        Assert.Equal(0, await service.Reconcile(tenantId, default));
-        Assert.Empty(await db.ValidConfirmedTransfers(tenantId).ToListAsync());
-        Assert.Equal("dismissed", pair.Status);
-    }
-
-    [Fact]
-    public async Task NewCompetingPaymentReleasesAutomaticExclusionForReview()
-    {
-        await using var factory = new FinyteApiFactory();
-        using var client = factory.CreateClient();
-        var tenantId = await Seed(factory, client);
-        using var scope = factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<FinyteDbContext>();
-        var service = scope.ServiceProvider.GetRequiredService<AutomaticTransferService>();
-        Assert.Equal(1, await service.Reconcile(tenantId, default));
-        var credit = await db.Transactions.SingleAsync(x => x.Amount > 0);
-        db.Transactions.Add(Row(tenantId, credit.AccountId, 100, "Unrelated refund"));
-        await db.SaveChangesAsync();
-        Assert.Equal(1, await service.Reconcile(tenantId, default));
-        Assert.Empty(await db.ValidConfirmedTransfers(tenantId).ToListAsync());
-        Assert.Equal("needs-review", (await db.InternalTransfers.SingleAsync()).Status);
-        var review = await scope.ServiceProvider.GetRequiredService<InternalTransferService>().GetReview(tenantId, "needs-review", new(2026, 9, 1), new(2026, 9, 30), 1, default);
-        Assert.Single(review.Items);
+        var service = scope.ServiceProvider.GetRequiredService<InternalTransferService>();
+        Assert.Equal(2, await service.Reclassify(tenantId, default));
+        Assert.Equal(0, await service.Reclassify(tenantId, default));
+        Assert.Equal(2, await db.Transactions.CountAsync(x => x.InternalTransferAccountId != null));
+        var debit = await db.Transactions.SingleAsync(x => x.Amount < 0);
+        await service.Review(tenantId, new TransferDecisionRequest(debit.Id, "exclude", null), default);
+        Assert.Equal(0, await service.Reclassify(tenantId, default));
+        await db.Entry(debit).ReloadAsync();
+        Assert.Null(debit.InternalTransferAccountId);
+        Assert.Equal(InternalTransferDetector.Excluded, debit.InternalTransferSource);
+        await service.Review(tenantId, new TransferDecisionRequest(debit.Id, "reset", null), default);
+        await db.Entry(debit).ReloadAsync();
+        Assert.NotNull(debit.InternalTransferAccountId);
+        Assert.Equal(InternalTransferDetector.Detected, debit.InternalTransferSource);
     }
 
     [Theory]
     [InlineData("unrelated")]
-    [InlineData("pending")]
-    [InlineData("currency")]
-    [InlineData("same-account")]
     [InlineData("foreign-tenant")]
+    [InlineData("same-account")]
     [InlineData("ambiguous")]
-    public async Task UncertainPairsStayUnclassified(string scenario)
+    [InlineData("card")]
+    public async Task RowsWithoutAUniqueCounterpartyStayUnclassified(string scenario)
     {
         await using var factory = new FinyteApiFactory();
         using var client = factory.CreateClient();
         var tenantId = await Seed(factory, client);
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<FinyteDbContext>();
-        var credit = await db.Transactions.SingleAsync(x => x.Amount > 0);
-        if (scenario == "unrelated") { credit.Description = "Refund"; }
-        if (scenario == "pending") { credit.Status = "pending"; }
-        if (scenario == "foreign-tenant") { credit.TenantId = Guid.NewGuid(); }
-        if (scenario == "currency") { credit.Currency = "USD"; }
-        if (scenario == "same-account") { credit.AccountId = await db.Transactions.Where(x => x.Amount < 0).Select(x => x.AccountId).SingleAsync(); }
-        if (scenario == "ambiguous") { db.Transactions.Add(Row(tenantId, credit.AccountId, 100, "Transfer from main")); }
+        var debit = await db.Transactions.SingleAsync(x => x.Amount < 0);
+        var main = await db.Accounts.SingleAsync(x => x.Name == "Main");
+        if (scenario == "unrelated") { debit.Description = "Transfer to savings"; }
+        if (scenario == "foreign-tenant") { debit.TenantId = Guid.NewGuid(); }
+        if (scenario == "same-account") { debit.Description = $"Transfer to xx{main.AccountNumber![^4..]}"; }
+        if (scenario == "ambiguous") { db.Accounts.Add(new Account { TenantId = tenantId, Name = "Offset", AccountNumber = "77776486" }); }
+        if (scenario == "card") { debit.Description = "Woolworths Card xx6486 Value Date: 01/09/2026"; }
         await db.SaveChangesAsync();
-        Assert.Equal(0, await scope.ServiceProvider.GetRequiredService<AutomaticTransferService>().Reconcile(tenantId, default));
-        Assert.Empty(await db.InternalTransfers.ToListAsync());
+        await scope.ServiceProvider.GetRequiredService<InternalTransferService>().Reclassify(tenantId, default);
+        await db.Entry(debit).ReloadAsync();
+        Assert.Null(debit.InternalTransferAccountId);
     }
 
     [Fact]
@@ -178,18 +97,28 @@ public sealed class MiscAutomationTests
     }
 
     [Fact]
-    public async Task ImportRunsAutomaticMatchingWithoutOpeningTransferReview()
+    public async Task ImportClassifiesNewRowsAndCapturesTheFileAccountNumber()
     {
         await using var factory = new FinyteApiFactory();
         using var client = factory.CreateClient();
         var tenantId = await Seed(factory, client);
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<FinyteDbContext>();
-        var accountId = await db.Accounts.Where(x => x.Name == "Main").Select(x => x.Id).SingleAsync();
-        using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes("<OFX><BANKTRANLIST><STMTTRN><DTPOSTED>20260906<TRNAMT>-12.34<FITID>auto-test<NAME>Coffee</STMTTRN></BANKTRANLIST></OFX>"));
-        await scope.ServiceProvider.GetRequiredService<Finyte.Data.Imports.TransactionFileImportService>().Import(tenantId, accountId, "test.ofx", stream, default);
-        Assert.Single(await db.ValidConfirmedTransfers(tenantId).ToListAsync());
-        Assert.Equal(1, (await db.TransactionFileImports.SingleAsync()).ImportedCount);
+        var offset = new Account { TenantId = tenantId, Name = "Offset" };
+        db.Accounts.Add(offset);
+        await db.SaveChangesAsync();
+        var file = "<OFX><BANKACCTFROM><BSB>062000<ACCTID>12345555</BANKACCTFROM><BANKTRANLIST>"
+            + "<STMTTRN><DTPOSTED>20260906<TRNAMT>-12.34<FITID>auto-1<NAME>Coffee</STMTTRN>"
+            + "<STMTTRN><DTPOSTED>20260906<TRNAMT>-50<FITID>auto-2<NAME>Transfer to xx6486</STMTTRN>"
+            + "</BANKTRANLIST></OFX>";
+        using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(file));
+        await scope.ServiceProvider.GetRequiredService<Finyte.Data.Imports.TransactionFileImportService>().Import(tenantId, offset.Id, "test.ofx", stream, default);
+        Assert.Equal("12345555", (await db.Accounts.SingleAsync(x => x.Id == offset.Id)).AccountNumber);
+        var savings = await db.Accounts.SingleAsync(x => x.Name == "Savings");
+        var imported = await db.Transactions.Where(x => x.AccountId == offset.Id).ToListAsync();
+        Assert.Equal(savings.Id, imported.Single(x => x.Amount == -50).InternalTransferAccountId);
+        Assert.Null(imported.Single(x => x.Amount == -12.34m).InternalTransferAccountId);
+        Assert.Equal(2, (await db.TransactionFileImports.SingleAsync()).ImportedCount);
     }
 
     private static async Task<Guid> Seed(FinyteApiFactory factory, HttpClient client)
@@ -203,10 +132,10 @@ public sealed class MiscAutomationTests
         db.BillingCustomers.Add(customer);
         db.BillingSubscriptions.Add(new BillingSubscription { TenantId = tenantId, BillingCustomer = customer, StripeCustomerId = customer.StripeCustomerId,
             StripeSubscriptionId = $"sub_{tenantId:N}", StripePriceId = "test", Status = "active", CurrentPeriodEnd = DateTimeOffset.UtcNow.AddDays(30) });
-        var main = new Account { TenantId = tenantId, Name = "Main" };
-        var savings = new Account { TenantId = tenantId, Name = "Savings" };
+        var main = new Account { TenantId = tenantId, Name = "Main", AccountNumber = "12340449" };
+        var savings = new Account { TenantId = tenantId, Name = "Savings", AccountNumber = "12346486" };
         db.Accounts.AddRange(main, savings);
-        db.Transactions.AddRange(Row(tenantId, main.Id, -100, "Transfer to savings"), Row(tenantId, savings.Id, 100, "Transfer from main"));
+        db.Transactions.AddRange(Row(tenantId, main.Id, -100, "Transfer to xx6486 CommBank app"), Row(tenantId, savings.Id, 100, "Transfer from xx0449"));
         await db.SaveChangesAsync();
         return tenantId;
     }

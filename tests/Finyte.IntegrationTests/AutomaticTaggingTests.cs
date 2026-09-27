@@ -4,6 +4,7 @@ using Finyte.Core.ProviderSync;
 using Finyte.Core.Tenancy;
 using Finyte.Data;
 using Finyte.Data.Analytics;
+using Finyte.Data.Transfers;
 using Finyte.Data.Imports;
 using Finyte.Data.ProviderSync;
 using Finyte.Data.Tagging;
@@ -44,12 +45,12 @@ public sealed class AutomaticTaggingTests
         await dbContext.SaveChangesAsync();
         var tagService = new TransactionTagService(dbContext);
         var client = new StubFiskilBankingClient { Transactions = [ProviderTransaction("Coffee Brisbane")] };
-        var syncService = new FiskilBankingSyncService(dbContext, client, tagService);
+        var syncService = new FiskilBankingSyncService(dbContext, client, tagService, new InternalTransferService(dbContext, new ProjectionInvalidator(dbContext)));
         var syncRun = new ProviderSyncRun { TenantId = tenant.Id, EndUserId = "end-user" };
 
         Assert.True((await syncService.SyncTransactions(syncRun, CancellationToken.None)).HasChanges);
         Assert.False((await syncService.SyncTransactions(syncRun, CancellationToken.None)).HasChanges);
-        var importService = new TransactionFileImportService(dbContext, new ProjectionInvalidator(dbContext), tagService);
+        var importService = new TransactionFileImportService(dbContext, new ProjectionInvalidator(dbContext), tagService, new InternalTransferService(dbContext, new ProjectionInvalidator(dbContext)));
         const string content = "<OFX><BANKTRANLIST><STMTTRN><DTPOSTED>20260908<TRNAMT>-4.50<FITID>coffee-one<NAME>Coffee Brisbane</STMTTRN></BANKTRANLIST></OFX>";
         using var firstStream = new MemoryStream(Encoding.UTF8.GetBytes(content));
         await importService.Import(tenant.Id, importAccount.Id, "transactions.ofx", firstStream, CancellationToken.None);
@@ -91,7 +92,7 @@ public sealed class AutomaticTaggingTests
         await dbContext.SaveChangesAsync();
         var tagService = new TransactionTagService(dbContext);
         var client = new StubFiskilBankingClient { Transactions = [ProviderTransaction("Coffee")] };
-        var service = new FiskilBankingSyncService(dbContext, client, tagService);
+        var service = new FiskilBankingSyncService(dbContext, client, tagService, new InternalTransferService(dbContext, new ProjectionInvalidator(dbContext)));
         var syncRun = new ProviderSyncRun { TenantId = tenantId, EndUserId = "end-user" };
         await service.SyncTransactions(syncRun, CancellationToken.None);
         var transaction = await dbContext.Transactions.SingleAsync();

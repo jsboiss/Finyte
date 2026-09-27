@@ -6,7 +6,7 @@ Budgets are family-owned spending limits, available at `/budgets` with an active
 
 - A budget has exactly one currency. Only transactions with that currency count, even when their account reports a different currency. No exchange-rate conversion occurs.
 - Actual spending is the positive total of negative, dated, posted transactions through the current UTC calendar day. Legacy null/empty statuses count as posted, consistent with other Finyte analytics. Pending, undated, future-dated, zero and positive transactions do not count. Credits are not inferred to be refunds.
-- Valid confirmed internal transfers are excluded using the shared transfer query. A stale confirmation stops excluding the corrected transaction until reviewed again.
+- Internal transfers are excluded by the row's `InternalTransferAccountId` (see [internal transfers](internal-transfers.md)).
 - `matchMode: all` explicitly means all eligible spending. `selected` matches exact primary or secondary category names (case insensitive), **or** any selected tag. A transaction matching several categories/tags counts once. Category matching is not a merchant or substring search.
 - `accountScope: analytics` follows account preferences, including accounts added later. `selected` counts only those accounts, overriding their combined-analytics preference as direct account views do. Transaction currency filtering still applies.
 - Deleted tag/account links cascade away, while the explicit scope persists. Deleting the last selected tag or account cannot broaden a budget to all transactions. A now-empty selection counts nothing and the UI explains why.

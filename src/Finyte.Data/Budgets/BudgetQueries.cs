@@ -19,7 +19,7 @@ public static class BudgetQueries
             .Where(x => x.TenantId == budget.TenantId && accountIds.Contains(x.AccountId)
                 && (includeOtherCurrencies || x.Currency == budget.Currency) && x.Amount < 0 && x.PostedAt != null && x.PostedAt < observedUntil
                 && (x.Status == null || x.Status == "" || x.Status.ToLower() == "posted"))
-            .ExcludeInternalTransfers(dbContext, budget.TenantId);
+            .ExcludeInternalTransfers();
         if (budget.MatchMode == "selected")
         {
             var categories = budget.Categories.Select(x => x.ToLowerInvariant()).ToArray();
