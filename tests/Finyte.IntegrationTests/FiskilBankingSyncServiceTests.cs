@@ -69,6 +69,38 @@ public sealed class FiskilBankingSyncServiceTests
     }
 
     [Fact]
+    public async Task SyncStoresAndUpdatesMerchantCodeCategoryConfidenceAndPaymentType()
+    {
+        await using var dbContext = CreateDbContext();
+        var tenantId = Guid.NewGuid();
+        var account = new Account { TenantId = tenantId, FiskilAccountId = "account-1", Name = "Everyday", CreatedAt = DateTimeOffset.UtcNow };
+        var syncRun = CreateSyncRun(tenantId, ProviderSyncDataset.Transactions);
+        dbContext.Accounts.Add(account);
+        dbContext.ProviderSyncRuns.Add(syncRun);
+        await dbContext.SaveChangesAsync();
+        var postedAt = new DateTimeOffset(2026, 9, 26, 23, 43, 0, TimeSpan.Zero);
+        var client = new StubFiskilBankingClient
+        {
+            Transactions =
+            [
+                new FiskilTransactionData("bank_tx_1", "account-1", -155m, "AUD", "PAYMENT TO SYNERGY", "POSTED", postedAt, postedAt,
+                    "RENT_AND_UTILITIES", "RENT_AND_UTILITIES_GAS_AND_ELECTRICITY", "Synergy", null, "{}", "4900", "MEDIUM", "PAYMENT")
+            ]
+        };
+        var service = new FiskilBankingSyncService(dbContext, client, new TransactionTagService(dbContext),
+            new InternalTransferService(dbContext, new ProjectionInvalidator(dbContext, TestCalendar.Tenants(dbContext)), TestCalendar.Tenants(dbContext)));
+
+        await service.SyncTransactions(syncRun, CancellationToken.None);
+        var stored = await dbContext.Transactions.SingleAsync();
+        Assert.Equal(("4900", "MEDIUM", "PAYMENT"), (stored.MerchantCategoryCode, stored.CategoryConfidence, stored.PaymentType));
+
+        client.Transactions = [client.Transactions.Single() with { CategoryConfidence = "VERY_HIGH", PaymentType = "DIRECT_DEBIT" }];
+        Assert.True((await service.SyncTransactions(syncRun, CancellationToken.None)).HasChanges);
+        stored = await dbContext.Transactions.SingleAsync();
+        Assert.Equal(("VERY_HIGH", "DIRECT_DEBIT"), (stored.CategoryConfidence, stored.PaymentType));
+    }
+
+    [Fact]
     public async Task SyncBalancesUpdatesExistingAccounts()
     {
         await using var dbContext = CreateDbContext();

@@ -58,7 +58,10 @@ public sealed record FiskilTransactionData(
     string? SecondaryCategory,
     string? MerchantName,
     string? Reference,
-    string RawJson);
+    string RawJson,
+    string? MerchantCategoryCode = null,
+    string? CategoryConfidence = null,
+    string? PaymentType = null);
 
 public sealed class FiskilBankingClient(
     HttpClient httpClient,
@@ -223,7 +226,10 @@ public sealed class FiskilBankingClient(
             GetString(category, "secondary_category"),
             GetString(x, "merchant_name"),
             GetString(x, "reference"),
-            x.GetRawText());
+            x.GetRawText(),
+            GetString(x, "merchant_category_code"),
+            GetString(category, "confidence_level"),
+            GetString(x, "type"));
     }
 
     private static string GetRequiredString(JsonElement x, string propertyName)

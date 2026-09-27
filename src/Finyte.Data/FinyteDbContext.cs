@@ -229,6 +229,12 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
 
             x.Property(y => y.SecondaryCategory)
                 .HasMaxLength(128);
+            x.Property(y => y.CategoryConfidence)
+                .HasMaxLength(32);
+            x.Property(y => y.MerchantCategoryCode)
+                .HasMaxLength(8);
+            x.Property(y => y.PaymentType)
+                .HasMaxLength(32);
 
             x.Property(y => y.MerchantName)
                 .HasMaxLength(256);
