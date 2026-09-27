@@ -1,0 +1,7 @@
+.coming-up-list { display: grid; }
+.coming-up-list li { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 10px 0; border-top: 1px solid #333d39; }
+.coming-up-list li:first-child { border-top: 0; }
+.coming-up-list time, .coming-up-list small { color: #aab4b0; font-size: 13px; }
+.coming-up-list span { display: grid; min-width: 0; }
+.coming-up-list strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.coming-up-amount { font-weight: 650; }

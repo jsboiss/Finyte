@@ -52,6 +52,7 @@ public static class RecurringPaymentEndpoints
         group.MapPost("/", Create).WithName("CreateRecurringPayment");
         group.MapGet("/discovery", Discover).WithName("DiscoverRecurringPayments");
         group.MapPost("/discovery/decisions", DiscoveryDecision).WithName("ReviewRecurringDiscovery");
+        group.MapGet("/upcoming", Upcoming).WithName("GetUpcomingRecurringPayments");
         group.MapPut("/{seriesId:guid}", Update).WithName("UpdateRecurringPayment");
         group.MapGet("/{seriesId:guid}/occurrences", Occurrences).WithName("GetRecurringOccurrences");
         group.MapGet("/{seriesId:guid}/transactions", Candidates).WithName("GetRecurringCandidates");
@@ -61,19 +62,22 @@ public static class RecurringPaymentEndpoints
         return app;
     }
 
-    private static async Task<IResult> List(DateOnly? from, DateOnly? to, HttpContext httpContext, RecurringPaymentService service, TenantCalendars calendars, CancellationToken cancellationToken)
+    private static async Task<IResult> List(DateOnly? from, DateOnly? to, Guid? accountId, HttpContext httpContext, RecurringPaymentService service, TenantCalendars calendars, CancellationToken cancellationToken)
     {
         var today = (await calendars.For(Tenant(httpContext).TenantId, cancellationToken)).Today;
-        return Results.Ok(await service.List(Tenant(httpContext).TenantId, from ?? today.AddDays(-1096), to ?? today.AddDays(366), cancellationToken));
+        return Results.Ok(await service.List(Tenant(httpContext).TenantId, from ?? today.AddDays(-1096), to ?? today.AddDays(366), cancellationToken, accountId));
     }
 
-    private static async Task<IResult> Discover(DateOnly? from, DateOnly? to, int? page, int? pageSize, bool? dismissed, Guid? accountId, string? search, string? cadence, string? sort, HttpContext httpContext,
+    private static async Task<IResult> Discover(DateOnly? from, DateOnly? to, int? page, int? pageSize, bool? dismissed, Guid? accountId, string? search, string? cadence, string? sort, bool? hideEnded, HttpContext httpContext,
         RecurringPaymentService service, TenantCalendars calendars, CancellationToken cancellationToken)
     {
         var today = (await calendars.For(Tenant(httpContext).TenantId, cancellationToken)).Today;
         return Results.Ok(await service.Discover(Tenant(httpContext).TenantId, from ?? today.AddDays(-1096), to ?? today,
-            page ?? 1, pageSize ?? 20, dismissed ?? false, cancellationToken, accountId, search, cadence, sort));
+            page ?? 1, pageSize ?? 20, dismissed ?? false, cancellationToken, accountId, search, cadence, sort, hideEnded ?? false));
     }
+
+    private static async Task<IResult> Upcoming(int? days, Guid? accountId, HttpContext httpContext, RecurringPaymentService service, CancellationToken cancellationToken) =>
+        Results.Ok(await service.Upcoming(Tenant(httpContext).TenantId, days ?? 7, accountId, cancellationToken));
 
     private static async Task<IResult> DiscoveryDecision(RecurringDiscoveryDecisionRequest request, HttpContext httpContext, RecurringPaymentService service, CancellationToken cancellationToken)
     {
