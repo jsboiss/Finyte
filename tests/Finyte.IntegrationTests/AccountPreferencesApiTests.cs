@@ -209,8 +209,8 @@ public sealed class AccountPreferencesApiTests
             StripeSubscriptionId = $"sub_{tenantId:N}", StripePriceId = "price_test", Status = "active",
             CurrentPeriodEnd = now.AddDays(30), CreatedAt = now, UpdatedAt = now
         });
-        var account = new Account { TenantId = tenantId, Name = "Unclassified loan", CurrentBalance = -20000, CreatedAt = now };
-        var everyday = new Account { TenantId = tenantId, Name = "Everyday", CurrentBalance = 1000, CreatedAt = now };
+        var account = new Account { TenantId = tenantId, Name = "Unclassified loan", CurrentBalance = -20000, BalanceAsOf = now.AddMinutes(1), CreatedAt = now };
+        var everyday = new Account { TenantId = tenantId, Name = "Everyday", CurrentBalance = 1000, BalanceAsOf = now.AddMinutes(1), CreatedAt = now };
         dbContext.Accounts.AddRange(account, everyday);
         dbContext.Transactions.AddRange(
             new Transaction { TenantId = tenantId, Account = account, FiskilTransactionId = Guid.NewGuid().ToString(), Amount = -300, Currency = "AUD", Status = "posted", PostedAt = new DateTimeOffset(2026, 9, 2, 0, 0, 0, TimeSpan.Zero), CreatedAt = now },
