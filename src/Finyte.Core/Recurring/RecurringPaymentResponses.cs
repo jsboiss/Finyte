@@ -33,4 +33,7 @@ public sealed record RecurringReviewResponse(Guid Id, Guid TransactionId, DateOn
     string CurrentStatus, RecurringTransactionEvidence? CurrentTransaction, string ReviewedByUserId, DateTimeOffset ReviewedAt);
 public sealed record RecurringReviewPage(IReadOnlyList<RecurringReviewResponse> Items, int TotalCount, int Page, int PageSize);
 
+public sealed record RecurringUpcomingItem(Guid SeriesId, string Name, string Kind, Guid AccountId, string AccountName, string Currency, DateOnly Date, decimal ExpectedAmount);
+public sealed record RecurringUpcomingPage(IReadOnlyList<RecurringUpcomingItem> Items, int ActiveSeriesCount);
+
 public sealed class RecurringConflictException(string message) : Exception(message);

@@ -51,6 +51,7 @@ public static class RecurringPaymentEndpoints
         group.MapPost("/", Create).WithName("CreateRecurringPayment");
         group.MapGet("/discovery", Discover).WithName("DiscoverRecurringPayments");
         group.MapPost("/discovery/decisions", DiscoveryDecision).WithName("ReviewRecurringDiscovery");
+        group.MapGet("/upcoming", Upcoming).WithName("GetUpcomingRecurringPayments");
         group.MapPut("/{seriesId:guid}", Update).WithName("UpdateRecurringPayment");
         group.MapGet("/{seriesId:guid}/occurrences", Occurrences).WithName("GetRecurringOccurrences");
         group.MapGet("/{seriesId:guid}/transactions", Candidates).WithName("GetRecurringCandidates");
@@ -73,6 +74,9 @@ public static class RecurringPaymentEndpoints
         return Results.Ok(await service.Discover(Tenant(httpContext).TenantId, from ?? today.AddDays(-1096), to ?? today,
             page ?? 1, pageSize ?? 20, dismissed ?? false, cancellationToken, accountId, search, cadence, sort, hideEnded ?? false));
     }
+
+    private static async Task<IResult> Upcoming(int? days, Guid? accountId, HttpContext httpContext, RecurringPaymentService service, CancellationToken cancellationToken) =>
+        Results.Ok(await service.Upcoming(Tenant(httpContext).TenantId, days ?? 7, accountId, cancellationToken));
 
     private static async Task<IResult> DiscoveryDecision(RecurringDiscoveryDecisionRequest request, HttpContext httpContext, RecurringPaymentService service, CancellationToken cancellationToken)
     {

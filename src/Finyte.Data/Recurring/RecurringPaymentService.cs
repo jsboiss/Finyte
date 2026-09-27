@@ -286,6 +286,32 @@ public sealed class RecurringPaymentService(FinyteDbContext dbContext, TimeProvi
         return new RecurringReviewPage(items, count, page, pageSize);
     }
 
+    public async Task<RecurringUpcomingPage> Upcoming(Guid tenantId, int days, Guid? accountId, CancellationToken cancellationToken)
+    {
+        if (days is < 1 or > 31)
+        {
+            throw new ArgumentException("Choose between 1 and 31 days.");
+        }
+        await using var snapshot = await ReadSnapshot(cancellationToken);
+        var series = await dbContext.RecurringPaymentSeries.AsNoTracking().Include(x => x.Aliases)
+            .Where(x => x.TenantId == tenantId && x.State == "active" && (accountId == null || x.AccountId == accountId)).ToListAsync(cancellationToken);
+        var accountNames = await dbContext.Accounts.AsNoTracking().Where(x => x.TenantId == tenantId)
+            .ToDictionaryAsync(x => x.Id, x => x.CustomName ?? x.Name, cancellationToken);
+        var items = new List<RecurringUpcomingItem>();
+        foreach (var item in series)
+        {
+            foreach (var occurrence in await OccurrenceRows(item, Today, Today.AddDays(days - 1), cancellationToken))
+            {
+                if (occurrence.Status is "upcoming" or "due")
+                {
+                    items.Add(new RecurringUpcomingItem(item.Id, item.Name, item.Kind, item.AccountId,
+                        accountNames.GetValueOrDefault(item.AccountId, "Account unavailable"), item.Currency, occurrence.Date, item.ExpectedAmount));
+                }
+            }
+        }
+        return new RecurringUpcomingPage(items.OrderBy(x => x.Date).ThenBy(x => x.Name).ToList(), series.Count);
+    }
+
     private async Task ApplyDecision(RecurringPaymentSeries series, string userId, RecurringDecisionRequest request, CancellationToken cancellationToken)
     {
         var decision = await dbContext.RecurringPaymentDecisions.SingleOrDefaultAsync(x => x.TenantId == series.TenantId && x.SeriesId == series.Id
