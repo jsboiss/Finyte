@@ -1,4 +1,5 @@
 import { Drawer } from './shared/Drawer'
+import { SandboxSync } from './SandboxSync'
 import { Help } from './shared/Help'
 import { HouseholdSharingSummary } from './shared/HouseholdSharing'
 import { CreateOrganization, OrganizationSwitcher, SignIn, UserButton, useAuth, useOrganization } from '@clerk/react'
@@ -910,6 +911,7 @@ function ConnectionsPage() {
         </div>
         {connectionError && <p role="alert">{connectionError}</p>}
       </section></Drawer>}
+      {import.meta.env.DEV && <SandboxSync />}
       <section className="panel connection-list">
         <div className="panel-header">
           <div>

@@ -5,7 +5,7 @@ import { DashboardModuleFrame } from '../components/DashboardModuleFrame'
 import './ComingUpModule.css'
 
 export function ComingUpModule({ accountIds }: { accountIds: string[] | null }) {
-  const upcoming = useQuery({ queryKey: ['recurring', 'upcoming', 7, ''], queryFn: () => getUpcoming(7), staleTime: 60_000 })
+  const upcoming = useQuery({ queryKey: ['recurring', 'upcoming', { days: 7 }, ''], queryFn: () => getUpcoming({ days: 7 }), staleTime: 60_000 })
   const items = (upcoming.data?.items ?? []).filter(x => accountIds === null || accountIds.includes(x.accountId))
   if (upcoming.isError) {
     return <DashboardModuleFrame eyebrow="Next 7 days" title="Coming up"><p role="alert">Unable to load recurring payments.</p></DashboardModuleFrame>

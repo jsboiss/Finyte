@@ -14,7 +14,7 @@ public sealed record RecurringTransactionEvidence(Guid Id, Guid AccountId, strin
 public sealed record RecurringSeriesResponse(Guid Id, string Name, Guid AccountId, string AccountName, string Currency, string Cadence,
     DateOnly AnchorDate, decimal ExpectedAmount, string AmountMode, string State, int Version, IReadOnlyList<RecurringAliasResponse> Aliases,
     DateOnly? NextDueDate, string NextDueStatus, int NeedsReviewCount,
-    string Kind = "subscription", decimal? LastPaidAmount = null, DateOnly? LastPaidDate = null, bool PriceChanged = false, DateOnly? MissedOccurrenceDate = null);
+    string Kind = "subscription", decimal? LastPaidAmount = null, DateOnly? LastPaidDate = null, bool PriceChanged = false, DateOnly? MissedOccurrenceDate = null, DateOnly? NextExpectedDate = null);
 public sealed record RecurringCostSummary(string Currency, decimal MonthlyEstimate, decimal AnnualEstimate, int ActiveSeriesCount, int VariableSeriesCount,
     decimal SubscriptionMonthlyEstimate = 0, decimal BillMonthlyEstimate = 0);
 public sealed record RecurringSeriesList(IReadOnlyList<RecurringSeriesResponse> Items, IReadOnlyList<RecurringCostSummary> Costs, DateOnly From, DateOnly To);
@@ -34,6 +34,7 @@ public sealed record RecurringReviewResponse(Guid Id, Guid TransactionId, DateOn
 public sealed record RecurringReviewPage(IReadOnlyList<RecurringReviewResponse> Items, int TotalCount, int Page, int PageSize);
 
 public sealed record RecurringUpcomingItem(Guid SeriesId, string Name, string Kind, Guid AccountId, string AccountName, string Currency, DateOnly Date, decimal ExpectedAmount);
-public sealed record RecurringUpcomingPage(IReadOnlyList<RecurringUpcomingItem> Items, int ActiveSeriesCount);
+public sealed record RecurringUpcomingTotal(string Currency, decimal Amount, int Count);
+public sealed record RecurringUpcomingPage(IReadOnlyList<RecurringUpcomingItem> Items, int ActiveSeriesCount, DateOnly? To = null, IReadOnlyList<RecurringUpcomingTotal>? Totals = null);
 
 public sealed class RecurringConflictException(string message) : Exception(message);
