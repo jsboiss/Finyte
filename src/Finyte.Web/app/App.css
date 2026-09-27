@@ -2409,3 +2409,5 @@ td {
 .transaction-amount-allocated { display: grid; gap: 2px; justify-items: end; }
 .transaction-amount-allocated small { color: #9aa0a6; font-size: 11px; white-space: nowrap; }
 .tag-allocation-note { color: #9aa0a6; font-size: 12px; margin: 0 0 4px; }
+.tag-always-rule { display: grid; gap: 6px; font-size: 13px; overflow-wrap: anywhere; }
+.tag-always-rule select { min-height: 34px; }

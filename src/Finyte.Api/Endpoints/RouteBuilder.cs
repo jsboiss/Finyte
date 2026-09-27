@@ -22,6 +22,7 @@ public static class RouteBuilder
         app.MapPayCycleEndpoints();
         app.MapBudgetEndpoints();
         app.MapRecurringPaymentEndpoints();
+        app.MapTagSuggestionEndpoints();
 
         return app;
     }
