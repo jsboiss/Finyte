@@ -18,26 +18,29 @@ public sealed class RecurringPaymentService(FinyteDbContext dbContext, TimeProvi
     private static DateOnly MinimumDate { get; } = new(1900, 1, 1);
     private static DateOnly MaximumDate { get; } = new(9998, 12, 31);
 
-    public async Task<RecurringSeriesList> List(Guid tenantId, DateOnly from, DateOnly to, CancellationToken cancellationToken)
+    public async Task<RecurringSeriesList> List(Guid tenantId, DateOnly from, DateOnly to, CancellationToken cancellationToken, Guid? accountId = null)
     {
         ValidateRange(from, to);
         var calendar = await calendars.For(tenantId, cancellationToken);
         await using var snapshot = await ReadSnapshot(cancellationToken);
         var series = await dbContext.RecurringPaymentSeries.AsNoTracking().Include(x => x.Aliases)
-            .Where(x => x.TenantId == tenantId).OrderBy(x => x.Name).ThenBy(x => x.Id).ToListAsync(cancellationToken);
+            .Where(x => x.TenantId == tenantId && (accountId == null || x.AccountId == accountId)).OrderBy(x => x.Name).ThenBy(x => x.Id).ToListAsync(cancellationToken);
+        var importedThrough = await ImportedThrough(tenantId, accountId, cancellationToken);
         var items = new List<RecurringSeriesResponse>();
         foreach (var item in series)
         {
-            items.Add(await Summary(item, calendar, from, to, cancellationToken));
+            items.Add(await Summary(item, calendar, from, to, cancellationToken, importedThrough));
         }
         var costs = series.Where(x => x.State == "active").GroupBy(x => x.Currency)
             .Select(x => new RecurringCostSummary(x.Key, decimal.Round(x.Sum(y => AnnualCost(y)) / 12, 2),
-                decimal.Round(x.Sum(y => AnnualCost(y)), 2), x.Count(), x.Count(y => y.AmountMode == "variable")))
+                decimal.Round(x.Sum(y => AnnualCost(y)), 2), x.Count(), x.Count(y => y.AmountMode == "variable"),
+                decimal.Round(x.Where(y => y.Kind == "subscription").Sum(y => AnnualCost(y)) / 12, 2),
+                decimal.Round(x.Where(y => y.Kind == "bill").Sum(y => AnnualCost(y)) / 12, 2)))
             .OrderBy(x => x.Currency).ToList();
         return new RecurringSeriesList(items, costs, from, to);
     }
 
-    public async Task<RecurringDiscoveryPage> Discover(Guid tenantId, DateOnly from, DateOnly to, int page, int pageSize, bool dismissed, CancellationToken cancellationToken, Guid? accountId = null, string? search = null, string? cadence = null, string? sort = null)
+    public async Task<RecurringDiscoveryPage> Discover(Guid tenantId, DateOnly from, DateOnly to, int page, int pageSize, bool dismissed, CancellationToken cancellationToken, Guid? accountId = null, string? search = null, string? cadence = null, string? sort = null, bool hideEnded = false)
     {
         ValidateRange(from, to);
         ValidatePage(page, pageSize);
@@ -64,18 +67,20 @@ public sealed class RecurringPaymentService(FinyteDbContext dbContext, TimeProvi
         var decisions = await dbContext.RecurringDiscoveryDecisions.AsNoTracking().Where(x => x.TenantId == tenantId)
             .Select(x => x.CandidateKey).ToHashSetAsync(cancellationToken);
         var patterns = RecurringPatternDetector.Detect(rows.Select(x => new RecurringPatternTransaction(x.Id, x.AccountId, x.Currency,
-            x.Amount, calendar.ToDate(x.PostedAt!.Value), x.MerchantName, x.Description, x.Reference)).ToList());
+            x.Amount, calendar.ToDate(x.PostedAt!.Value), x.MerchantName, x.Description, x.Reference)).ToList(),
+            new RecurringDetectionOptions(IncludeEarly: true, AsOf: to < calendar.Today ? to : calendar.Today));
         var filtered = patterns.Where(x => decisions.Contains(x.Key) == dismissed
+            && (!hideEnded || !x.IsEnded)
             && (string.IsNullOrWhiteSpace(search) || x.Name.Contains(search.Trim(), StringComparison.OrdinalIgnoreCase))
             && (cadence is null || x.Cadence == cadence));
         var candidates = (sort == "amount"
-            ? filtered.OrderBy(x => x.Currency).ThenByDescending(x => x.ExpectedAmount).ThenBy(x => x.Key)
-            : filtered.OrderBy(x => x.Name).ThenBy(x => x.Key)).ToList();
+            ? filtered.OrderBy(x => x.IsEnded).ThenBy(x => x.Currency).ThenByDescending(x => x.ExpectedAmount).ThenBy(x => x.Key)
+            : filtered.OrderBy(x => x.IsEnded).ThenBy(x => x.Name).ThenBy(x => x.Key)).ToList();
         var byId = rows.ToDictionary(x => x.Id);
         var items = candidates.Skip((page - 1) * pageSize).Take(pageSize).Select(x => new RecurringDiscoveryResponse(x.Key,
             x.Name, x.AccountId, AccountName(byId[x.TransactionIds[0]]), x.Currency, x.Cadence, x.AnchorDate, x.ExpectedAmount,
             x.AliasField, x.AliasValue, x.TransactionIds.Select(y => new RecurringDiscoveryTransaction(Evidence(byId[y], calendar),
-                RecurringCalendar.Resolve(x.Cadence, x.AnchorDate, calendar.ToDate(byId[y].PostedAt!.Value)).Date)).ToList(), x.Evidence, dismissed)).ToList();
+                RecurringCalendar.Resolve(x.Cadence, x.AnchorDate, calendar.ToDate(byId[y].PostedAt!.Value)).Date)).ToList(), x.Evidence, dismissed, x.IsEarly, x.IsEnded, SuggestedKind(x.AliasValue))).ToList();
         return new RecurringDiscoveryPage(items, candidates.Count, page, pageSize, from, to);
     }
 
@@ -101,6 +106,7 @@ public sealed class RecurringPaymentService(FinyteDbContext dbContext, TimeProvi
     public async Task<RecurringSeriesResponse> Create(Guid tenantId, string userId, CreateRecurringRequest request, CancellationToken cancellationToken)
     {
         ValidateSettings(request.Name, request.Cadence, request.AnchorDate, request.ExpectedAmount, request.AmountMode, "active");
+        ValidateKind(request.Kind);
         if (request.AccountId == Guid.Empty || string.IsNullOrWhiteSpace(request.Currency) || request.Currency.Length != 3
             || !request.Currency.All(x => char.IsAsciiLetter(x)) || request.History?.Count > 300 || request.Aliases?.Count > 20
             || request.History?.Any(x => x is null) == true || request.Aliases?.Any(x => x is null) == true)
@@ -124,7 +130,7 @@ public sealed class RecurringPaymentService(FinyteDbContext dbContext, TimeProvi
         {
             TenantId = tenantId, AccountId = account.Id, Currency = currency, Name = request.Name.Trim(), Cadence = request.Cadence,
             AnchorDate = request.AnchorDate, ExpectedAmount = request.ExpectedAmount, AmountMode = request.AmountMode,
-            CreatedAt = timeProvider.GetUtcNow(), UpdatedAt = timeProvider.GetUtcNow()
+            Kind = request.Kind ?? "subscription", CreatedAt = timeProvider.GetUtcNow(), UpdatedAt = timeProvider.GetUtcNow()
         };
         foreach (var alias in request.Aliases ?? [])
         {
@@ -143,6 +149,7 @@ public sealed class RecurringPaymentService(FinyteDbContext dbContext, TimeProvi
     public async Task<RecurringSeriesResponse> Update(Guid tenantId, Guid seriesId, UpdateRecurringRequest request, CancellationToken cancellationToken)
     {
         ValidateSettings(request.Name, request.Cadence, request.AnchorDate, request.ExpectedAmount, request.AmountMode, request.State);
+        ValidateKind(request.Kind);
         await using var transaction = await WriteLock(tenantId, [], cancellationToken);
         var series = await Find(tenantId, seriesId, cancellationToken);
         CheckVersion(series, request.ExpectedVersion);
@@ -152,6 +159,7 @@ public sealed class RecurringPaymentService(FinyteDbContext dbContext, TimeProvi
         series.ExpectedAmount = request.ExpectedAmount;
         series.AmountMode = request.AmountMode;
         series.State = request.State;
+        series.Kind = request.Kind ?? series.Kind;
         Changed(series);
         await Save(transaction, cancellationToken);
         var calendar = await calendars.For(tenantId, cancellationToken);
@@ -289,6 +297,54 @@ public sealed class RecurringPaymentService(FinyteDbContext dbContext, TimeProvi
         return new RecurringReviewPage(items, count, page, pageSize);
     }
 
+    public async Task<RecurringUpcomingPage> Upcoming(Guid tenantId, int? days, DateOnly? until, Guid? payCycleId, Guid? accountId, CancellationToken cancellationToken)
+    {
+        var calendar = await calendars.For(tenantId, cancellationToken);
+        DateOnly end;
+        if (payCycleId is { } profileId)
+        {
+            var profile = await dbContext.PayCycleProfiles.AsNoTracking().SingleOrDefaultAsync(x => x.TenantId == tenantId && x.Id == profileId, cancellationToken)
+                ?? throw new KeyNotFoundException("Pay cycle not found.");
+            end = Finyte.Core.PayCycles.PayCycleCalendar.Resolve(profile.Frequency, profile.AnchorDate, calendar.Today).ToExclusive.AddDays(-1);
+        }
+        else if (until is { } date)
+        {
+            end = date;
+        }
+        else
+        {
+            if (days is < 1 or > 31)
+            {
+                throw new ArgumentException("Choose between 1 and 31 days.");
+            }
+            end = calendar.Today.AddDays((days ?? 7) - 1);
+        }
+        if (end < calendar.Today || end > calendar.Today.AddDays(62))
+        {
+            throw new ArgumentException("Choose a date from today up to 62 days ahead.");
+        }
+        await using var snapshot = await ReadSnapshot(cancellationToken);
+        var series = await dbContext.RecurringPaymentSeries.AsNoTracking().Include(x => x.Aliases)
+            .Where(x => x.TenantId == tenantId && x.State == "active" && (accountId == null || x.AccountId == accountId)).ToListAsync(cancellationToken);
+        var accountNames = await dbContext.Accounts.AsNoTracking().Where(x => x.TenantId == tenantId)
+            .ToDictionaryAsync(x => x.Id, x => x.CustomName ?? x.Name, cancellationToken);
+        var items = new List<RecurringUpcomingItem>();
+        foreach (var item in series)
+        {
+            foreach (var occurrence in await OccurrenceRows(item, calendar, calendar.Today, end, cancellationToken))
+            {
+                if (occurrence.Status is "upcoming" or "due")
+                {
+                    items.Add(new RecurringUpcomingItem(item.Id, item.Name, item.Kind, item.AccountId,
+                        accountNames.GetValueOrDefault(item.AccountId, "Account unavailable"), item.Currency, occurrence.Date, item.ExpectedAmount));
+                }
+            }
+        }
+        var totals = items.GroupBy(x => x.Currency).OrderBy(x => x.Key)
+            .Select(x => new RecurringUpcomingTotal(x.Key, x.Sum(y => y.ExpectedAmount), x.Count())).ToList();
+        return new RecurringUpcomingPage(items.OrderBy(x => x.Date).ThenBy(x => x.Name).ToList(), series.Count, end, totals);
+    }
+
     private async Task ApplyDecision(RecurringPaymentSeries series, string userId, RecurringDecisionRequest request, FinancialCalendar calendar, CancellationToken cancellationToken)
     {
         var decision = await dbContext.RecurringPaymentDecisions.SingleOrDefaultAsync(x => x.TenantId == series.TenantId && x.SeriesId == series.Id
@@ -383,17 +439,33 @@ public sealed class RecurringPaymentService(FinyteDbContext dbContext, TimeProvi
         }
     }
 
-    private async Task<RecurringSeriesResponse> Summary(RecurringPaymentSeries series, FinancialCalendar calendar, DateOnly from, DateOnly to, CancellationToken cancellationToken)
+    private async Task<Dictionary<Guid, DateTimeOffset?>> ImportedThrough(Guid tenantId, Guid? accountId, CancellationToken cancellationToken) =>
+        await dbContext.Transactions.AsNoTracking()
+            .Where(x => x.TenantId == tenantId && x.PostedAt != null && (accountId == null || x.AccountId == accountId))
+            .GroupBy(x => x.AccountId)
+            .Select(x => new { AccountId = x.Key, Through = x.Max(y => y.PostedAt) })
+            .ToDictionaryAsync(x => x.AccountId, x => x.Through, cancellationToken);
+
+    private async Task<RecurringSeriesResponse> Summary(RecurringPaymentSeries series, FinancialCalendar calendar, DateOnly from, DateOnly to, CancellationToken cancellationToken,
+        IReadOnlyDictionary<Guid, DateTimeOffset?>? importedThrough = null)
     {
         var accountName = await dbContext.Accounts.AsNoTracking().Where(x => x.TenantId == series.TenantId && x.Id == series.AccountId)
             .Select(x => x.CustomName ?? x.Name).SingleOrDefaultAsync(cancellationToken) ?? "Account unavailable";
-        var occurrences = await OccurrenceRows(series, calendar, from, to, cancellationToken);
+        importedThrough ??= await ImportedThrough(series.TenantId, series.AccountId, cancellationToken);
+        var occurrences = await OccurrenceRows(series, calendar, from, to, cancellationToken, importedThrough);
         var next = occurrences.FirstOrDefault(x => x.Status is "needs-review" or "no-payment-found" or "due" or "upcoming");
+        var nextExpected = occurrences.FirstOrDefault(x => x.Status is "due" or "upcoming");
+        var lastPaid = occurrences.Where(x => x.Status == "paid" && x.PaidAmount is not null).MaxBy(x => x.Date);
+        var missed = series.State == "active"
+            ? occurrences.Where(x => x.Status == "no-payment-found" && x.Date >= calendar.Today.AddDays(-45)).MaxBy(x => x.Date)?.Date
+            : null;
         return new RecurringSeriesResponse(series.Id, series.Name, series.AccountId, accountName, series.Currency, series.Cadence,
             series.AnchorDate, series.ExpectedAmount, series.AmountMode, series.State, series.Version,
             series.Aliases.OrderBy(x => x.Field).ThenBy(x => x.Value).Select(x => new RecurringAliasResponse(x.Id, x.Field, x.Value)).ToList(),
             series.State == "active" ? next?.Date : null, series.State == "active" ? next?.Status ?? "none-in-range" : series.State,
-            await NeedsReviewCount(series, calendar, cancellationToken));
+            await NeedsReviewCount(series, calendar, cancellationToken), series.Kind, lastPaid?.PaidAmount, lastPaid?.Date,
+            series.AmountMode == "fixed" && lastPaid?.PaidAmount is { } paid && paid != series.ExpectedAmount, missed,
+            series.State == "active" ? nextExpected?.Date : null);
     }
 
     private async Task<int> NeedsReviewCount(RecurringPaymentSeries series, FinancialCalendar calendar, CancellationToken cancellationToken)
@@ -416,8 +488,11 @@ public sealed class RecurringPaymentService(FinyteDbContext dbContext, TimeProvi
         }
     }
 
-    private async Task<IReadOnlyList<RecurringOccurrenceResponse>> OccurrenceRows(RecurringPaymentSeries series, FinancialCalendar calendar, DateOnly from, DateOnly to, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<RecurringOccurrenceResponse>> OccurrenceRows(RecurringPaymentSeries series, FinancialCalendar calendar, DateOnly from, DateOnly to, CancellationToken cancellationToken,
+        IReadOnlyDictionary<Guid, DateTimeOffset?>? importedThrough = null)
     {
+        importedThrough ??= await ImportedThrough(series.TenantId, series.AccountId, cancellationToken);
+        var coveredThrough = importedThrough.GetValueOrDefault(series.AccountId) is { } through ? calendar.ToDate(through) : (DateOnly?)null;
         var decisions = await dbContext.RecurringPaymentDecisions.AsNoTracking().Where(x => x.TenantId == series.TenantId && x.SeriesId == series.Id
             && x.Status == "confirmed" && x.OccurrenceDate >= from && x.OccurrenceDate <= to).ToListAsync(cancellationToken);
         var ids = decisions.Select(x => x.TransactionId).ToArray();
@@ -445,7 +520,7 @@ public sealed class RecurringPaymentService(FinyteDbContext dbContext, TimeProvi
             }
             var valid = decision is not null && Valid(series, decision, row, eligible);
             var status = decision is not null ? valid ? "paid" : "needs-review"
-                : series.State != "active" ? series.State : calendar.Today > occurrence.WindowTo ? "no-payment-found"
+                : series.State != "active" ? series.State : calendar.Today > occurrence.WindowTo ? occurrence.WindowTo < coveredThrough ? "no-payment-found" : "not-imported"
                 : calendar.Today >= occurrence.WindowFrom ? "due" : "upcoming";
             return new RecurringOccurrenceResponse(x, occurrence.WindowFrom, occurrence.WindowTo, status, series.ExpectedAmount,
                 valid ? -row!.Amount : null, decision?.TransactionId);
@@ -552,6 +627,14 @@ public sealed class RecurringPaymentService(FinyteDbContext dbContext, TimeProvi
         }
     }
 
+    private static void ValidateKind(string? kind)
+    {
+        if (kind is not null and not "subscription" and not "bill")
+        {
+            throw new ArgumentException("Choose subscription or bill.");
+        }
+    }
+
     private static void ValidateOccurrence(RecurringPaymentSeries series, DateOnly date)
     {
         if (date < series.AnchorDate || date < MinimumDate || date > MaximumDate || RecurringCalendar.Resolve(series.Cadence, series.AnchorDate, date).Date != date)
@@ -564,6 +647,7 @@ public sealed class RecurringPaymentService(FinyteDbContext dbContext, TimeProvi
     {
         "weekly" => 52m, "fortnightly" => 26m, "monthly" => 12m, "quarterly" => 4m, _ => 1m
     });
+    private static string SuggestedKind(string alias) => RecurringPatternDetector.IsBillAlias(alias) ? "bill" : "subscription";
     private static DateOnly DefaultFrom(FinancialCalendar calendar) => calendar.Today.AddDays(-1096);
     private static DateOnly DefaultTo(FinancialCalendar calendar) => calendar.Today.AddDays(366);
     private static string AccountName(Transaction row) => row.Account is null ? "Account unavailable" : AccountPreferences.DisplayName(row.Account);

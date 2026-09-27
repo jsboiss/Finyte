@@ -12,6 +12,7 @@ public static class RouteBuilder
         app.MapBillingEndpoints();
         app.MapFiskilWebhookEndpoints();
         app.MapProviderConnectionEndpoints();
+        app.MapSandboxSyncEndpoints();
         app.MapBankingAccountEndpoints();
         app.MapImportEndpoints();
         app.MapInternalTransferEndpoints();

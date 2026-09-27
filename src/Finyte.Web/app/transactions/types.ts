@@ -25,9 +25,18 @@ export type Transaction = {
   internalTransferSource?: string | null
 }
 
+export type TransactionTotals = {
+  currency: string
+  moneyInMinorUnits: number
+  moneyOutMinorUnits: number
+  netMinorUnits: number
+  transactionCount: number
+}
+
 export type TransactionPage = {
   items: Transaction[]
   page: number
   pageSize: number
   totalCount: number
+  totals?: TransactionTotals[]
 }

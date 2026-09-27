@@ -119,6 +119,20 @@ public static partial class TransactionEndpoints
             query = query.Where(x => x.InternalTransferAccountId != null);
         }
         var totalCount = await query.CountAsync(cancellationToken);
+        var currencyTotals = await query.GroupBy(x => x.Currency)
+            .Select(x => new
+            {
+                Currency = x.Key,
+                MoneyIn = x.Where(y => y.Amount > 0).Sum(y => (decimal?)y.Amount) ?? 0m,
+                MoneyOut = x.Where(y => y.Amount < 0).Sum(y => (decimal?)y.Amount) ?? 0m,
+                Count = x.Count()
+            })
+            .ToListAsync(cancellationToken);
+        var totals = currencyTotals
+            .OrderBy(x => x.Currency, StringComparer.Ordinal)
+            .Select(x => new TransactionTotalsResponse(x.Currency, ToMinorUnits(x.MoneyIn), ToMinorUnits(-x.MoneyOut),
+                ToMinorUnits(x.MoneyIn + x.MoneyOut), x.Count))
+            .ToList();
         var transactions = await filters.Order(query)
             .Skip((currentPage - 1) * take)
             .Take(take)
@@ -145,7 +159,7 @@ public static partial class TransactionEndpoints
                 x.TagExclusions.Select(y => y.TagId).ToList()))
             .ToListAsync(cancellationToken);
 
-        return TypedResults.Ok(new TransactionPageResponse(transactions, currentPage, take, totalCount));
+        return TypedResults.Ok(new TransactionPageResponse(transactions, currentPage, take, totalCount, totals));
     }
 
     private static async Task<Ok<IReadOnlyList<TransactionTagResponse>>> GetTags(
@@ -533,7 +547,15 @@ public static partial class TransactionEndpoints
         IReadOnlyList<TransactionResponse> Items,
         int Page,
         int PageSize,
-        int TotalCount);
+        int TotalCount,
+        IReadOnlyList<TransactionTotalsResponse> Totals);
+
+    private sealed record TransactionTotalsResponse(
+        string Currency,
+        long MoneyInMinorUnits,
+        long MoneyOutMinorUnits,
+        long NetMinorUnits,
+        int TransactionCount);
 
     private sealed record TransactionTagResponse(Guid Id, string Name, string Color,
         string? Source = null, Guid? MerchantRuleId = null, string? MerchantRuleName = null);

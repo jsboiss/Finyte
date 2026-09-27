@@ -1,4 +1,5 @@
 import { Drawer } from './shared/Drawer'
+import { SandboxSync } from './SandboxSync'
 import { Help } from './shared/Help'
 import { HouseholdSharingSummary } from './shared/HouseholdSharing'
 import { CreateOrganization, OrganizationSwitcher, SignIn, UserButton, useAuth, useOrganization } from '@clerk/react'
@@ -23,6 +24,8 @@ import { RecurringPage } from './recurring/RecurringPage'
 import { TransactionAccountChip, TransactionAmount } from './transactions/TransactionCard'
 import { TransactionCardList } from './transactions/TransactionCardList'
 import { TransactionPagination } from './transactions/TransactionPagination'
+import { TransactionResultTotals } from './transactions/TransactionResultTotals'
+import { isAllocatedSpend, tagAllocationMinorUnits } from './transactions/tagAllocation'
 import { TransactionQuickFilters, TransactionFilterChips } from './transactions/TransactionQuickFilters'
 import { TransactionFilterForm } from './transactions/TransactionFilters'
 import { defaultTransactionFilters, readTransactionRouteSearch, transactionRouteSearch, transactionSearchParams, type TransactionFilters } from './transactions/transactionSearch'
@@ -456,6 +459,18 @@ function TransactionsPage() {
       ])
     },
   })
+  const allocationTag = filters.tagIds.length === 1
+    ? (tagsQuery.data ?? []).find(x => x.id === filters.tagIds[0])
+    : undefined
+  const allocationFor = useCallback((transaction: Transaction) => {
+    if (!allocationTag || !isAllocatedSpend(transaction.amountMinorUnits, transaction.tags.length)) {
+      return undefined
+    }
+    return {
+      minorUnits: tagAllocationMinorUnits(transaction.amountMinorUnits, transaction.tags.map(x => x.id), allocationTag.id),
+      tagName: allocationTag.name,
+    }
+  }, [allocationTag])
   const columns = useMemo(() => [
     transactionColumnHelper.accessor('postedDate', {
       header: 'Date',
@@ -494,9 +509,9 @@ function TransactionsPage() {
     }),
     transactionColumnHelper.accessor('amountMinorUnits', {
       header: 'Amount',
-      cell: x => <TransactionAmount amountMinorUnits={x.getValue()} currencyCode={x.row.original.currency} />,
+      cell: x => <TransactionAmount allocation={allocationFor(x.row.original)} amountMinorUnits={x.getValue()} currencyCode={x.row.original.currency} />,
     }),
-  ], [setTransactionTagIds, tagsQuery.data, accountsQuery.data, restoreAutomaticTagsMutation, updateTransactionTagsMutation.isPending])
+  ], [allocationFor, setTransactionTagIds, tagsQuery.data, accountsQuery.data, restoreAutomaticTagsMutation, updateTransactionTagsMutation.isPending])
   // TanStack Table intentionally returns stateful functions that React Compiler cannot memoize.
   // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
@@ -643,6 +658,7 @@ function TransactionsPage() {
 
       <TransactionCardList
         accounts={accountsQuery.data ?? []}
+        allocationFor={allocationFor}
         emptyMessage={emptyMessage}
         isLoading={isLoading}
         renderTags={x => (
@@ -678,6 +694,13 @@ function TransactionsPage() {
           </tbody>
         </table>
       </section>
+
+      <TransactionResultTotals
+        internalTransfers={filters.internalTransfers}
+        isError={transactionsQuery.isError}
+        isLoading={isLoading}
+        totals={transactionsQuery.data?.totals}
+      />
 
       <TransactionPagination
         isLoading={isLoading}
@@ -890,6 +913,7 @@ function ConnectionsPage() {
         </div>
         {connectionError && <p role="alert">{connectionError}</p>}
       </section></Drawer>}
+      {import.meta.env.DEV && <SandboxSync />}
       <section className="panel connection-list">
         <div className="panel-header">
           <div>

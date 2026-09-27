@@ -9,7 +9,13 @@ type TransactionAccountChipProps = {
   children: ReactNode
 }
 
+type TransactionAllocation = {
+  minorUnits: number
+  tagName: string
+}
+
 type TransactionAmountProps = {
+  allocation?: TransactionAllocation
   amountMinorUnits: number
   className?: string
   currencyCode: string
@@ -17,11 +23,12 @@ type TransactionAmountProps = {
 
 type TransactionCardProps = {
   accounts: { id: string; name: string }[]
+  allocation?: TransactionAllocation
   tags: ReactNode
   transaction: Transaction
 }
 
-export function TransactionCard({ accounts, tags, transaction }: TransactionCardProps) {
+export function TransactionCard({ accounts, allocation, tags, transaction }: TransactionCardProps) {
   return (
     <article className="transaction-card" style={{ '--account-color': getAccountColor(transaction.accountId) } as CSSProperties}>
       <div className="transaction-card-account-header">
@@ -36,7 +43,7 @@ export function TransactionCard({ accounts, tags, transaction }: TransactionCard
             <span className="transaction-title"><strong>{transaction.description}</strong><TransferBadge transaction={transaction} /></span>
             {transaction.merchantName && transaction.merchantName.toLowerCase() !== transaction.description?.toLowerCase() && <span>{transaction.merchantName}</span>}
           </div>
-          <TransactionAmount amountMinorUnits={transaction.amountMinorUnits} className="transaction-card-amount" currencyCode={transaction.currency} />
+          <TransactionAmount allocation={allocation} amountMinorUnits={transaction.amountMinorUnits} className="transaction-card-amount" currencyCode={transaction.currency} />
         </div>
         <div className="transaction-card-footer">{tags}</div>
       </div>
@@ -52,13 +59,23 @@ export function TransactionAccountChip({ accountId, children }: TransactionAccou
   )
 }
 
-export function TransactionAmount({ amountMinorUnits, className, currencyCode }: TransactionAmountProps) {
+export function TransactionAmount({ allocation, amountMinorUnits, className, currencyCode }: TransactionAmountProps) {
   const amountClassName = amountMinorUnits < 0 ? 'amount-negative' : 'amount-positive'
-
-  return (
+  const amount = (
     <strong className={className ? `${amountClassName} ${className}` : amountClassName}>
       {exactCurrency(amountMinorUnits, currencyCode)}
     </strong>
+  )
+
+  if (!allocation) {
+    return amount
+  }
+
+  return (
+    <span className="transaction-amount-allocated">
+      {amount}
+      <small>{exactCurrency(allocation.minorUnits, currencyCode)} counted towards {allocation.tagName}</small>
+    </span>
   )
 }
 
