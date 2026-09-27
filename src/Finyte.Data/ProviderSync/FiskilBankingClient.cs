@@ -181,14 +181,14 @@ public sealed class FiskilBankingClient(
     private static FiskilAccountData ToAccount(JsonElement x)
     {
         return new FiskilAccountData(
-            GetRequiredString(x, "id"),
+            GetString(x, "account_id") ?? GetRequiredString(x, "id"),
             GetString(x, "account_number"),
             GetString(x, "bsb"),
             GetString(x, "name") ?? GetString(x, "display_name") ?? "Bank account",
             GetString(x, "product_name"),
             GetString(x, "product_category"),
             GetString(x, "institution_id"),
-            GetString(x, "consent_id"),
+            GetString(x, "arrangement_id") ?? GetString(x, "consent_id"),
             GetBool(x, "is_owned"),
             GetString(x, "open_status"),
             GetDateOnly(x, "creation_date"),
@@ -209,17 +209,18 @@ public sealed class FiskilBankingClient(
 
     private static FiskilTransactionData ToTransaction(JsonElement x)
     {
+        var category = x.TryGetProperty("category", out var y) && y.ValueKind == JsonValueKind.Object ? y : x;
         return new FiskilTransactionData(
-            GetRequiredString(x, "id"),
+            GetString(x, "fiskil_id") ?? GetRequiredString(x, "id"),
             GetRequiredString(x, "account_id"),
             GetDecimal(x, "amount") ?? 0,
             GetString(x, "currency"),
             GetString(x, "description"),
             GetString(x, "status"),
-            GetDateTimeOffset(x, "posted_at") ?? GetDateTimeOffset(x, "posted_time"),
-            GetDateTimeOffset(x, "executed_at") ?? GetDateTimeOffset(x, "execution_time"),
-            GetString(x, "primary_category"),
-            GetString(x, "secondary_category"),
+            GetDateTimeOffset(x, "posting_date_time") ?? GetDateTimeOffset(x, "posted_at") ?? GetDateTimeOffset(x, "posted_time"),
+            GetDateTimeOffset(x, "execution_date_time") ?? GetDateTimeOffset(x, "executed_at") ?? GetDateTimeOffset(x, "execution_time"),
+            GetString(category, "primary_category"),
+            GetString(category, "secondary_category"),
             GetString(x, "merchant_name"),
             GetString(x, "reference"),
             x.GetRawText());
