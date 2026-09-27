@@ -22,6 +22,7 @@ public static class DependencyInjection
         services.AddScoped<IBillingAccess, BillingAccess>();
         services.AddScoped<Imports.TransactionFileImportService>();
         services.AddScoped<Tagging.TransactionTagService>();
+        services.AddScoped<Tagging.TagSuggestionService>();
         services.AddScoped<Transfers.InternalTransferService>();
         services.AddScoped<PayCycles.PayCycleQueries>();
         services.AddScoped<Recurring.RecurringPaymentService>();

@@ -23,6 +23,7 @@ export type Transaction = {
   internalTransferAccountId?: string | null
   internalTransferAccountName?: string | null
   internalTransferSource?: string | null
+  ruleMerchantName?: string
 }
 
 export type TransactionTotals = {

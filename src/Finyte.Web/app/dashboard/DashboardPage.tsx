@@ -115,7 +115,8 @@ export function DashboardPage() {
       <div className="overview-grid">
         <CashFlowModule overview={overview} />
 
-        <DashboardModuleFrame eyebrow={formatMonth(overview.monthKey)} title="Spend by tag">
+        <DashboardModuleFrame eyebrow={formatMonth(overview.monthKey)} title="Spend by tag"
+          actions={(overview.monthlySpendByTag.find(x => x.tagId === null)?.percentage ?? 0) > 20 ? <Link to="/tag-suggestions">Tag suggestions</Link> : undefined}>
           <SpendByTagChart tags={overview.monthlySpendByTag} currencyCode={overview.currency} overview={overview} />
         </DashboardModuleFrame>
       </div>
