@@ -413,8 +413,14 @@ public sealed class RecurringPaymentService(FinyteDbContext dbContext, TimeProvi
         var occurrences = await OccurrenceRows(series, from, to, cancellationToken);
         var next = occurrences.FirstOrDefault(x => x.Status is "needs-review" or "no-payment-found" or "due" or "upcoming");
         var lastPaid = occurrences.Where(x => x.Status == "paid" && x.PaidAmount is not null).MaxBy(x => x.Date);
-        var missed = series.State == "active"
-            ? occurrences.Where(x => x.Status == "no-payment-found" && x.Date >= Today.AddDays(-45)).MaxBy(x => x.Date)?.Date
+        // A payment is only missed once the account's imported history reaches past its window; older exports simply
+        // have not seen it yet.
+        var importedThrough = await dbContext.Transactions.AsNoTracking()
+            .Where(x => x.TenantId == series.TenantId && x.AccountId == series.AccountId && x.PostedAt != null)
+            .MaxAsync(x => x.PostedAt, cancellationToken);
+        var missed = series.State == "active" && importedThrough is { } through
+            ? occurrences.Where(x => x.Status == "no-payment-found" && x.Date >= Today.AddDays(-45)
+                && x.WindowTo < DateOnly.FromDateTime(through.UtcDateTime)).MaxBy(x => x.Date)?.Date
             : null;
         return new RecurringSeriesResponse(series.Id, series.Name, series.AccountId, accountName, series.Currency, series.Cadence,
             series.AnchorDate, series.ExpectedAmount, series.AmountMode, series.State, series.Version,

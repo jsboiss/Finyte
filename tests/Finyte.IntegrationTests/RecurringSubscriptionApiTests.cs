@@ -72,7 +72,8 @@ public sealed class RecurringSubscriptionApiTests
         await using var baseFactory = new FinyteApiFactory();
         await using var factory = WithClock(baseFactory);
         using var client = factory.CreateClient();
-        var accountId = await Seed(factory, client, account => Enumerable.Range(4, 5).Select(month => Row(account, month, 5, -20m, "STREAMCO SYDNEY AUS")));
+        var accountId = await Seed(factory, client, account => Enumerable.Range(4, 5).Select(month => Row(account, month, 5, -20m, "STREAMCO SYDNEY AUS"))
+            .Append(Row(account, 9, 1, -45m, "CORNER CAFE")));
         var found = Assert.Single((await client.GetFromJsonAsync<RecurringDiscoveryPage>($"{Url}/discovery"))!.Items);
         var history = found.Transactions.Where(x => x.OccurrenceDate.Month < 8)
             .Select(x => new RecurringHistoryInput(x.Snapshot.Id, x.OccurrenceDate, x.Snapshot.Fingerprint)).ToList();
@@ -107,6 +108,20 @@ public sealed class RecurringSubscriptionApiTests
         Assert.Empty((await client.GetFromJsonAsync<RecurringUpcomingPage>($"{Url}/upcoming?days=7&accountId={Guid.NewGuid()}"))!.Items);
         Assert.Equal(HttpStatusCode.BadRequest, (await client.GetAsync($"{Url}/upcoming?days=0")).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await client.GetAsync($"{Url}/upcoming?days=32")).StatusCode);
+    }
+
+    [Fact]
+    public async Task PaymentsAreNotReportedMissedBeforeTheAccountHistoryCoversTheirWindow()
+    {
+        await using var baseFactory = new FinyteApiFactory();
+        await using var factory = WithClock(baseFactory);
+        using var client = factory.CreateClient();
+        var accountId = await Seed(factory, client, account => Enumerable.Range(4, 3).Select(month => Row(account, month, 5, -20m, "STREAMCO SYDNEY AUS")));
+        var found = Assert.Single((await client.GetFromJsonAsync<RecurringDiscoveryPage>($"{Url}/discovery"))!.Items);
+        var history = found.Transactions.Select(x => new RecurringHistoryInput(x.Snapshot.Id, x.OccurrenceDate, x.Snapshot.Fingerprint)).ToList();
+        var series = await Create(client, new CreateRecurringRequest("Streaming", accountId, "AUD", "monthly", found.AnchorDate, 20, "fixed", [], history));
+        Assert.Equal(new DateOnly(2026, 6, 5), series.LastPaidDate);
+        Assert.Null(series.MissedOccurrenceDate); // History ends 5 June; July and August were never imported.
     }
 
     private static CreateRecurringRequest Manual(Guid accountId) => new("Music", accountId, "AUD", "monthly", new(2026, 9, 10), 20, "fixed", [], []);

@@ -59,6 +59,7 @@
 
 @media(min-width:701px) { .calendar-payment strong { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; } }
 
+.recurring-page .recurring-overview { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; }
 .recurring-page .recurring-overview-filter { max-width: 320px; }
 .recurring-page .recurring-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .recurring-page .recurring-summary > div { display: grid; gap: 4px; padding: 16px 18px; border: 1px solid #3e4945; border-radius: 8px; background: #1d2522; }

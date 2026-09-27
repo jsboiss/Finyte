@@ -39,7 +39,7 @@ export function RecurringOverview({ accounts, range, onSelect, onDiscover, onCha
     writeKeepActive(next)
   }
 
-  return <div className="recurring-list">
+  return <div className="recurring-overview">
     <label className="recurring-overview-filter">Account<select value={accountId} onChange={event => setAccountId(event.target.value)}><option value="">All accounts</option>{accounts.map(account => <option key={account.id} value={account.id}>{account.name}</option>)}</select></label>
     {series.isError && <p role="alert">{recurringError(series.error)}</p>}
     {stateChange.error && <p role="alert">{recurringError(stateChange.error)}</p>}
