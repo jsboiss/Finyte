@@ -20,3 +20,5 @@
   .tag-suggestion-merchant { grid-template-columns: minmax(0, 1fr) auto; }
   .tag-suggestion-merchant-name { grid-column: 1 / -1; }
 }
+.tag-suggestion-mode { display: grid; gap: 8px; }
+.tag-suggestion-mode label { display: flex; gap: 8px; align-items: center; }

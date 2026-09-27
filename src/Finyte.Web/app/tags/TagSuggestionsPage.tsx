@@ -11,12 +11,16 @@ import './TagSuggestions.css'
 export function TagSuggestionsPage() {
   const client = useQueryClient()
   const [notice, setNotice] = useState('')
+  const [mode, setMode] = useState<'rule' | 'once'>('rule')
   const suggestions = useQuery({ queryKey: ['tag-suggestions'], queryFn: getTagSuggestions })
   const tags = useQuery({ queryKey: ['tags'], queryFn: () => httpClient<TransactionTag[]>({ url: '/api/tags' }) })
   const accept = useMutation({
-    mutationFn: (items: AcceptItem[]) => acceptTagSuggestions(items),
+    mutationFn: (items: AcceptItem[]) => acceptTagSuggestions(items.map(x => ({ ...x, mode }))),
     onSuccess: async (result, items) => {
-      setNotice(`Tagged ${items.length} ${items.length === 1 ? 'merchant' : 'merchants'}${result.createdTags > 0 ? ` and added ${result.createdTags} ${result.createdTags === 1 ? 'tag' : 'tags'}` : ''}. Past and future payments now use these rules.`)
+      const added = result.createdTags > 0 ? ` and added ${result.createdTags} ${result.createdTags === 1 ? 'tag' : 'tags'}` : ''
+      setNotice(mode === 'once'
+        ? `Tagged ${result.taggedTransactions} existing ${result.taggedTransactions === 1 ? 'payment' : 'payments'}${added}. Future payments are not tagged automatically.`
+        : `Tagged ${items.length} ${items.length === 1 ? 'merchant' : 'merchants'}${added}. Past and future payments now use these rules.`)
       await Promise.all(['tag-suggestions', 'tags', 'merchant-tags', 'transactions', 'overview', 'budgets'].map(key => client.invalidateQueries({ queryKey: [key] })))
     },
   })
@@ -24,12 +28,16 @@ export function TagSuggestionsPage() {
   const data = suggestions.data
 
   return <section className="page tag-suggestions-page">
-    <header className="page-header"><div className="page-title"><h1>Tag suggestions</h1><Help title="How tag suggestions work"><p>Finyte suggests a tag for merchants you have not tagged yet, using common merchant names. Accepting creates a merchant rule, so matching past and future payments are tagged. Your manual tags and removed tags are kept.</p></Help></div><Link to="/transactions">Back to transactions</Link></header>
+    <header className="page-header"><div className="page-title"><h1>Tag suggestions</h1><Help title="How tag suggestions work"><p>Finyte suggests a tag for merchants you have not tagged yet, using your bank's categories where available and common merchant names otherwise. You choose whether accepting creates a rule for future payments or only tags existing ones. Your manual tags and removed tags are kept.</p></Help></div><Link to="/transactions">Back to transactions</Link></header>
     {notice && <p role="status" className="tag-suggestions-notice">{notice}</p>}
     {suggestions.isLoading && <p role="status">Looking for suggestions…</p>}
     {suggestions.isError && <p role="alert">Unable to load tag suggestions. <button type="button" onClick={() => void suggestions.refetch()}>Retry</button></p>}
     {accept.isError && <p role="alert">Those suggestions could not be saved. Nothing was changed.</p>}
     {data && <>
+      <fieldset className="panel tag-suggestion-mode"><legend>When I accept a suggestion</legend>
+        <label><input type="radio" name="tag-mode" checked={mode === 'rule'} onChange={() => setMode('rule')} />Tag existing and future payments (creates a rule)</label>
+        <label><input type="radio" name="tag-mode" checked={mode === 'once'} onChange={() => setMode('once')} />Only tag existing payments</label>
+      </fieldset>
       {data.coverage.map(x => <Coverage key={x.currency} tagged={x.taggedMinorUnits} total={x.totalMinorUnits} currency={x.currency} />)}
       {data.groups.length === 0 && data.needsTag.length === 0 && <section className="panel"><h2>Everything is tagged</h2><p>New merchants will appear here after your next import.</p></section>}
       {data.groups.map(group => <SuggestionGroup key={group.tagName} group={group} tagNames={tagNames} busy={accept.isPending} onAccept={items => accept.mutate(items)} />)}

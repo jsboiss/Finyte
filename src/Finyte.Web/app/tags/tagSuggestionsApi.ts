@@ -4,7 +4,7 @@ export type TagCoverage = { currency: string; taggedMinorUnits: number; totalMin
 export type MerchantSuggestion = { ruleMerchantName: string; examples: string[]; transactionCount: number; spendMinorUnits: number; currency: string; reason: string | null }
 export type TagSuggestionGroup = { tagName: string; tagId: string | null; color: string; merchants: MerchantSuggestion[] }
 export type TagSuggestions = { from: string; to: string; coverage: TagCoverage[]; groups: TagSuggestionGroup[]; needsTag: MerchantSuggestion[] }
-export type AcceptItem = { merchantName: string; tagId?: string; tagName?: string }
+export type AcceptItem = { merchantName: string; tagId?: string; tagName?: string; mode?: 'rule' | 'once' }
 
 export const starterTagNames = ['Groceries', 'Eating out', 'Transport', 'Fuel', 'Subscriptions', 'Bills and utilities', 'Health', 'Shopping', 'Home', 'Entertainment', 'Travel', 'Transfers']
 
@@ -13,5 +13,5 @@ export function getTagSuggestions() {
 }
 
 export function acceptTagSuggestions(items: AcceptItem[]) {
-  return httpClient<{ createdTags: number; createdRules: number }>({ method: 'POST', url: '/api/tag-suggestions/accept', data: { items } })
+  return httpClient<{ createdTags: number; createdRules: number; taggedTransactions: number }>({ method: 'POST', url: '/api/tag-suggestions/accept', data: { items } })
 }
