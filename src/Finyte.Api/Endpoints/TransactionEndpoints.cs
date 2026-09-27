@@ -106,7 +106,6 @@ public static partial class TransactionEndpoints
 
         var currentPage = filters.Page;
         var take = filters.PageSize;
-        var transfers = dbContext.ValidConfirmedTransfers(currentTenant.TenantId);
         var query = filters.Apply(dbContext.Transactions.AsNoTracking(), currentTenant.TenantId, calendar);
         if (filters.AnalyticsOnly && filters.AccountId == null && filters.AccountIds.Length == 0)
         {
@@ -116,11 +115,11 @@ public static partial class TransactionEndpoints
         }
         if (filters.InternalTransfers == "exclude")
         {
-            query = query.ExcludeInternalTransfers(dbContext, currentTenant.TenantId);
+            query = query.ExcludeInternalTransfers();
         }
         else if (filters.InternalTransfers == "only")
         {
-            query = query.Where(x => transfers.Any(y => y.DebitTransactionId == x.Id || y.CreditTransactionId == x.Id));
+            query = query.Where(x => x.InternalTransferAccountId != null);
         }
         var totalCount = await query.CountAsync(cancellationToken);
         var currencyTotals = await query.GroupBy(x => x.Currency)
@@ -150,7 +149,10 @@ public static partial class TransactionEndpoints
                 GetCategory(x.PrimaryCategory, x.SecondaryCategory),
                 ToMinorUnits(x.Amount),
                 x.Currency,
-                transfers.Any(y => y.DebitTransactionId == x.Id || y.CreditTransactionId == x.Id),
+                x.InternalTransferAccountId != null,
+                x.InternalTransferAccountId,
+                x.InternalTransferAccount == null ? null : x.InternalTransferAccount.CustomName ?? x.InternalTransferAccount.Name,
+                x.InternalTransferSource,
                 x.TagAssignments
                     .Where(y => y.Tag != null && y.Tag.TenantId == currentTenant.TenantId)
                     .OrderBy(y => y.Tag == null ? "" : y.Tag.Name)
@@ -539,6 +541,9 @@ public static partial class TransactionEndpoints
         long AmountMinorUnits,
         string Currency,
         bool IsInternalTransfer,
+        Guid? InternalTransferAccountId,
+        string? InternalTransferAccountName,
+        string? InternalTransferSource,
         IReadOnlyList<TransactionTagResponse> Tags,
         IReadOnlyList<Guid> AutomaticTagExclusions,
         string RuleMerchantName);

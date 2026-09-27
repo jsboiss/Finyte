@@ -87,7 +87,7 @@ public sealed class OverviewProjector(FinyteDbContext dbContext, TenantCalendars
                 && (x.Status == null || x.Status == "" || x.Status.ToLower() == "posted"));
         if (!includeInternalTransfers)
         {
-            monthQuery = monthQuery.ExcludeInternalTransfers(dbContext, scope.TenantId);
+            monthQuery = monthQuery.ExcludeInternalTransfers();
         }
 
         var transactionQuery = monthQuery.Where(x => x.Currency == currency);

@@ -1,6 +1,8 @@
 using Finyte.Core.Accounts;
 using Finyte.Core.ProviderSync;
 using Finyte.Data;
+using Finyte.Data.Analytics;
+using Finyte.Data.Transfers;
 using Finyte.Data.ProviderSync;
 using Finyte.Data.Tagging;
 using Microsoft.EntityFrameworkCore;
@@ -44,7 +46,7 @@ public sealed class FiskilBankingSyncServiceTests
                 new FiskilTransactionData("transaction-1", "account-1", -25.50m, "AUD", "Coffee", "posted", postedAt, null, null, null, "Cafe", null, "{}")
             ]
         };
-        var service = new FiskilBankingSyncService(dbContext, client, new TransactionTagService(dbContext));
+        var service = new FiskilBankingSyncService(dbContext, client, new TransactionTagService(dbContext), new InternalTransferService(dbContext, new ProjectionInvalidator(dbContext, TestCalendar.Tenants(dbContext)), TestCalendar.Tenants(dbContext)));
 
         var summary = await service.SyncTransactions(syncRun, CancellationToken.None);
 
@@ -85,7 +87,8 @@ public sealed class FiskilBankingSyncServiceTests
                     "RENT_AND_UTILITIES", "RENT_AND_UTILITIES_GAS_AND_ELECTRICITY", "Synergy", null, "{}", "4900", "MEDIUM", "PAYMENT")
             ]
         };
-        var service = new FiskilBankingSyncService(dbContext, client, new TransactionTagService(dbContext));
+        var service = new FiskilBankingSyncService(dbContext, client, new TransactionTagService(dbContext),
+            new InternalTransferService(dbContext, new ProjectionInvalidator(dbContext, TestCalendar.Tenants(dbContext)), TestCalendar.Tenants(dbContext)));
 
         await service.SyncTransactions(syncRun, CancellationToken.None);
         var stored = await dbContext.Transactions.SingleAsync();
@@ -121,7 +124,7 @@ public sealed class FiskilBankingSyncServiceTests
                 new FiskilBalanceData("account-1", 123.45m, 120.00m, null, "AUD", DateTimeOffset.UtcNow, "{}")
             ]
         };
-        var service = new FiskilBankingSyncService(dbContext, client, new TransactionTagService(dbContext));
+        var service = new FiskilBankingSyncService(dbContext, client, new TransactionTagService(dbContext), new InternalTransferService(dbContext, new ProjectionInvalidator(dbContext, TestCalendar.Tenants(dbContext)), TestCalendar.Tenants(dbContext)));
 
         var summary = await service.SyncBalances(syncRun, CancellationToken.None);
 

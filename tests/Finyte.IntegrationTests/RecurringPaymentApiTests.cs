@@ -360,14 +360,12 @@ public sealed class RecurringPaymentApiTests
         undated.PostedAt = null;
         dbContext.Transactions.AddRange(renamed, pending, undated, Row(account, 9, 10, -99, "Future"), Row(account, 9, 6, 99, "Credit"));
         var debit = Row(account, 9, 7, -50, "Internal transfer");
+        debit.InternalTransferAccountId = excluded.Id;
+        debit.InternalTransferSource = "manual";
         var credit = Row(excluded, 9, 7, 50, "Internal transfer");
+        credit.InternalTransferAccountId = account.Id;
+        credit.InternalTransferSource = "manual";
         dbContext.Transactions.AddRange(debit, credit);
-        dbContext.InternalTransfers.Add(new InternalTransfer
-        {
-            TenantId = tenantId, DebitTransaction = debit, DebitTransactionId = debit.Id, CreditTransaction = credit, CreditTransactionId = credit.Id,
-            DebitAccountId = account.Id, CreditAccountId = excluded.Id, Amount = 50, Currency = "AUD", Status = "confirmed",
-            DebitPostedAt = debit.PostedAt!.Value, CreditPostedAt = credit.PostedAt!.Value, ReviewedByUserId = "dev-user", UpdatedAt = now
-        });
         await dbContext.SaveChangesAsync();
         return new SeedData(tenantId, account.Id, renamed.Id);
     }

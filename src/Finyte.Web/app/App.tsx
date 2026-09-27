@@ -17,6 +17,7 @@ import { AuthTokenProvider } from './auth/AuthTokenProvider'
 import { BillingPage } from './billing/BillingAccessPanel'
 import { DashboardPage } from './dashboard/DashboardPage'
 import { ImportsPage } from './imports/ImportsPage'
+import { TransactionOptions, TransferBadge } from './transfers/TransferControl'
 import { TransferCorrections } from './transfers/TransferCorrections'
 import { PayCyclesPage } from './pay-cycles/PayCyclesPage'
 import { RecurringPage } from './recurring/RecurringPage'
@@ -477,6 +478,7 @@ function TransactionsPage() {
   const columns = useMemo(() => [
     transactionColumnHelper.accessor('postedDate', {
       header: 'Date',
+      cell: x => <span className="transaction-date-cell">{x.getValue()}<TransactionOptions transaction={x.row.original} accounts={accountsQuery.data ?? []} /></span>,
     }),
     transactionColumnHelper.accessor('accountId', {
       header: 'Account',
@@ -488,8 +490,7 @@ function TransactionsPage() {
       header: 'Description',
       cell: x => (
         <div className="transaction-description">
-          <strong>{x.getValue()}</strong>
-          {x.row.original.isInternalTransfer && <Link className="transfer-badge" to="/transactions" search={previous => ({ ...previous, transferView: 'confirmed' })}>Internal transfer</Link>}
+          <span className="transaction-title"><strong>{x.getValue()}</strong><TransferBadge transaction={x.row.original} /></span>
           {x.row.original.merchantName && x.row.original.merchantName.toLowerCase() !== x.getValue()?.toLowerCase() && <span>{x.row.original.merchantName}</span>}
         </div>
       ),
@@ -516,7 +517,7 @@ function TransactionsPage() {
       header: 'Amount',
       cell: x => <TransactionAmount allocation={allocationFor(x.row.original)} amountMinorUnits={x.getValue()} currencyCode={x.row.original.currency} />,
     }),
-  ], [allocationFor, setTransactionTagIds, tagsQuery.data, restoreAutomaticTagsMutation, updateTransactionTagsMutation.isPending, createMerchantRuleMutation])
+  ], [allocationFor, setTransactionTagIds, tagsQuery.data, accountsQuery.data, restoreAutomaticTagsMutation, updateTransactionTagsMutation.isPending, createMerchantRuleMutation])
   // TanStack Table intentionally returns stateful functions that React Compiler cannot memoize.
   // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
@@ -542,7 +543,7 @@ function TransactionsPage() {
         <div>
           <h1>Transactions</h1>
         </div>
-        <div className="transactions-actions"><Help title="Transfer matching"><p>Transfers between your accounts are matched automatically.</p><button type="button" onClick={() => void navigate({ search: previous => ({ ...previous, transferView: 'confirmed' }) })}>Correct a transfer match</button></Help>
+        <div className="transactions-actions"><Help title="Internal transfers"><p>A transaction whose description names another of your accounts is treated as an internal transfer and left out of spending and income. Mark or unmark any transaction from its row.</p><button type="button" onClick={() => void navigate({ search: previous => ({ ...previous, transferView: 'transfers' }) })}>Review internal transfers</button></Help>
           <button className={showTagManagement ? 'secondary-button is-active' : 'secondary-button'} onClick={() => setShowTagManagement(x => !x)} type="button">
             <Tags aria-hidden="true" />
             Tags
@@ -645,7 +646,7 @@ function TransactionsPage() {
       )}
 
 
-      {transferView && <Drawer title="Transfer matching" onClose={() => void navigate({ search: previous => ({ ...previous, transferView: undefined }) })}><TransferCorrections initialView={transferView} /></Drawer>}
+      {transferView && <Drawer title="Internal transfers" onClose={() => void navigate({ search: previous => ({ ...previous, transferView: undefined }) })}><TransferCorrections initialView={transferView} /></Drawer>}
       {showFilters && (
         <Drawer title="Advanced filters" onClose={() => setShowFilters(false)}><TransactionFilterForm
           key={JSON.stringify(filters)}
@@ -663,6 +664,7 @@ function TransactionsPage() {
       {(updateTransactionTagsMutation.isError || deleteTagMutation.isError || createMerchantRuleMutation.isError) && <p role="alert">The tag change could not be saved. Please try again.</p>}
 
       <TransactionCardList
+        accounts={accountsQuery.data ?? []}
         allocationFor={allocationFor}
         emptyMessage={emptyMessage}
         isLoading={isLoading}
@@ -1251,7 +1253,7 @@ const connectionsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/
 const transactionsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/transactions', component: TransactionsPage,
   validateSearch: (search: Record<string, unknown>) => {
     const { page, filters } = readTransactionRouteSearch(search)
-    const transferView = typeof search.transferView === 'string' && ['suggested', 'confirmed', 'dismissed', 'needs-review'].includes(search.transferView) ? search.transferView : undefined
+    const transferView = typeof search.transferView === 'string' && ['transfers', 'excluded'].includes(search.transferView) ? search.transferView : undefined
     return transactionRouteSearch(page, filters, transferView)
   },
 })
@@ -1265,9 +1267,9 @@ const recurringRoute = createRoute({ getParentRoute: () => rootRoute, path: '/re
 const tagSuggestionsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/tag-suggestions', component: TagSuggestionsPage })
 const transfersRoute = createRoute({
   getParentRoute: () => rootRoute, path: '/transfers',
-  beforeLoad: ({ search }) => { throw redirect({ to: '/transactions', search: { transferView: search.view ?? 'confirmed' }, replace: true }) },
+  beforeLoad: ({ search }) => { throw redirect({ to: '/transactions', search: { transferView: search.view ?? 'transfers' }, replace: true }) },
   validateSearch: (search: Record<string, unknown>): { view?: string } => ({
-    view: typeof search.view === 'string' && ['suggested', 'confirmed', 'dismissed', 'needs-review'].includes(search.view) ? search.view : undefined,
+    view: typeof search.view === 'string' && ['transfers', 'excluded'].includes(search.view) ? search.view : undefined,
   }),
 })
 const routeTree = rootRoute.addChildren([indexRoute, connectionsRoute, transactionsRoute, billingRoute, settingsRoute, importsRoute, transfersRoute, accountsRoute, budgetsRoute, payCyclesRoute, recurringRoute, tagSuggestionsRoute])

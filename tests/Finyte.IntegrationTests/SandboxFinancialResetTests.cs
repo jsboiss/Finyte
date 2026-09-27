@@ -4,8 +4,10 @@ using Finyte.Core.Budgets;
 using Finyte.Core.ProviderSync;
 using Finyte.Core.Tenancy;
 using Finyte.Data;
+using Finyte.Data.Analytics;
 using Finyte.Data.ProviderSync;
 using Finyte.Data.Tagging;
+using Finyte.Data.Transfers;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 
@@ -43,7 +45,8 @@ public sealed class SandboxFinancialResetTests
         Assert.Equal(rule.Id, (await dbContext.MerchantTagRules.SingleAsync()).Id);
 
         var syncRun = new ProviderSyncRun { TenantId = tenant.Id, EndUserId = "sandbox", ConsentId = "consent", Dataset = ProviderSyncDataset.Transactions };
-        var service = new FiskilBankingSyncService(dbContext, new BankingClient(), new TransactionTagService(dbContext));
+        var service = new FiskilBankingSyncService(dbContext, new BankingClient(), new TransactionTagService(dbContext),
+            new InternalTransferService(dbContext, new ProjectionInvalidator(dbContext, TestCalendar.Tenants(dbContext)), TestCalendar.Tenants(dbContext)));
         await service.SyncTransactions(syncRun, CancellationToken.None);
         var imported = await dbContext.Transactions.Include(x => x.TagAssignments).SingleAsync(x => x.TenantId == tenant.Id);
         Assert.NotEqual(oldTransaction.Id, imported.Id);

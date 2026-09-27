@@ -51,6 +51,13 @@ public static partial class TransactionFileParser
         return new DateTimeOffset(date, TimeSpan.Zero).AddMinutes(-(double)(offset * 60));
     }
 
+    public static string? ParseAccountNumber(string content)
+    {
+        var account = Regex.Match(content, @"<(?:BANKACCTFROM|CCACCTFROM)>(.*?)(?:</(?:BANKACCTFROM|CCACCTFROM)>|<BANKTRANLIST>)", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+        var value = account.Success ? GetOfxValue(account.Groups[1].Value, "ACCTID") : null;
+        return value is { Length: <= 64 } && value.Any(char.IsAsciiDigit) ? value : null;
+    }
+
     public static IReadOnlyList<ImportedTransaction> Parse(string fileName, string content)
     {
         if (!Path.GetExtension(fileName).Equals(".ofx", StringComparison.OrdinalIgnoreCase))

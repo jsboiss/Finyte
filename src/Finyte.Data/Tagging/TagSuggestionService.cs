@@ -26,7 +26,7 @@ public sealed class TagSuggestionService(FinyteDbContext dbContext, TenantCalend
         var rows = await dbContext.Transactions.AsNoTracking()
             .Where(x => x.TenantId == tenantId && x.Amount < 0 && accountIds.Contains(x.AccountId)
                 && x.PostedAt >= calendar.StartOf(start) && x.PostedAt < calendar.EndExclusive(end))
-            .ExcludeInternalTransfers(dbContext, tenantId)
+            .ExcludeInternalTransfers()
             .Select(x => new SpendRow(x.Amount, x.Currency, x.MerchantName, x.Description, x.PrimaryCategory, x.SecondaryCategory,
                 x.TagAssignments.Any(y => y.Tag != null && y.Tag.TenantId == tenantId)))
             .ToListAsync(cancellationToken);

@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using Finyte.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Finyte.Data.Migrations
 {
     [DbContext(typeof(FinyteDbContext))]
-    partial class FinyteDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260927024306_AddAccountTransferNicknames")]
+    partial class AddAccountTransferNicknames
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -137,49 +140,6 @@ namespace Finyte.Data.Migrations
                     b.ToTable("accounts", (string)null);
                 });
 
-            modelBuilder.Entity("Finyte.Core.Accounts.AccountGroup", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(80)
-                        .HasColumnType("character varying(80)");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("TenantId", "Name")
-                        .IsUnique();
-
-                    b.ToTable("account_groups", (string)null);
-                });
-
-            modelBuilder.Entity("Finyte.Core.Accounts.AccountGroupMember", b =>
-                {
-                    b.Property<Guid>("GroupId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("AccountId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("GroupId", "AccountId");
-
-                    b.HasIndex("AccountId");
-
-                    b.ToTable("account_group_members", (string)null);
-                });
-
             modelBuilder.Entity("Finyte.Core.Accounts.MerchantTagRule", b =>
                 {
                     b.Property<Guid>("Id")
@@ -230,10 +190,6 @@ namespace Finyte.Data.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
 
-                    b.Property<string>("CategoryConfidence")
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -261,17 +217,9 @@ namespace Finyte.Data.Migrations
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)");
 
-                    b.Property<string>("MerchantCategoryCode")
-                        .HasMaxLength(8)
-                        .HasColumnType("character varying(8)");
-
                     b.Property<string>("MerchantName")
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
-
-                    b.Property<string>("PaymentType")
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
 
                     b.Property<DateTimeOffset?>("PostedAt")
                         .HasColumnType("timestamp with time zone");
@@ -1237,13 +1185,6 @@ namespace Finyte.Data.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
 
-                    b.Property<string>("Kind")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(16)
-                        .HasColumnType("character varying(16)")
-                        .HasDefaultValue("subscription");
-
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(120)
@@ -1445,25 +1386,6 @@ namespace Finyte.Data.Migrations
                         .WithMany()
                         .HasForeignKey("ProviderConnectionId")
                         .OnDelete(DeleteBehavior.SetNull);
-                });
-
-            modelBuilder.Entity("Finyte.Core.Accounts.AccountGroupMember", b =>
-                {
-                    b.HasOne("Finyte.Core.Accounts.Account", "Account")
-                        .WithMany()
-                        .HasForeignKey("AccountId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Finyte.Core.Accounts.AccountGroup", "Group")
-                        .WithMany("Members")
-                        .HasForeignKey("GroupId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Account");
-
-                    b.Navigation("Group");
                 });
 
             modelBuilder.Entity("Finyte.Core.Accounts.MerchantTagRule", b =>
@@ -1696,11 +1618,6 @@ namespace Finyte.Data.Migrations
             modelBuilder.Entity("Finyte.Core.Accounts.Account", b =>
                 {
                     b.Navigation("Transactions");
-                });
-
-            modelBuilder.Entity("Finyte.Core.Accounts.AccountGroup", b =>
-                {
-                    b.Navigation("Members");
                 });
 
             modelBuilder.Entity("Finyte.Core.Accounts.Transaction", b =>

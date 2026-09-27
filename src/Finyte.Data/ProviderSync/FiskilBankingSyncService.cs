@@ -1,6 +1,8 @@
 using System.Text.Json;
 using Finyte.Core.Accounts;
 using Finyte.Core.ProviderSync;
+using Finyte.Core.Transfers;
+using Finyte.Data.Transfers;
 using Finyte.Data.Tagging;
 using Microsoft.EntityFrameworkCore;
 
@@ -13,7 +15,7 @@ public interface IFiskilBankingSyncService
     Task<SyncChangeSummary> SyncTransactions(ProviderSyncRun syncRun, CancellationToken cancellationToken);
 }
 
-public sealed class FiskilBankingSyncService(FinyteDbContext dbContext, IFiskilBankingClient fiskilBankingClient, TransactionTagService tagService) : IFiskilBankingSyncService
+public sealed class FiskilBankingSyncService(FinyteDbContext dbContext, IFiskilBankingClient fiskilBankingClient, TransactionTagService tagService, InternalTransferService transferService) : IFiskilBankingSyncService
 {
     public async Task<SyncChangeSummary> SyncAccounts(ProviderSyncRun syncRun, CancellationToken cancellationToken)
     {
@@ -63,6 +65,10 @@ public sealed class FiskilBankingSyncService(FinyteDbContext dbContext, IFiskilB
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
+        if (changedAccountIds.Count > 0)
+        {
+            await transferService.Reclassify(syncRun.TenantId, cancellationToken);
+        }
         return CreateSummary(changedAccountIds, minChangedAt: null, maxChangedAt: null);
     }
 
@@ -137,10 +143,11 @@ public sealed class FiskilBankingSyncService(FinyteDbContext dbContext, IFiskilB
         // Fetch remotely before taking the tag lock; reconcile current rules and manual choices atomically.
         await using var databaseTransaction = await tagService.BeginMutation(syncRun.TenantId, cancellationToken);
         var rules = await tagService.GetRules(syncRun.TenantId, cancellationToken);
+        var tenantAccounts = await dbContext.Accounts.AsNoTracking().Where(x => x.TenantId == syncRun.TenantId).ToListAsync(cancellationToken);
         foreach (var fetchedTransaction in fetchedTransactions)
         {
             var transaction = fetchedTransaction.Transaction;
-            var (changed, previousDate) = await UpsertTransaction(syncRun.TenantId, fetchedTransaction.AccountId, transaction, rules, cancellationToken);
+            var (changed, previousDate) = await UpsertTransaction(syncRun.TenantId, fetchedTransaction.AccountId, transaction, rules, tenantAccounts, cancellationToken);
             if (!changed)
             {
                 continue;
@@ -160,7 +167,7 @@ public sealed class FiskilBankingSyncService(FinyteDbContext dbContext, IFiskilB
         return CreateSummary(changedAccountIds, minChangedAt, maxChangedAt);
     }
 
-    private async Task<(bool Changed, DateTimeOffset? PreviousDate)> UpsertTransaction(Guid tenantId, Guid accountId, FiskilTransactionData transaction, IReadOnlyList<MerchantTagRule> rules, CancellationToken cancellationToken)
+    private async Task<(bool Changed, DateTimeOffset? PreviousDate)> UpsertTransaction(Guid tenantId, Guid accountId, FiskilTransactionData transaction, IReadOnlyList<MerchantTagRule> rules, IReadOnlyList<Account> tenantAccounts, CancellationToken cancellationToken)
     {
         var localTransaction = dbContext.Transactions.Local.FirstOrDefault(x => x.TenantId == tenantId && x.FiskilTransactionId == transaction.Id)
             ?? await dbContext.Transactions
@@ -194,6 +201,7 @@ public sealed class FiskilBankingSyncService(FinyteDbContext dbContext, IFiskilB
                 CreatedAt = DateTimeOffset.UtcNow
             };
             tagService.Reconcile(localTransaction, rules);
+            InternalTransferDetector.Apply(localTransaction, tenantAccounts);
             dbContext.Transactions.Add(localTransaction);
             return (true, null);
         }
@@ -216,6 +224,7 @@ public sealed class FiskilBankingSyncService(FinyteDbContext dbContext, IFiskilB
         changed |= SetIfChanged(localTransaction.Reference, transaction.Reference, x => localTransaction.Reference = x);
         changed |= SetIfChanged(localTransaction.RawJson, transaction.RawJson, x => localTransaction.RawJson = x);
         changed |= tagService.Reconcile(localTransaction, rules);
+        changed |= InternalTransferDetector.Apply(localTransaction, tenantAccounts);
         return (changed, previousDate);
     }
 

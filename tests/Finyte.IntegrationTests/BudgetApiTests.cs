@@ -233,6 +233,8 @@ public sealed class BudgetApiTests
             var dbContext = scope.ServiceProvider.GetRequiredService<FinyteDbContext>();
             var debit = await dbContext.Transactions.SingleAsync(x => x.Id == seed.TransferDebitId);
             debit.Amount = -51;
+            debit.InternalTransferAccountId = null;
+            debit.InternalTransferSource = "excluded";
             await dbContext.SaveChangesAsync();
         }
         Assert.Equal(241, (await Period(client, budget.Id)).Spent);
@@ -393,13 +395,12 @@ public sealed class BudgetApiTests
         // A provider-stamped local evening stays on its own calendar day.
         before.PostedAt = new DateTimeOffset(2025, 8, 31, 23, 59, 59, TimeSpan.FromHours(10)).ToUniversalTime();
         var debit = Transaction(account, -50);
+        debit.InternalTransferAccountId = loan.Id;
+        debit.InternalTransferSource = "manual";
         var credit = Transaction(loan, 50);
+        credit.InternalTransferAccountId = account.Id;
+        credit.InternalTransferSource = "manual";
         dbContext.Transactions.AddRange(tagged, secondary, substring, pending, undated, foreignCurrency, after, before, debit, credit, Transaction(account, 100), Transaction(loan, -900));
-        dbContext.InternalTransfers.Add(new InternalTransfer
-        {
-            TenantId = tenantId, DebitTransaction = debit, CreditTransaction = credit, DebitAccountId = account.Id, CreditAccountId = loan.Id,
-            DebitPostedAt = debit.PostedAt!.Value, CreditPostedAt = credit.PostedAt!.Value, Amount = 50, Currency = "AUD", Status = "confirmed", ReviewedByUserId = "test", UpdatedAt = now
-        });
         await dbContext.SaveChangesAsync();
         return new SeedResult(tenantId, tag.Id, secondTag.Id, loan.Id, debit.Id);
     }

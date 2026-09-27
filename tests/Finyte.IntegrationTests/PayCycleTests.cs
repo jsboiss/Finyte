@@ -136,11 +136,10 @@ public sealed class PayCycleTests
         using (var scope = factory.Services.CreateScope())
         {
             var dbContext = scope.ServiceProvider.GetRequiredService<FinyteDbContext>();
-            var transfer = await dbContext.InternalTransfers.Include(x => x.DebitTransaction).Include(x => x.CreditTransaction).SingleAsync(x => x.CreditAccountId == seed.SecondId);
-            transfer.DebitTransaction.PostedAt = At(7);
-            transfer.DebitPostedAt = At(7);
-            transfer.CreditTransaction.PostedAt = At(8);
-            transfer.CreditPostedAt = At(8);
+            var debit = await dbContext.Transactions.SingleAsync(x => x.AccountId == seed.MainId && x.InternalTransferAccountId == seed.SecondId);
+            var credit = await dbContext.Transactions.SingleAsync(x => x.AccountId == seed.SecondId && x.InternalTransferAccountId == seed.MainId);
+            debit.PostedAt = At(7);
+            credit.PostedAt = At(8);
             await dbContext.SaveChangesAsync();
         }
         var completed = await Breakdown(client, profile.Id, "2026-09-07");
@@ -161,7 +160,7 @@ public sealed class PayCycleTests
     }
 
     [Fact]
-    public async Task StaleOrDismissedTransferDecisionsDoNotHideSpending()
+    public async Task UnmarkingATransferReturnsItToSpending()
     {
         await using var baseFactory = new FinyteApiFactory();
         await using var factory = WithClock(baseFactory);
@@ -171,20 +170,21 @@ public sealed class PayCycleTests
         using (var scope = factory.Services.CreateScope())
         {
             var dbContext = scope.ServiceProvider.GetRequiredService<FinyteDbContext>();
-            var transfer = await dbContext.InternalTransfers.Include(x => x.DebitTransaction).SingleAsync(x => x.CreditAccountId == seed.SavingsId);
-            transfer.DebitTransaction.Amount = -301;
+            var debit = await dbContext.Transactions.SingleAsync(x => x.AccountId == seed.MainId && x.InternalTransferAccountId == seed.SavingsId && x.Amount < 0);
+            debit.Amount = -301;
+            debit.InternalTransferAccountId = null;
+            debit.InternalTransferSource = "excluded";
             await dbContext.SaveChangesAsync();
         }
-        var stale = await Breakdown(client, profile.Id);
-        Assert.Equal(401, stale.Totals.Spending);
-        Assert.Equal(0, stale.Totals.SavingsTransfersOut);
-        Assert.Equal(609, stale.Totals.NetMovement);
+        var unmarked = await Breakdown(client, profile.Id);
+        Assert.Equal(401, unmarked.Totals.Spending);
+        Assert.Equal(0, unmarked.Totals.SavingsTransfersOut);
+        Assert.Equal(609, unmarked.Totals.NetMovement);
         using (var scope = factory.Services.CreateScope())
         {
             var dbContext = scope.ServiceProvider.GetRequiredService<FinyteDbContext>();
-            var transfer = await dbContext.InternalTransfers.Include(x => x.DebitTransaction).SingleAsync(x => x.CreditAccountId == seed.SavingsId);
-            transfer.DebitTransaction.Amount = -300;
-            transfer.Status = "dismissed";
+            var debit = await dbContext.Transactions.SingleAsync(x => x.AccountId == seed.MainId && x.Amount == -301);
+            debit.Amount = -300;
             await dbContext.SaveChangesAsync();
         }
         Assert.Equal(400, (await Breakdown(client, profile.Id)).Totals.Spending);
@@ -364,14 +364,12 @@ public sealed class PayCycleTests
     private static void AddTransfer(FinyteDbContext dbContext, Account debitAccount, Account creditAccount, decimal amount, int day)
     {
         var debit = Row(debitAccount, -amount, day);
+        debit.InternalTransferAccountId = creditAccount.Id;
+        debit.InternalTransferSource = "manual";
         var credit = Row(creditAccount, amount, day);
+        credit.InternalTransferAccountId = debitAccount.Id;
+        credit.InternalTransferSource = "manual";
         dbContext.Transactions.AddRange(debit, credit);
-        dbContext.InternalTransfers.Add(new InternalTransfer
-        {
-            TenantId = debitAccount.TenantId, DebitTransaction = debit, DebitTransactionId = debit.Id, CreditTransaction = credit,
-            CreditTransactionId = credit.Id, DebitAccountId = debitAccount.Id, CreditAccountId = creditAccount.Id, Amount = amount,
-            Currency = "AUD", Status = "confirmed", DebitPostedAt = At(day), CreditPostedAt = At(day), ReviewedByUserId = "dev-user", UpdatedAt = At(day)
-        });
     }
 
     private static DateTimeOffset At(int day) => new(2026, 9, day, 0, 0, 0, TimeSpan.Zero);

@@ -1,7 +1,9 @@
 using Finyte.Api.Tenancy;
 using Finyte.Core.Accounts;
+using Finyte.Core.Transfers;
 using Finyte.Data;
 using Finyte.Data.Analytics;
+using Finyte.Data.Transfers;
 using Finyte.Data.Billing;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
@@ -64,13 +66,18 @@ public static class BankingAccountEndpoints
     private static async Task<IResult> UpdatePreferences(
         Guid accountId, UpdateAccountPreferencesRequest request, TenantResolver tenantResolver,
         HttpContext httpContext, FinyteDbContext dbContext, IProjectionInvalidator projectionInvalidator,
-        CancellationToken cancellationToken)
+        InternalTransferService transferService, CancellationToken cancellationToken)
     {
         var name = string.IsNullOrWhiteSpace(request.CustomName) ? null : request.CustomName.Trim();
         var accountType = request.AccountTypeOverride?.Trim().ToLowerInvariant();
         if (name?.Length > 120 || (accountType is not null && !AccountPreferences.Types.Contains(accountType)))
         {
             return Results.BadRequest("Use a custom name of up to 120 characters and a supported account type, or null to reset a preference.");
+        }
+        var nicknames = InternalTransferDetector.NormaliseNicknames(request.TransferNicknames);
+        if (nicknames.Count > InternalTransferDetector.MaxNicknames || nicknames.Any(x => x.Length > InternalTransferDetector.MaxNicknameLength))
+        {
+            return Results.BadRequest($"Use up to {InternalTransferDetector.MaxNicknames} transfer nicknames of {InternalTransferDetector.MaxNicknameLength} characters or fewer.");
         }
         if (request.ExpectedVersion is null or < 0)
         {
@@ -89,6 +96,8 @@ public static class BankingAccountEndpoints
         account.CustomName = name;
         account.AccountTypeOverride = accountType;
         account.IncludeInAnalyticsOverride = request.IncludeInAnalyticsOverride;
+        var nicknamesChanged = !nicknames.SequenceEqual(account.TransferNicknames, StringComparer.Ordinal);
+        account.TransferNicknames = nicknames;
         account.PreferencesVersion++;
         try
         {
@@ -99,6 +108,10 @@ public static class BankingAccountEndpoints
         {
             return Results.Conflict("Account data changed. Reload the account before saving again.");
         }
+        if (nicknamesChanged)
+        {
+            await transferService.Reclassify(currentTenant.TenantId, cancellationToken);
+        }
         return Results.Ok(ToResponse(account));
     }
 
@@ -108,15 +121,15 @@ public static class BankingAccountEndpoints
         return new AccountResponse(account.Id, AccountPreferences.DisplayName(account), account.CurrentBalance,
             account.AvailableBalance, account.Currency, account.CreatedAt, account.Name, account.CustomName,
             accountType, AccountPreferences.InferredType(account.ProductCategory), account.AccountTypeOverride,
-            AccountPreferences.DefaultIncludeInAnalytics(accountType), account.IncludeInAnalyticsOverride,
+            AccountPreferences.DefaultIncludeInAnalytics(accountType), account.IncludeInAnalyticsOverride, account.TransferNicknames,
             AccountPreferences.IncludeInAnalytics(account), AccountPreferences.IsProviderManaged(account),
             account.ProductName, account.ProductCategory, AccountPreferences.HasReportedBalance(account) ? account.BalanceAsOf : null, account.PreferencesVersion, account.ManualBalanceVersion);
     }
 
     private sealed record CreateAccountRequest(string Name, string? Currency);
-    private sealed record UpdateAccountPreferencesRequest(string? CustomName, string? AccountTypeOverride, bool? IncludeInAnalyticsOverride, int? ExpectedVersion);
+    private sealed record UpdateAccountPreferencesRequest(string? CustomName, string? AccountTypeOverride, bool? IncludeInAnalyticsOverride, IReadOnlyList<string>? TransferNicknames, int? ExpectedVersion);
     private sealed record AccountResponse(Guid Id, string Name, decimal CurrentBalance, decimal? AvailableBalance, string Currency,
         DateTimeOffset CreatedAt, string OriginalName, string? CustomName, string AccountType, string InferredAccountType,
-        string? AccountTypeOverride, bool DefaultIncludeInAnalytics, bool? IncludeInAnalyticsOverride, bool IncludeInAnalytics,
+        string? AccountTypeOverride, bool DefaultIncludeInAnalytics, bool? IncludeInAnalyticsOverride, IReadOnlyList<string> TransferNicknames, bool IncludeInAnalytics,
         bool IsProviderManaged, string? ProductName, string? ProductCategory, DateTimeOffset? BalanceAsOf, int PreferencesVersion, int ManualBalanceVersion);
 }

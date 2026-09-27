@@ -62,14 +62,6 @@ public sealed class SyncProjectionRefresher(
         }
 
         var summary = MergeSummaries(syncRuns);
-        if (summary.HasChanges && summary.MinChangedAt is { } minChangedAt && summary.MaxChangedAt is { } maxChangedAt
-            && syncRuns.Any(x => x.Dataset == ProviderSyncDataset.Transactions))
-        {
-            var calendar = await calendars.For(syncRun.TenantId, cancellationToken);
-            await new Transfers.AutomaticTransferService(dbContext, projectionInvalidator, calendars).Reconcile(syncRun.TenantId, cancellationToken,
-                calendar.ToDate(minChangedAt), calendar.ToDate(maxChangedAt));
-        }
-
         if (summary.HasChanges)
         {
             await RefreshProjections(syncRun.TenantId, syncRuns.Select(x => x.Dataset).Distinct().ToList(), summary, cancellationToken);

@@ -206,12 +206,10 @@ public sealed class TagSuggestionApiTests
         var debit = Row(account, 8, 3, -500m, "Transfer to xx9999 NetBank Savings");
         var credit = Row(savings, 8, 3, 500m, "Transfer from xx1111 NetBank Savings");
         dbContext.Transactions.AddRange(debit, credit);
-        dbContext.InternalTransfers.Add(new InternalTransfer
-        {
-            TenantId = tenantId, DebitTransaction = debit, DebitTransactionId = debit.Id, CreditTransaction = credit, CreditTransactionId = credit.Id,
-            DebitAccountId = account.Id, CreditAccountId = savings.Id, Amount = 500, Currency = "AUD", Status = "confirmed",
-            DebitPostedAt = debit.PostedAt!.Value, CreditPostedAt = credit.PostedAt!.Value, ReviewedByUserId = "dev-user", UpdatedAt = now
-        });
+        debit.InternalTransferAccountId = savings.Id;
+        debit.InternalTransferSource = "manual";
+        credit.InternalTransferAccountId = account.Id;
+        credit.InternalTransferSource = "manual";
         await dbContext.SaveChangesAsync();
     }
 

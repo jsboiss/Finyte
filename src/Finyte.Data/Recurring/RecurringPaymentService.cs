@@ -538,7 +538,7 @@ public sealed class RecurringPaymentService(FinyteDbContext dbContext, TimeProvi
         return dbContext.Transactions.AsNoTracking().Where(x => x.TenantId == tenantId
         && x.Amount < 0 && x.PostedAt != null && x.PostedAt < observedUntil
         && (x.Status == null || x.Status == "" || x.Status == "posted" || x.Status == "POSTED"))
-        .ExcludeInternalTransfers(dbContext, tenantId);
+        .ExcludeInternalTransfers();
     }
 
     private async Task<RecurringPaymentSeries> Find(Guid tenantId, Guid seriesId, CancellationToken cancellationToken) =>

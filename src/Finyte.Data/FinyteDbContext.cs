@@ -29,8 +29,6 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
 
     public DbSet<Transaction> Transactions => Set<Transaction>();
 
-    public DbSet<InternalTransfer> InternalTransfers => Set<InternalTransfer>();
-
     public DbSet<TransactionFileImport> TransactionFileImports => Set<TransactionFileImport>();
 
     public DbSet<TransactionFileIdentity> TransactionFileIdentities => Set<TransactionFileIdentity>();
@@ -125,22 +123,6 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
             x.HasOne(y => y.Account).WithMany().HasForeignKey(y => y.AccountId).OnDelete(DeleteBehavior.Cascade);
         });
         Recurring.RecurringPaymentConfiguration.Configure(modelBuilder);
-        modelBuilder.Entity<InternalTransfer>(x =>
-        {
-            x.ToTable("internal_transfers");
-            x.HasKey(y => y.Id);
-            x.Property(y => y.Status).HasMaxLength(32).IsRequired();
-            x.Property(y => y.Amount).HasPrecision(18, 2);
-            x.Property(y => y.Currency).HasMaxLength(3).IsRequired();
-            x.Property(y => y.ReviewedByUserId).HasMaxLength(128).IsRequired();
-            x.Property(y => y.UpdatedAt).IsConcurrencyToken();
-            x.HasIndex(y => new { y.TenantId, y.DebitTransactionId, y.CreditTransactionId }).IsUnique();
-            x.HasIndex(y => y.DebitTransactionId).IsUnique().HasFilter("\"Status\" = 'confirmed'");
-            x.HasIndex(y => y.CreditTransactionId).IsUnique().HasFilter("\"Status\" = 'confirmed'");
-            x.HasOne(y => y.DebitTransaction).WithMany().HasForeignKey(y => y.DebitTransactionId).OnDelete(DeleteBehavior.Cascade);
-            x.HasOne(y => y.CreditTransaction).WithMany().HasForeignKey(y => y.CreditTransactionId).OnDelete(DeleteBehavior.Cascade);
-        });
-
         modelBuilder.Entity<TransactionFileImport>(x =>
         {
             x.ToTable("transaction_file_imports");
@@ -189,6 +171,7 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
 
             x.Property(y => y.CustomName).HasMaxLength(120);
             x.Property(y => y.AccountTypeOverride).HasMaxLength(32);
+            x.Property(y => y.TransferNicknames).HasColumnType("text[]");
             x.Property(y => y.PreferencesVersion).IsConcurrencyToken();
             x.Property(y => y.ManualBalanceVersion).IsConcurrencyToken();
 
@@ -285,6 +268,16 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
                 .WithMany(y => y.Transactions)
                 .HasForeignKey(y => y.AccountId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            x.Property(y => y.InternalTransferSource)
+                .HasMaxLength(16);
+
+            x.HasOne(y => y.InternalTransferAccount)
+                .WithMany()
+                .HasForeignKey(y => y.InternalTransferAccountId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            x.HasIndex(y => new { y.TenantId, y.InternalTransferAccountId });
 
             x.HasIndex(y => y.TenantId);
             x.HasIndex(y => y.AccountId);

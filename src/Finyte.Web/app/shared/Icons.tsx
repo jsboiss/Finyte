@@ -1,4 +1,4 @@
-import { Activity as ActivityGlyph, ArrowRightLeft as ArrowRightLeftGlyph, Banknote as BanknoteGlyph, CalendarDays as CalendarDaysGlyph, ChevronDown as ChevronDownGlyph, ChevronLeft as ChevronLeftGlyph, ChevronRight as ChevronRightGlyph, CircleHelp as CircleHelpGlyph, CreditCard as CreditCardGlyph, Home as HomeGlyph, Loader2 as Loader2Glyph, Mail as MailGlyph, Menu as MenuGlyph, Plus as PlusGlyph, ReceiptText as ReceiptTextGlyph, RefreshCcw as RefreshCcwGlyph, Settings as SettingsGlyph, Shield as ShieldGlyph, SlidersHorizontal as SlidersHorizontalGlyph, Tags as TagsGlyph, Trash2 as Trash2Glyph, Upload as UploadGlyph, UserPlus as UserPlusGlyph, Users as UsersGlyph, WalletCards as WalletCardsGlyph, X as XGlyph, type LucideIcon, type LucideProps } from 'lucide-react'
+import { Activity as ActivityGlyph, ArrowRightLeft as ArrowRightLeftGlyph, Banknote as BanknoteGlyph, CalendarDays as CalendarDaysGlyph, ChevronDown as ChevronDownGlyph, ChevronLeft as ChevronLeftGlyph, ChevronRight as ChevronRightGlyph, CircleHelp as CircleHelpGlyph, CreditCard as CreditCardGlyph, Ellipsis as EllipsisGlyph, Home as HomeGlyph, Loader2 as Loader2Glyph, Mail as MailGlyph, Menu as MenuGlyph, Plus as PlusGlyph, ReceiptText as ReceiptTextGlyph, RefreshCcw as RefreshCcwGlyph, Settings as SettingsGlyph, Shield as ShieldGlyph, SlidersHorizontal as SlidersHorizontalGlyph, Tags as TagsGlyph, Trash2 as Trash2Glyph, Upload as UploadGlyph, UserPlus as UserPlusGlyph, Users as UsersGlyph, WalletCards as WalletCardsGlyph, X as XGlyph, type LucideIcon, type LucideProps } from 'lucide-react'
 
 // All icons inherit currentColor. Labels are required only when the icon conveys meaning alone.
 type IconProps = LucideProps & { label?: string }
@@ -14,6 +14,7 @@ export function ChevronLeft(props: IconProps) { return <StandardIcon glyph={Chev
 export function ChevronRight(props: IconProps) { return <StandardIcon glyph={ChevronRightGlyph} {...props} /> }
 export function CircleHelp(props: IconProps) { return <StandardIcon glyph={CircleHelpGlyph} {...props} /> }
 export function CreditCard(props: IconProps) { return <StandardIcon glyph={CreditCardGlyph} {...props} /> }
+export function Ellipsis(props: IconProps) { return <StandardIcon glyph={EllipsisGlyph} {...props} /> }
 export function Home(props: IconProps) { return <StandardIcon glyph={HomeGlyph} {...props} /> }
 export function Loader2(props: IconProps) { return <StandardIcon glyph={Loader2Glyph} {...props} /> }
 export function Mail(props: IconProps) { return <StandardIcon glyph={MailGlyph} {...props} /> }

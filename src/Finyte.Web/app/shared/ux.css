@@ -108,7 +108,9 @@ button, a, input, select, summary { touch-action: manipulation; }
 .family-settings-page .family-invite-panel, .family-settings-page .family-members-panel { padding: 20px; }
 .billing-page .billing-panel { max-width: 760px; width: 100%; box-sizing: border-box; }
 @media (max-width: 1000px) {
-  .accounts-page .account-card { grid-template-columns: minmax(0,1fr) auto; gap: 12px; }
+  .accounts-page .account-card { grid-template-columns: minmax(0,1fr); gap: 12px; }
+  .accounts-page .account-card h2 { overflow-wrap: anywhere; }
+  .account-balance { text-align: left; }
   .account-card .account-actions { grid-column: 1 / -1; }
   .imports-page { grid-template-columns: minmax(0,1fr); }
 }

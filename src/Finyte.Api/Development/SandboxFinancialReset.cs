@@ -15,7 +15,6 @@ public static class SandboxFinancialReset
         await Delete(dbContext, dbContext.RecurringPaymentAliases.Where(x => seriesIds.Contains(x.SeriesId)), cancellationToken);
         await Delete(dbContext, dbContext.RecurringPaymentSeries.Where(x => x.TenantId == tenantId), cancellationToken);
         await Delete(dbContext, dbContext.RecurringDiscoveryDecisions.Where(x => x.TenantId == tenantId), cancellationToken);
-        await Delete(dbContext, dbContext.InternalTransfers.Where(x => x.TenantId == tenantId), cancellationToken);
         var transactionIds = dbContext.Transactions.Where(x => x.TenantId == tenantId).Select(x => x.Id);
         await Delete(dbContext, dbContext.TransactionTagAssignments.Where(x => transactionIds.Contains(x.TransactionId)), cancellationToken);
         await Delete(dbContext, dbContext.TransactionTagExclusions.Where(x => transactionIds.Contains(x.TransactionId)), cancellationToken);

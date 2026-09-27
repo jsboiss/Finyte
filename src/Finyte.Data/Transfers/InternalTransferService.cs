@@ -1,5 +1,6 @@
 using Finyte.Core.Accounts;
 using Finyte.Core.Scheduling;
+using Finyte.Core.Transfers;
 using Finyte.Data.Tenancy;
 using Finyte.Data.Analytics;
 using Microsoft.EntityFrameworkCore;
@@ -8,196 +9,122 @@ namespace Finyte.Data.Transfers;
 
 public sealed class InternalTransferService(FinyteDbContext dbContext, IProjectionInvalidator projectionInvalidator, TenantCalendars calendars)
 {
-    public async Task<TransferReviewPage> GetReview(Guid tenantId, string status, DateOnly from, DateOnly to, int page, CancellationToken cancellationToken)
+    public static IReadOnlyList<string> Views { get; } = ["transfers", "excluded"];
+
+    public async Task<TransferReviewPage> GetReview(Guid tenantId, string view, DateOnly from, DateOnly to, int page, CancellationToken cancellationToken)
     {
         var calendar = await calendars.For(tenantId, cancellationToken);
         var fromTimestamp = calendar.StartOf(from);
         var toTimestamp = calendar.EndExclusive(to);
-        var loadFrom = calendar.StartOf(from.AddDays(-3));
-        var loadTo = calendar.EndExclusive(to.AddDays(3));
-        var decisions = dbContext.InternalTransfers.AsNoTracking().Where(x => x.TenantId == tenantId);
-        List<TransferReview> reviews;
-        if (status == "suggested")
-        {
-            // Keep confirmed legs reserved even when stale, until the user releases or reviews the pair.
-            var reserved = decisions.Where(x => x.Status == "confirmed" || x.Status == "needs-review");
-            var transactions = await dbContext.Transactions.AsNoTracking().Include(x => x.Account)
-                .Where(x => x.TenantId == tenantId && x.PostedAt >= loadFrom
-                    && x.PostedAt < loadTo && x.Amount != 0
-                    && (x.Status == null || x.Status == "" || x.Status.ToLower() == "posted")
-                    && !reserved.Any(y => y.DebitTransactionId == x.Id || y.CreditTransactionId == x.Id))
-                .ToListAsync(cancellationToken);
-            var candidates = FindCandidates(transactions, calendar);
-            var transactionIds = transactions.Select(x => x.Id).ToArray();
-            var relevantDecisions = await decisions.Where(x => transactionIds.Contains(x.DebitTransactionId) && transactionIds.Contains(x.CreditTransactionId))
-                .Select(x => new { x.DebitTransactionId, x.CreditTransactionId }).ToListAsync(cancellationToken);
-            var decisionKeys = relevantDecisions.Select(x => (x.DebitTransactionId, x.CreditTransactionId)).ToHashSet();
-            var counts = candidates.SelectMany(x => new[] { x.Debit.Id, x.Credit.Id }).GroupBy(x => x).ToDictionary(x => x.Key, x => x.Count());
-            reviews = candidates.Where(x => !decisionKeys.Contains((x.Debit.Id, x.Credit.Id))
-                    && x.Debit.PostedAt >= fromTimestamp && x.Debit.PostedAt < toTimestamp)
-                .Select(x => new TransferReview(ToLeg(x.Debit, calendar), ToLeg(x.Credit, calendar), "suggested",
-                    counts[x.Debit.Id] > 1 || counts[x.Credit.Id] > 1,
-                    "Equal amounts in the same currency, on different family accounts, posted within three days. This does not prove a transfer.", null, null))
-                .ToList();
-        }
-        else
-        {
-            var valid = dbContext.ValidConfirmedTransfers(tenantId);
-            var filtered = status == "needs-review"
-                ? decisions.Where(x => x.Status == "needs-review" || (x.Status == "confirmed" && !valid.Any(y => y.Id == x.Id)))
-                : decisions.Where(x => x.Status == status && (status != "confirmed" || valid.Any(y => y.Id == x.Id))
-                    && x.DebitPostedAt >= fromTimestamp && x.DebitPostedAt < toTimestamp);
-            var count = await filtered.CountAsync(cancellationToken);
-            var rows = await filtered.OrderByDescending(x => x.DebitTransaction.PostedAt)
-                .ThenBy(x => x.DebitTransactionId).ThenBy(x => x.CreditTransactionId)
-                .Skip((page - 1) * 50).Take(50)
-                .Include(x => x.DebitTransaction).ThenInclude(x => x.Account)
-                .Include(x => x.CreditTransaction).ThenInclude(x => x.Account).ToListAsync(cancellationToken);
-            reviews = rows
-                .Select(x => new TransferReview(ToLeg(x.DebitTransaction, calendar), ToLeg(x.CreditTransaction, calendar), status, false,
-                    status == "needs-review" ? "Transfer evidence changed or a competing payment appeared. Both transactions count in totals until reviewed."
-                    : status == "confirmed" ? x.ReviewedByUserId == AutomaticTransferService.Reviewer ? "Automatically matched: unique equal amounts between your accounts, within three days, with transfer evidence. Excluded from spending and income." : "Confirmed by a family member. Excluded from spending and income."
-                    : "Dismissed by a family member. This pair will not be suggested again unless returned to review.",
-                    x.UpdatedAt, x.ReviewedByUserId)).ToList();
-            return new TransferReviewPage(reviews, count, page, 50);
-        }
-
-        return new TransferReviewPage(reviews.OrderByDescending(x => x.Debit.PostedAt).ThenBy(x => x.Debit.Id).ThenBy(x => x.Credit.Id)
-            .Skip((page - 1) * 50).Take(50).ToList(), reviews.Count, page, 50);
+        var query = dbContext.Transactions.AsNoTracking()
+            .Where(x => x.TenantId == tenantId && x.PostedAt >= fromTimestamp && x.PostedAt < toTimestamp);
+        query = view == "excluded"
+            ? query.Where(x => x.InternalTransferSource == InternalTransferDetector.Excluded)
+            : query.Where(x => x.InternalTransferAccountId != null);
+        var count = await query.CountAsync(cancellationToken);
+        var rows = await query.OrderByDescending(x => x.PostedAt).ThenBy(x => x.Id)
+            .Skip((page - 1) * 50).Take(50)
+            .Include(x => x.Account).Include(x => x.InternalTransferAccount)
+            .ToListAsync(cancellationToken);
+        return new TransferReviewPage(rows.Select(x => ToRow(x, calendar)).ToList(), count, page, 50);
     }
 
-    public async Task Review(Guid tenantId, string userId, TransferDecisionRequest request, CancellationToken cancellationToken)
+    public async Task Review(Guid tenantId, TransferDecisionRequest request, CancellationToken cancellationToken)
     {
         await using var databaseTransaction = dbContext.Database.IsRelational()
             ? await dbContext.Database.BeginTransactionAsync(cancellationToken) : null;
-        if (dbContext.Database.IsNpgsql())
+        var transaction = await dbContext.Transactions
+            .SingleOrDefaultAsync(x => x.TenantId == tenantId && x.Id == request.TransactionId, cancellationToken)
+            ?? throw new KeyNotFoundException("The transaction was not found.");
+        var accounts = await dbContext.Accounts.AsNoTracking().Where(x => x.TenantId == tenantId).ToListAsync(cancellationToken);
+        var previousAccountId = transaction.InternalTransferAccountId;
+        var ruleAdded = false;
+        switch (request.Action)
         {
-            // Serialize decisions within a family, including confirm versus undo and competing pairs.
-            await dbContext.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM tenants WHERE \"Id\" = {tenantId} FOR UPDATE", cancellationToken);
-        }
-        var transactions = await dbContext.Transactions.Where(x => x.TenantId == tenantId
-            && (x.Id == request.DebitTransactionId || x.Id == request.CreditTransactionId)).ToListAsync(cancellationToken);
-        var debit = transactions.SingleOrDefault(x => x.Id == request.DebitTransactionId);
-        var credit = transactions.SingleOrDefault(x => x.Id == request.CreditTransactionId);
-        if (debit is null || credit is null)
-        {
-            throw new KeyNotFoundException("One of the transactions was not found.");
-        }
-        var decision = await dbContext.InternalTransfers.SingleOrDefaultAsync(x => x.TenantId == tenantId
-            && x.DebitTransactionId == debit.Id && x.CreditTransactionId == credit.Id, cancellationToken);
-        var previouslyExcluded = decision is not null && await dbContext.ValidConfirmedTransfers(tenantId)
-            .AnyAsync(x => x.Id == decision.Id, cancellationToken);
-        if (request.Action == "reset")
-        {
-            if (decision is not null)
-            {
-                if (decision.ReviewedByUserId == AutomaticTransferService.Reviewer)
+            case "mark":
+                var counterparty = accounts.SingleOrDefault(x => x.Id == request.CounterpartyAccountId)
+                    ?? throw new KeyNotFoundException("The other account was not found.");
+                if (counterparty.Id == transaction.AccountId)
                 {
-                    // Undo is an explicit override, so later imports must not recreate the classification.
-                    decision.Status = "dismissed";
-                    decision.ReviewedByUserId = userId;
-                    decision.UpdatedAt = DateTimeOffset.UtcNow;
+                    throw new InvalidOperationException("A transfer needs a different account on the other side.");
                 }
-                else
-                {
-                    dbContext.InternalTransfers.Remove(decision);
-                }
-            }
+                transaction.InternalTransferAccountId = counterparty.Id;
+                transaction.InternalTransferSource = InternalTransferDetector.Manual;
+                ruleAdded = request.CreateRule != false && await AddRule(counterparty.Id, transaction, cancellationToken);
+                break;
+            case "exclude":
+                transaction.InternalTransferAccountId = null;
+                transaction.InternalTransferSource = InternalTransferDetector.Excluded;
+                break;
+            default:
+                transaction.InternalTransferAccountId = null;
+                transaction.InternalTransferSource = null;
+                InternalTransferDetector.Apply(transaction, accounts);
+                break;
         }
-        else
-        {
-            if (!IsCandidate(debit, credit, await calendars.For(tenantId, cancellationToken)))
-            {
-                throw new InvalidOperationException("These transactions no longer match. Refresh the review list.");
-            }
-            // Reject a stale screen even if both amounts were corrected to a new matching value.
-            if (request.Amount != credit.Amount || request.Currency != credit.Currency
-                || request.DebitPostedAt != debit.PostedAt || request.CreditPostedAt != credit.PostedAt
-                || request.DebitAccountId != debit.AccountId || request.CreditAccountId != credit.AccountId)
-            {
-                throw new InvalidOperationException("The transaction details changed. Refresh and review them again.");
-            }
-            var occupied = await dbContext.InternalTransfers.AnyAsync(x => x.TenantId == tenantId && (x.Status == "confirmed" || x.Status == "needs-review")
-                && (decision == null || x.Id != decision.Id)
-                && (x.DebitTransactionId == debit.Id || x.CreditTransactionId == debit.Id
-                    || x.DebitTransactionId == credit.Id || x.CreditTransactionId == credit.Id), cancellationToken);
-            if (occupied)
-            {
-                throw new InvalidOperationException("A transaction is already linked to another confirmed transfer. Return that pair to review first.");
-            }
-            if (decision is null)
-            {
-                decision = new InternalTransfer
-                {
-                    TenantId = tenantId, DebitTransactionId = debit.Id, CreditTransactionId = credit.Id,
-                    Status = "dismissed", Currency = credit.Currency, ReviewedByUserId = userId
-                };
-                dbContext.InternalTransfers.Add(decision);
-            }
-            decision.Status = request.Action == "confirm" ? "confirmed" : "dismissed";
-            decision.Amount = credit.Amount;
-            decision.Currency = credit.Currency;
-            decision.DebitAccountId = debit.AccountId;
-            decision.CreditAccountId = credit.AccountId;
-            decision.DebitPostedAt = debit.PostedAt!.Value;
-            decision.CreditPostedAt = credit.PostedAt!.Value;
-            decision.ReviewedByUserId = userId;
-            decision.UpdatedAt = DateTimeOffset.UtcNow;
-        }
-        if (previouslyExcluded != (request.Action == "confirm"))
+        if (transaction.InternalTransferAccountId != previousAccountId)
         {
             await projectionInvalidator.TenantProjectionDataChanged(tenantId, "internal transfer reviewed", cancellationToken);
         }
         await dbContext.SaveChangesAsync(cancellationToken);
+        if (ruleAdded)
+        {
+            await Reclassify(tenantId, cancellationToken);
+        }
         if (databaseTransaction is not null)
         {
             await databaseTransaction.CommitAsync(cancellationToken);
         }
     }
 
-    public static IReadOnlyList<TransferCandidate> FindCandidates(IReadOnlyList<Transaction> transactions, FinancialCalendar calendar)
+    private async Task<bool> AddRule(Guid counterpartyId, Transaction transaction, CancellationToken cancellationToken)
     {
-        var credits = transactions.Where(x => x.Amount > 0 && IsPosted(x)).ToLookup(x => (x.TenantId, x.Amount, x.Currency, calendar.ToDate(x.PostedAt!.Value).DayNumber));
-        var candidates = new List<TransferCandidate>();
-        foreach (var debit in transactions.Where(x => x.Amount < 0 && IsPosted(x)))
+        var phrase = InternalTransferDetector.RulePhrase(transaction.Description);
+        if (phrase is null)
         {
-            var dayNumber = calendar.ToDate(debit.PostedAt!.Value).DayNumber;
-            for (var offset = -3; offset <= 3; offset++)
+            return false;
+        }
+        var counterparty = await dbContext.Accounts.SingleAsync(x => x.Id == counterpartyId, cancellationToken);
+        var nicknames = InternalTransferDetector.MergeRule(counterparty.TransferNicknames, phrase);
+        if (nicknames is null)
+        {
+            return false;
+        }
+        counterparty.TransferNicknames = nicknames;
+        counterparty.PreferencesVersion++;
+        return true;
+    }
+
+    public async Task<int> Reclassify(Guid tenantId, CancellationToken cancellationToken)
+    {
+        var accounts = await dbContext.Accounts.AsNoTracking().Where(x => x.TenantId == tenantId).ToListAsync(cancellationToken);
+        var changed = 0;
+        await foreach (var transaction in dbContext.Transactions
+            .Where(x => x.TenantId == tenantId && (x.InternalTransferSource == null || x.InternalTransferSource == InternalTransferDetector.Detected))
+            .AsAsyncEnumerable().WithCancellation(cancellationToken))
+        {
+            if (InternalTransferDetector.Apply(transaction, accounts))
             {
-                foreach (var credit in credits[(debit.TenantId, -debit.Amount, debit.Currency, dayNumber + offset)])
-                {
-                    if (IsCandidate(debit, credit, calendar))
-                    {
-                        candidates.Add(new TransferCandidate(debit, credit));
-                    }
-                }
+                changed++;
             }
         }
-        return candidates;
+        if (changed > 0)
+        {
+            await projectionInvalidator.TenantProjectionDataChanged(tenantId, "internal transfers reclassified", cancellationToken);
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        return changed;
     }
 
-    private static bool IsCandidate(Transaction debit, Transaction credit, FinancialCalendar calendar)
-    {
-        return IsPosted(debit) && IsPosted(credit) && debit.TenantId == credit.TenantId
-            && debit.AccountId != credit.AccountId && debit.Amount < 0 && credit.Amount == -debit.Amount
-            && debit.Currency == credit.Currency
-            && Math.Abs(calendar.ToDate(debit.PostedAt!.Value).DayNumber - calendar.ToDate(credit.PostedAt!.Value).DayNumber) <= 3;
-    }
-
-    private static bool IsPosted(Transaction transaction)
-    {
-        return transaction.PostedAt.HasValue && (string.IsNullOrEmpty(transaction.Status)
-            || string.Equals(transaction.Status, "posted", StringComparison.OrdinalIgnoreCase));
-    }
-
-    private static TransferLeg ToLeg(Transaction transaction, FinancialCalendar calendar) => new(transaction.Id, transaction.AccountId,
-        transaction.Account is null ? "Account" : AccountPreferences.DisplayName(transaction.Account), transaction.Description ?? "Transaction", transaction.Amount, transaction.Currency, transaction.PostedAt,
-        transaction.PostedAt is { } postedAt ? calendar.ToDate(postedAt) : null);
+    private static TransferRow ToRow(Transaction transaction, FinancialCalendar calendar) => new(transaction.Id, transaction.AccountId,
+        transaction.Account is null ? "Account" : AccountPreferences.DisplayName(transaction.Account),
+        transaction.Description ?? "Transaction", transaction.Amount, transaction.Currency, transaction.PostedAt,
+        transaction.PostedAt is { } postedAt ? calendar.ToDate(postedAt) : null, transaction.InternalTransferAccountId,
+        transaction.InternalTransferAccount is null ? null : AccountPreferences.DisplayName(transaction.InternalTransferAccount),
+        transaction.InternalTransferSource);
 }
 
-public sealed record TransferCandidate(Transaction Debit, Transaction Credit);
-public sealed record TransferLeg(Guid Id, Guid AccountId, string AccountName, string Description, decimal Amount, string Currency, DateTimeOffset? PostedAt, DateOnly? PostedDate);
-public sealed record TransferReview(TransferLeg Debit, TransferLeg Credit, string Status, bool IsAmbiguous, string Explanation, DateTimeOffset? ReviewedAt, string? ReviewedByUserId);
-public sealed record TransferReviewPage(IReadOnlyList<TransferReview> Items, int TotalCount, int Page, int PageSize);
-public sealed record TransferDecisionRequest(Guid DebitTransactionId, Guid CreditTransactionId, string Action,
-    decimal Amount, string Currency, Guid DebitAccountId, Guid CreditAccountId, DateTimeOffset? DebitPostedAt, DateTimeOffset? CreditPostedAt);
+public sealed record TransferRow(Guid Id, Guid AccountId, string AccountName, string Description, decimal Amount, string Currency,
+    DateTimeOffset? PostedAt, DateOnly? PostedDate, Guid? CounterpartyAccountId, string? CounterpartyAccountName, string? Source);
+public sealed record TransferReviewPage(IReadOnlyList<TransferRow> Items, int TotalCount, int Page, int PageSize);
+public sealed record TransferDecisionRequest(Guid TransactionId, string Action, Guid? CounterpartyAccountId, bool? CreateRule = null);

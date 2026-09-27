@@ -82,7 +82,7 @@ public static class CashFlowEndpoints
                 && (x.Status == null || x.Status == "" || x.Status.ToLower() == "posted"));
         if (includeInternalTransfers != true)
         {
-            transactionQuery = transactionQuery.ExcludeInternalTransfers(dbContext, currentTenant.TenantId);
+            transactionQuery = transactionQuery.ExcludeInternalTransfers();
         }
         var dailyTotals = await transactionQuery
             .GroupBy(x => TimeZoneInfo.ConvertTimeBySystemTimeZoneId(x.PostedAt!.Value.UtcDateTime, timeZoneId).Date)
