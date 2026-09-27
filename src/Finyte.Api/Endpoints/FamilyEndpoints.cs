@@ -1,7 +1,9 @@
 using System.Net.Mail;
 using Finyte.Api.Tenancy;
+using Finyte.Core.Scheduling;
 using Finyte.Core.Tenancy;
 using Finyte.Data;
+using Finyte.Data.Analytics;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
 
@@ -13,6 +15,7 @@ public static class FamilyEndpoints
     {
         var group = app.MapGroup("/api/family").RequireAuthorization();
         group.MapGet("/", GetFamily).WithName("GetFamily");
+        group.MapPut("/settings", UpdateSettings).WithName("UpdateFamilySettings");
         group.MapPost("/invitations", Invite).WithName("InviteFamilyMember");
         group.MapDelete("/invitations/{invitationId:guid}", RevokeInvitation).WithName("RevokeFamilyInvitation");
         group.MapPost("/invitations/{invitationId:guid}/dev-accept", AcceptDevelopmentInvitation).WithName("AcceptDevelopmentFamilyInvitation");
@@ -52,6 +55,7 @@ public static class FamilyEndpoints
             tenant.Id,
             tenant.ClerkOrganizationId,
             tenant.Name,
+            tenant.TimeZoneId,
             currentTenant.Role == TenantRole.Owner,
             environment.IsDevelopment(),
             members,
@@ -237,6 +241,38 @@ public static class FamilyEndpoints
         return TypedResults.NoContent();
     }
 
+    private static async Task<Results<Ok<FamilySettingsResponse>, BadRequest<string>, ForbidHttpResult>> UpdateSettings(
+        FamilySettingsRequest request,
+        TenantResolver tenantResolver,
+        HttpContext httpContext,
+        FinyteDbContext dbContext,
+        IProjectionInvalidator projectionInvalidator,
+        CancellationToken cancellationToken)
+    {
+        var currentTenant = await tenantResolver.Resolve(httpContext.User, cancellationToken);
+        if (currentTenant.Role != TenantRole.Owner)
+        {
+            return TypedResults.Forbid();
+        }
+
+        var timeZoneId = request.TimeZoneId?.Trim();
+        if (timeZoneId is null || timeZoneId.Length > 64 || !FinancialCalendar.IsValidTimeZoneId(timeZoneId))
+        {
+            return TypedResults.BadRequest("Choose a valid time zone, such as Australia/Sydney.");
+        }
+
+        var tenant = await dbContext.Tenants.SingleAsync(x => x.Id == currentTenant.TenantId, cancellationToken);
+        if (tenant.TimeZoneId != timeZoneId)
+        {
+            tenant.TimeZoneId = timeZoneId;
+            // Every day and month boundary moves with the zone, so cached overviews must rebuild.
+            await projectionInvalidator.TenantProjectionDataChanged(tenant.Id, "household time zone changed", cancellationToken);
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+
+        return TypedResults.Ok(new FamilySettingsResponse(tenant.TimeZoneId));
+    }
+
     private static FamilyInvitationResponse ToResponse(FamilyInvitation invitation)
     {
         return new FamilyInvitationResponse(invitation.Id, invitation.Email, invitation.Role, invitation.Status, invitation.CreatedAt);
@@ -244,10 +280,15 @@ public static class FamilyEndpoints
 
     private sealed record InviteRequest(string? Email);
 
+    private sealed record FamilySettingsRequest(string? TimeZoneId);
+
+    private sealed record FamilySettingsResponse(string TimeZoneId);
+
     private sealed record FamilyResponse(
         Guid Id,
         string OrganizationId,
         string Name,
+        string TimeZoneId,
         bool CanManage,
         bool IsDevelopment,
         IReadOnlyList<FamilyMemberResponse> Members,

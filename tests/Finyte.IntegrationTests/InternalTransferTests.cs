@@ -134,7 +134,7 @@ public sealed class InternalTransferTests
         var debit = Transaction(tenantId, Guid.NewGuid(), -100, 1);
         var credit = Transaction(tenantId, Guid.NewGuid(), 100, 2);
         var otherCredit = Transaction(tenantId, Guid.NewGuid(), 100, 4);
-        Assert.Equal(2, InternalTransferService.FindCandidates([debit, credit, otherCredit]).Count);
+        Assert.Equal(2, InternalTransferService.FindCandidates([debit, credit, otherCredit], TestCalendar.Default).Count);
     }
 
     [Theory]
@@ -160,7 +160,7 @@ public sealed class InternalTransferTests
             case "pending": credit.Status = "pending"; break;
             case "no-date": credit.PostedAt = null; break;
         }
-        Assert.Empty(InternalTransferService.FindCandidates([debit, credit]));
+        Assert.Empty(InternalTransferService.FindCandidates([debit, credit], TestCalendar.Default));
     }
 
     [Fact]
@@ -370,7 +370,7 @@ public sealed class InternalTransferTests
             dbContext.Accounts.Add(excludedAccount);
             dbContext.Transactions.AddRange(pending, undated, Transaction(seed.TenantId, excludedAccount.Id, -200, 10));
             await dbContext.SaveChangesAsync();
-            var projector = new OverviewProjector(dbContext);
+            var projector = new OverviewProjector(dbContext, TestCalendar.Tenants(dbContext));
             var projectionScope = new OverviewProjectionScope(seed.TenantId, null, "2026-08");
             var normal = await projector.Rebuild(projectionScope, CancellationToken.None);
             var comparison = await projector.ReadIncludingTransfers(projectionScope, CancellationToken.None);

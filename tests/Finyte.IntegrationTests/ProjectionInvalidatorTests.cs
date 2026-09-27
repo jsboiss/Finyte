@@ -20,7 +20,7 @@ public sealed class ProjectionInvalidatorTests
         var otherMonth = CreateProjection(tenant.Id, accountId, "2026-05");
         dbContext.AddRange(tenant, accountProjection, allProjection, otherMonth);
         await dbContext.SaveChangesAsync();
-        var invalidator = new ProjectionInvalidator(dbContext);
+        var invalidator = new ProjectionInvalidator(dbContext, TestCalendar.Tenants(dbContext));
 
         await invalidator.TransactionChanged(
             tenant.Id,
@@ -47,7 +47,7 @@ public sealed class ProjectionInvalidatorTests
         dbContext.Add(tenant);
         dbContext.AddRange(projections);
         await dbContext.SaveChangesAsync();
-        var invalidator = new ProjectionInvalidator(dbContext);
+        var invalidator = new ProjectionInvalidator(dbContext, TestCalendar.Tenants(dbContext));
 
         await invalidator.TenantProjectionDataChanged(tenant.Id, "broad change", CancellationToken.None);
 
@@ -65,7 +65,7 @@ public sealed class ProjectionInvalidatorTests
         var other = CreateProjection(tenant.Id, Guid.NewGuid(), "2026-06");
         dbContext.AddRange(tenant, requested, other);
         await dbContext.SaveChangesAsync();
-        var invalidator = new ProjectionInvalidator(dbContext);
+        var invalidator = new ProjectionInvalidator(dbContext, TestCalendar.Tenants(dbContext));
 
         await invalidator.OverviewRequested(tenant.Id, null, "2026-06", CancellationToken.None);
 

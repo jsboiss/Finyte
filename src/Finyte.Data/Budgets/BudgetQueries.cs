@@ -1,5 +1,6 @@
 using Finyte.Core.Accounts;
 using Finyte.Core.Budgets;
+using Finyte.Core.Scheduling;
 using Finyte.Data.Transfers;
 using Microsoft.EntityFrameworkCore;
 
@@ -7,14 +8,14 @@ namespace Finyte.Data.Budgets;
 
 public static class BudgetQueries
 {
-    public static async Task<IQueryable<Transaction>> Transactions(FinyteDbContext dbContext, Budget budget, CancellationToken cancellationToken, bool includeOtherCurrencies = false)
+    public static async Task<IQueryable<Transaction>> Transactions(FinyteDbContext dbContext, Budget budget, FinancialCalendar calendar, CancellationToken cancellationToken, bool includeOtherCurrencies = false)
     {
         var selectedIds = budget.Accounts.Select(x => x.AccountId).ToArray();
         var accounts = await dbContext.Accounts.AsNoTracking()
             .Where(x => x.TenantId == budget.TenantId && (budget.AccountScope != "selected" || selectedIds.Contains(x.Id)))
             .ToListAsync(cancellationToken);
         var accountIds = accounts.Where(x => budget.AccountScope == "selected" || AccountPreferences.IncludeInAnalytics(x)).Select(x => x.Id).ToArray();
-        var observedUntil = new DateTimeOffset(DateTime.UtcNow.Date.AddDays(1), TimeSpan.Zero);
+        var observedUntil = calendar.EndExclusive(calendar.Today);
         var query = dbContext.Transactions.AsNoTracking()
             .Where(x => x.TenantId == budget.TenantId && accountIds.Contains(x.AccountId)
                 && (includeOtherCurrencies || x.Currency == budget.Currency) && x.Amount < 0 && x.PostedAt != null && x.PostedAt < observedUntil
@@ -31,10 +32,10 @@ public static class BudgetQueries
         return query;
     }
 
-    public static IQueryable<Transaction> InPeriod(this IQueryable<Transaction> query, BudgetPeriod period)
+    public static IQueryable<Transaction> InPeriod(this IQueryable<Transaction> query, BudgetPeriod period, FinancialCalendar calendar)
     {
-        var from = new DateTimeOffset(period.From.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
-        var to = new DateTimeOffset(period.EndExclusive.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+        var from = calendar.StartOf(period.From);
+        var to = calendar.StartOf(period.EndExclusive);
         return query.Where(x => x.PostedAt >= from && x.PostedAt < to);
     }
 }

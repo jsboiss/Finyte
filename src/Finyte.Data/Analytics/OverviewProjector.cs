@@ -1,18 +1,21 @@
 using System.Text.Json;
 using Finyte.Core.Accounts;
 using Finyte.Core.Analytics;
+using Finyte.Core.Scheduling;
+using Finyte.Data.Tenancy;
 using Finyte.Data.Transfers;
 using Microsoft.EntityFrameworkCore;
 
 namespace Finyte.Data.Analytics;
 
-public sealed class OverviewProjector(FinyteDbContext dbContext) : IOverviewProjector
+public sealed class OverviewProjector(FinyteDbContext dbContext, TenantCalendars calendars) : IOverviewProjector
 {
     private static JsonSerializerOptions JsonOptions { get; } = new(JsonSerializerDefaults.Web);
 
     public async Task<OverviewResponse> GetOrRebuild(Guid tenantId, Guid? accountId, CancellationToken cancellationToken)
     {
-        var monthKey = GetCurrentMonthKey();
+        var calendar = await calendars.For(tenantId, cancellationToken);
+        var monthKey = calendar.CurrentMonthKey;
         var projection = await dbContext.OverviewProjections
             .AsNoTracking()
             .Where(x => x.TenantId == tenantId && x.AccountId == accountId && x.MonthKey == monthKey)
@@ -35,18 +38,19 @@ public sealed class OverviewProjector(FinyteDbContext dbContext) : IOverviewProj
     private async Task<OverviewResponse> Build(OverviewProjectionScope scope, bool includeInternalTransfers, CancellationToken cancellationToken)
     {
         var now = DateTimeOffset.UtcNow;
+        var calendar = await calendars.For(scope.TenantId, cancellationToken);
+        var timeZoneId = calendar.TimeZoneId;
         var sourceVersion = await dbContext.Tenants
             .Where(x => x.Id == scope.TenantId)
             .Select(x => x.FinancialDataVersion)
             .SingleAsync(cancellationToken);
         var month = ParseMonthKey(scope.MonthKey);
-        var today = DateOnly.FromDateTime(now.UtcDateTime);
-        var currentMonthKey = GetCurrentMonthKey();
-        var elapsedDays = scope.MonthKey == currentMonthKey
+        var today = calendar.Today;
+        var elapsedDays = scope.MonthKey == calendar.CurrentMonthKey
             ? Math.Max(1, today.Day)
             : DateTime.DaysInMonth(month.Year, month.Month);
-        var monthStart = new DateTimeOffset(month.Year, month.Month, 1, 0, 0, 0, TimeSpan.Zero);
-        var nextMonthStart = monthStart.AddMonths(1);
+        var monthStart = calendar.StartOf(new DateOnly(month.Year, month.Month, 1));
+        var nextMonthStart = calendar.StartOf(new DateOnly(month.Year, month.Month, 1).AddMonths(1));
 
         var accountRows = await dbContext.Accounts
             .AsNoTracking()
@@ -91,7 +95,7 @@ public sealed class OverviewProjector(FinyteDbContext dbContext) : IOverviewProj
             .Select(x => new OverviewDailyCashFlowAccumulator(new DateOnly(month.Year, month.Month, x)))
             .ToDictionary(x => x.Date);
         var dailyTotals = await transactionQuery
-            .GroupBy(x => x.PostedAt!.Value.Date)
+            .GroupBy(x => TimeZoneInfo.ConvertTimeBySystemTimeZoneId(x.PostedAt!.Value.UtcDateTime, timeZoneId).Date)
             .Select(x => new DailyTransactionTotals(
                 x.Key,
                 x.Sum(y => y.Amount > 0 ? y.Amount : 0),
@@ -100,8 +104,7 @@ public sealed class OverviewProjector(FinyteDbContext dbContext) : IOverviewProj
 
         foreach (var dailyTotal in dailyTotals)
         {
-            var date = DateOnly.FromDateTime(dailyTotal.Date);
-            if (!dailyMap.TryGetValue(date, out var day))
+            if (!dailyMap.TryGetValue(DateOnly.FromDateTime(dailyTotal.Date), out var day))
             {
                 continue;
             }
@@ -225,12 +228,6 @@ public sealed class OverviewProjector(FinyteDbContext dbContext) : IOverviewProj
     {
         return JsonSerializer.Deserialize<OverviewResponse>(payloadJson, JsonOptions)
             ?? throw new InvalidOperationException("Overview projection payload could not be deserialized.");
-    }
-
-    private static string GetCurrentMonthKey()
-    {
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        return $"{today.Year:D4}-{today.Month:D2}";
     }
 
     private static YearMonth ParseMonthKey(string monthKey)

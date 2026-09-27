@@ -21,7 +21,7 @@ export type Range = { from: string; to: string }
 export type Page<T> = { items: T[]; totalCount: number; page: number; pageSize: number }
 export type Snapshot = {
   id: string; accountId: string; accountName: string; amount: number; currency: string
-  postedAt: string | null; merchantName: string | null; description: string | null
+  postedAt: string | null; postedDate: string | null; merchantName: string | null; description: string | null
   reference: string | null; status: string | null; fingerprint: string
 }
 export type Discovery = {

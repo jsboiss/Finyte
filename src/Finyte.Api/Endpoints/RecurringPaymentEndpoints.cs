@@ -1,5 +1,6 @@
 using Finyte.Api.Tenancy;
 using Finyte.Core.Recurring;
+using Finyte.Data.Tenancy;
 using Finyte.Data.Billing;
 using Finyte.Data.Recurring;
 using Microsoft.EntityFrameworkCore;
@@ -61,16 +62,16 @@ public static class RecurringPaymentEndpoints
         return app;
     }
 
-    private static async Task<IResult> List(DateOnly? from, DateOnly? to, Guid? accountId, HttpContext httpContext, RecurringPaymentService service, TimeProvider timeProvider, CancellationToken cancellationToken)
+    private static async Task<IResult> List(DateOnly? from, DateOnly? to, Guid? accountId, HttpContext httpContext, RecurringPaymentService service, TenantCalendars calendars, CancellationToken cancellationToken)
     {
-        var today = DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime);
+        var today = (await calendars.For(Tenant(httpContext).TenantId, cancellationToken)).Today;
         return Results.Ok(await service.List(Tenant(httpContext).TenantId, from ?? today.AddDays(-1096), to ?? today.AddDays(366), cancellationToken, accountId));
     }
 
     private static async Task<IResult> Discover(DateOnly? from, DateOnly? to, int? page, int? pageSize, bool? dismissed, Guid? accountId, string? search, string? cadence, string? sort, bool? hideEnded, HttpContext httpContext,
-        RecurringPaymentService service, TimeProvider timeProvider, CancellationToken cancellationToken)
+        RecurringPaymentService service, TenantCalendars calendars, CancellationToken cancellationToken)
     {
-        var today = DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime);
+        var today = (await calendars.For(Tenant(httpContext).TenantId, cancellationToken)).Today;
         return Results.Ok(await service.Discover(Tenant(httpContext).TenantId, from ?? today.AddDays(-1096), to ?? today,
             page ?? 1, pageSize ?? 20, dismissed ?? false, cancellationToken, accountId, search, cadence, sort, hideEnded ?? false));
     }
@@ -95,16 +96,16 @@ public static class RecurringPaymentEndpoints
         Results.Ok(await service.Update(Tenant(httpContext).TenantId, seriesId, request, cancellationToken));
 
     private static async Task<IResult> Occurrences(Guid seriesId, DateOnly? from, DateOnly? to, HttpContext httpContext, RecurringPaymentService service,
-        TimeProvider timeProvider, CancellationToken cancellationToken)
+        TenantCalendars calendars, CancellationToken cancellationToken)
     {
-        var today = DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime);
+        var today = (await calendars.For(Tenant(httpContext).TenantId, cancellationToken)).Today;
         return Results.Ok(await service.Occurrences(Tenant(httpContext).TenantId, seriesId, from ?? today.AddDays(-31), to ?? today.AddDays(90), cancellationToken));
     }
 
     private static async Task<IResult> Candidates(Guid seriesId, DateOnly? from, DateOnly? to, DateOnly? occurrenceDate, int? page, int? pageSize,
-        HttpContext httpContext, RecurringPaymentService service, TimeProvider timeProvider, CancellationToken cancellationToken)
+        HttpContext httpContext, RecurringPaymentService service, TenantCalendars calendars, CancellationToken cancellationToken)
     {
-        var today = DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime);
+        var today = (await calendars.For(Tenant(httpContext).TenantId, cancellationToken)).Today;
         return Results.Ok(await service.Candidates(Tenant(httpContext).TenantId, seriesId, from ?? today.AddDays(-1096), to ?? today,
             occurrenceDate, page ?? 1, pageSize ?? 25, cancellationToken));
     }

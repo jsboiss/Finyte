@@ -4,13 +4,14 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Finyte.Core.Accounts;
+using Finyte.Data.Tenancy;
 using Finyte.Data.Analytics;
 using Finyte.Data.Tagging;
 using Microsoft.EntityFrameworkCore;
 
 namespace Finyte.Data.Imports;
 
-public sealed class TransactionFileImportService(FinyteDbContext dbContext, IProjectionInvalidator projectionInvalidator, TransactionTagService tagService)
+public sealed class TransactionFileImportService(FinyteDbContext dbContext, IProjectionInvalidator projectionInvalidator, TransactionTagService tagService, TenantCalendars calendars)
 {
     public async Task<TransactionFileImport> Import(Guid tenantId, Guid accountId, string fileName, Stream stream, CancellationToken cancellationToken)
     {
@@ -54,10 +55,13 @@ public sealed class TransactionFileImportService(FinyteDbContext dbContext, IPro
                 account.ManualBalanceVersion++;
             }
 
-            var from = new DateTimeOffset(transactions.Min(x => x.PostedDate).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
-            var to = new DateTimeOffset(transactions.Max(x => x.PostedDate).ToDateTime(TimeOnly.MaxValue), TimeSpan.Zero);
+            var calendar = await calendars.For(tenantId, cancellationToken);
+            var from = transactions.Min(x => x.PostedDate);
+            var to = transactions.Max(x => x.PostedDate);
+            var fromInstant = calendar.StartOf(from);
+            var toInstant = calendar.EndExclusive(to);
             var existing = await dbContext.Transactions
-                .Where(x => x.TenantId == tenantId && x.AccountId == accountId && x.PostedAt >= from && x.PostedAt <= to)
+                .Where(x => x.TenantId == tenantId && x.AccountId == accountId && x.PostedAt >= fromInstant && x.PostedAt < toInstant)
                 .ToListAsync(cancellationToken);
             var occurrences = new Dictionary<string, int>();
             var rows = transactions.Select(x =>
@@ -88,7 +92,7 @@ public sealed class TransactionFileImportService(FinyteDbContext dbContext, IPro
                 var transaction = row.Transaction;
                 var amount = transaction.AmountMinorUnits / 100m;
                 var candidates = existing.Where(x => !used.Contains(x.Id) && !x.FiskilTransactionId.StartsWith("file:", StringComparison.Ordinal)
-                    && x.PostedAt.HasValue && DateOnly.FromDateTime(x.PostedAt.Value.UtcDateTime) == transaction.PostedDate
+                    && x.PostedAt.HasValue && calendar.ToDate(x.PostedAt.Value) == transaction.PostedDate
                     && x.Amount == amount && !string.Equals(x.Status, "pending", StringComparison.OrdinalIgnoreCase)).ToList();
                 var matched = candidates.FirstOrDefault(x => MatchKey(transaction.PostedDate, x.Amount, x.Description ?? "") == row.MatchKey);
                 // Only provider rows are eligible for the less strict legacy match.
@@ -107,7 +111,7 @@ public sealed class TransactionFileImportService(FinyteDbContext dbContext, IPro
                     TenantId = tenantId, AccountId = accountId, FiskilTransactionId = row.ExternalId,
                     Amount = amount, Currency = account.Currency, Description = transaction.Description,
                     MerchantName = transaction.Description.Length <= 256 ? transaction.Description : transaction.Description[..256],
-                    Status = "posted", PostedAt = new DateTimeOffset(transaction.PostedDate.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero),
+                    Status = "posted", PostedAt = calendar.NoonOf(transaction.PostedDate),
                     CreatedAt = DateTimeOffset.UtcNow,
                     RawJson = JsonSerializer.Serialize(new { source = "file-import", fileName = run.FileName, transaction.BankId })
                 };
@@ -121,8 +125,7 @@ public sealed class TransactionFileImportService(FinyteDbContext dbContext, IPro
             await dbContext.SaveChangesAsync(cancellationToken);
             if (run.ImportedCount > 0)
             {
-                await new Transfers.AutomaticTransferService(dbContext, projectionInvalidator).Reconcile(tenantId, cancellationToken,
-                    DateOnly.FromDateTime(from.UtcDateTime), DateOnly.FromDateTime(to.UtcDateTime));
+                await new Transfers.AutomaticTransferService(dbContext, projectionInvalidator, calendars).Reconcile(tenantId, cancellationToken, from, to);
             }
             run.TotalCount = transactions.Count;
             run.Status = "completed";

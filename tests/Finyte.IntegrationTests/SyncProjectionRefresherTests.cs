@@ -18,7 +18,7 @@ public sealed class SyncProjectionRefresherTests
         dbContext.ProviderSyncRuns.Add(syncRun);
         await dbContext.SaveChangesAsync();
         var invalidator = new RecordingProjectionInvalidator();
-        var refresher = new SyncProjectionRefresher(dbContext, invalidator);
+        var refresher = new SyncProjectionRefresher(dbContext, invalidator, TestCalendar.Tenants(dbContext));
 
         await refresher.RefreshAfterSync(syncRun.Id, SyncChangeSummary.Empty, CancellationToken.None);
 
@@ -40,7 +40,7 @@ public sealed class SyncProjectionRefresherTests
         dbContext.ProviderSyncRuns.AddRange(firstRun, secondRun);
         await dbContext.SaveChangesAsync();
         var invalidator = new RecordingProjectionInvalidator();
-        var refresher = new SyncProjectionRefresher(dbContext, invalidator);
+        var refresher = new SyncProjectionRefresher(dbContext, invalidator, TestCalendar.Tenants(dbContext));
 
         await refresher.RefreshAfterSync(
             firstRun.Id,
@@ -75,7 +75,7 @@ public sealed class SyncProjectionRefresherTests
         dbContext.ProviderSyncRuns.Add(syncRun);
         await dbContext.SaveChangesAsync();
         var invalidator = new RecordingProjectionInvalidator();
-        var refresher = new SyncProjectionRefresher(dbContext, invalidator);
+        var refresher = new SyncProjectionRefresher(dbContext, invalidator, TestCalendar.Tenants(dbContext));
 
         await refresher.RefreshAfterSync(
             syncRun.Id,
