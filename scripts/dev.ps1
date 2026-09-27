@@ -2,11 +2,17 @@ param([ValidateSet('start', 'status', 'stop', 'restart')][string]$Action = 'star
 $ErrorActionPreference = 'Stop'
 $workspace = Split-Path $PSScriptRoot -Parent
 Set-Location -LiteralPath $workspace
-# Reuse local .NET secrets for both the API and worker; never print their values.
+# Compose reads the shared sandbox settings from the workspace .env file.
+# Only fall back to .NET secrets when no .env exists, to avoid mixing workspaces.
+$envFile = Join-Path $workspace '.env'
+$compose = @('compose', '-p', 'finyte-sample-dev', '-f', (Join-Path $workspace 'docker-compose.dev.yml'))
+if (Test-Path -LiteralPath $envFile) {
+    $compose += @('--env-file', $envFile)
+}
 $apiProject = [xml](Get-Content -Raw (Join-Path $workspace 'src/Finyte.Api/Finyte.Api.csproj'))
 $secretsId = ($apiProject.Project.PropertyGroup | Where-Object UserSecretsId | Select-Object -First 1).UserSecretsId
 $secretsPath = Join-Path $env:APPDATA "Microsoft/UserSecrets/$secretsId/secrets.json"
-if (Test-Path -LiteralPath $secretsPath) {
+if (!(Test-Path -LiteralPath $envFile) -and (Test-Path -LiteralPath $secretsPath)) {
     $localSecrets = Get-Content -Raw -LiteralPath $secretsPath | ConvertFrom-Json
     $secretEnvironment = @{
         'Fiskil:ClientId' = 'FINYTE_FISKIL_CLIENT_ID'
@@ -21,7 +27,6 @@ if (Test-Path -LiteralPath $secretsPath) {
         }
     }
 }
-$compose = @('compose', '-p', 'finyte-sample-dev', '-f', (Join-Path $workspace 'docker-compose.dev.yml'))
 function Docker-Run([string[]]$Arguments) {
     & docker @Arguments
     if ($LASTEXITCODE -ne 0) { throw "Docker command failed: $($Arguments -join ' ')" }
