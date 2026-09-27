@@ -45,7 +45,6 @@ public sealed class TagSuggestionService(FinyteDbContext dbContext, TenantCalend
             }
             var display = StatementNameCleaner.Clean(group.First().MerchantName ?? group.First().Description);
             var keyword = MerchantKeywordCatalog.Suggest(group.Key);
-            // A keyword at the start lets one rule cover every branch of the merchant, e.g. each store of a chain.
             var ruleName = keyword is { AtStart: true, Generic: false }
                 ? string.Join(' ', display.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(keyword.Keyword.Split(' ').Length))
                 : display;
@@ -178,7 +177,6 @@ public sealed class TagSuggestionService(FinyteDbContext dbContext, TenantCalend
                 reason = $"Keyword: {keyword.Keyword}";
                 return;
             }
-            // A bank category is only a hint when it names a tag the family has or a starter tag.
             var category = group.SelectMany(x => new[] { x.SecondaryCategory, x.PrimaryCategory }).Where(x => !string.IsNullOrWhiteSpace(x))
                 .Select(x => x!.Trim())
                 .FirstOrDefault(x => tags.Any(y => string.Equals(y.Name, x, StringComparison.OrdinalIgnoreCase)) || MerchantKeywordCatalog.Starter(x) is not null);

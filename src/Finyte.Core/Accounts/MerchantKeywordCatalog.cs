@@ -1,6 +1,5 @@
 namespace Finyte.Core.Accounts;
 
-// Suggestions only: nothing here tags a transaction until the family accepts a merchant rule.
 public static class MerchantKeywordCatalog
 {
     public sealed record StarterTag(string Name, string Color);
@@ -29,7 +28,6 @@ public static class MerchantKeywordCatalog
         ["Transfers"] = ["transfer to"]
     };
 
-    // Longest keyword first so specific names win; Transfers last so "transfer to ... rent" suggests Home.
     private static readonly (string Keyword, string Tag)[] Ordered = KeywordsByTag
         .SelectMany(x => x.Value.Select(y => (Keyword: y, Tag: x.Key)))
         .OrderBy(x => x.Tag == "Transfers").ThenByDescending(x => x.Keyword.Length).ThenBy(x => x.Keyword, StringComparer.Ordinal)
@@ -52,7 +50,6 @@ public static class MerchantKeywordCatalog
                 continue;
             }
             var match = new KeywordMatch(keyword, tag, padded.StartsWith($" {keyword} ", StringComparison.Ordinal), IsGeneric(keyword, tag));
-            // The merchant's leading brand beats a longer word later in the name, except that Transfers always comes last.
             if (best is null || (match.TagName != "Transfers" && (best.TagName == "Transfers" || (match.AtStart && !best.AtStart))))
             {
                 best = match;
@@ -61,8 +58,6 @@ public static class MerchantKeywordCatalog
         return best;
     }
 
-    // A generic phrase starts many unrelated merchants ("transfer to ...", or "uber" before "uber eats"), so a rule for it
-    // must name the whole merchant rather than every merchant beginning with it.
     private static bool IsGeneric(string keyword, string tag) =>
         tag == "Transfers" || Ordered.Any(x => x.Keyword.StartsWith($"{keyword} ", StringComparison.Ordinal));
 

@@ -28,7 +28,7 @@ public sealed class TagSuggestionApiTests
         var coverage = Assert.Single(suggestions.Coverage);
         Assert.Equal("AUD", coverage.Currency);
         Assert.Equal(1200, coverage.TaggedMinorUnits);
-        Assert.Equal(1200 + 3 * 5000 + 2 * 999, coverage.TotalMinorUnits); // The internal transfer is not spending.
+        Assert.Equal(1200 + 3 * 5000 + 2 * 999, coverage.TotalMinorUnits);
         var groceries = Assert.Single(suggestions.Groups);
         Assert.Equal("Groceries", groceries.TagName);
         Assert.Null(groceries.TagId);
