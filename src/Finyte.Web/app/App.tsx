@@ -23,7 +23,7 @@ import { TransactionAccountChip, TransactionAmount } from './transactions/Transa
 import { TransactionCardList } from './transactions/TransactionCardList'
 import { TransactionPagination } from './transactions/TransactionPagination'
 import { TransactionResultTotals } from './transactions/TransactionResultTotals'
-import { tagAllocationMinorUnits } from './transactions/tagAllocation'
+import { isAllocatedSpend, tagAllocationMinorUnits } from './transactions/tagAllocation'
 import { TransactionQuickFilters, TransactionFilterChips } from './transactions/TransactionQuickFilters'
 import { TransactionFilterForm } from './transactions/TransactionFilters'
 import { defaultTransactionFilters, readTransactionRouteSearch, transactionRouteSearch, transactionSearchParams, type TransactionFilters } from './transactions/transactionSearch'
@@ -460,7 +460,7 @@ function TransactionsPage() {
     ? (tagsQuery.data ?? []).find(x => x.id === filters.tagIds[0])
     : undefined
   const allocationFor = useCallback((transaction: Transaction) => {
-    if (!allocationTag || transaction.tags.length < 2) {
+    if (!allocationTag || !isAllocatedSpend(transaction.amountMinorUnits, transaction.tags.length)) {
       return undefined
     }
     return {
