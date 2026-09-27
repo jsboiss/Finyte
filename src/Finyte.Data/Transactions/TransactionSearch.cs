@@ -149,10 +149,10 @@ public sealed record TransactionSearch
             var category = Category.Trim().ToLowerInvariant();
             query = query.Where(x => (x.CategoryOverride ?? "").Trim() != ""
                 ? x.CategoryOverride!.ToLower().Contains(category)
-                : (x.SecondaryCategory ?? "").Trim() != "" || (x.PrimaryCategory ?? "").Trim() != ""
-                    ? (x.PrimaryCategory != null && x.PrimaryCategory.ToLower().Contains(category))
-                        || (x.SecondaryCategory != null && x.SecondaryCategory.ToLower().Contains(category))
-                    : x.CategoryFromRule != null && x.CategoryFromRule.ToLower().Contains(category));
+                : (x.CategoryFromRule ?? "").Trim() != ""
+                    ? x.CategoryFromRule!.ToLower().Contains(category)
+                    : (x.PrimaryCategory != null && x.PrimaryCategory.ToLower().Contains(category))
+                        || (x.SecondaryCategory != null && x.SecondaryCategory.ToLower().Contains(category)));
         }
 
         var tagIds = TagIds.Distinct().ToArray();

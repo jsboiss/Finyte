@@ -191,6 +191,31 @@ public sealed class TransactionCategoryOverrideTests
     }
 
     [Fact]
+    public async Task ARuleMovesTheDashboardBarAndItsDrillDownTogether()
+    {
+        await using var factory = new FinyteApiFactory();
+        using var client = factory.CreateClient();
+        var seed = await Seed(factory, client);
+        await CreateRule(client, "Kmart", "Transport");
+
+        using var scope = factory.Services.CreateScope();
+        var projector = scope.ServiceProvider.GetRequiredService<IOverviewProjector>();
+        var overview = await projector.Rebuild(new OverviewProjectionScope(seed.TenantId, null, "2026-08"), CancellationToken.None);
+        var bar = Assert.Single(overview.MonthlySpendByCategory!);
+
+        Assert.Equal("Transport", bar.Name);
+        Assert.Equal(4500, bar.AmountMinorUnits);
+        Assert.DoesNotContain(overview.MonthlySpendByCategory!, x => x.Name == "Department stores");
+
+        var drillDown = await client.GetFromJsonAsync<JsonElement>("/api/transactions?category=Transport");
+        var item = Assert.Single(drillDown.GetProperty("items").EnumerateArray());
+        Assert.Equal(seed.TransactionId, item.GetProperty("id").GetGuid());
+
+        var stale = await client.GetFromJsonAsync<JsonElement>("/api/transactions?category=Department%20stores");
+        Assert.Empty(stale.GetProperty("items").EnumerateArray());
+    }
+
+    [Fact]
     public async Task TheUncategorisedFilterFindsOnlyTransactionsWithNoCategoryAtAll()
     {
         await using var factory = new FinyteApiFactory();

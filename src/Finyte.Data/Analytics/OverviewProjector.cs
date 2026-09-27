@@ -160,9 +160,9 @@ public sealed class OverviewProjector(FinyteDbContext dbContext) : IOverviewProj
         var categorySpend = await transactionQuery
             .Where(x => x.Amount < 0)
             .GroupBy(x => x.CategoryOverride != null && x.CategoryOverride.Trim() != "" ? x.CategoryOverride.Trim()
+                : x.CategoryFromRule != null && x.CategoryFromRule.Trim() != "" ? x.CategoryFromRule.Trim()
                 : x.SecondaryCategory != null && x.SecondaryCategory.Trim() != "" ? x.SecondaryCategory.Trim()
                 : x.PrimaryCategory != null && x.PrimaryCategory.Trim() != "" ? x.PrimaryCategory.Trim()
-                : x.CategoryFromRule != null && x.CategoryFromRule.Trim() != "" ? x.CategoryFromRule.Trim()
                 : TransactionCategories.Uncategorised)
             .Select(x => new { Category = x.Key, Amount = x.Sum(y => -y.Amount) })
             .ToListAsync(cancellationToken);
