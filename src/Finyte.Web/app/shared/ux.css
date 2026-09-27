@@ -108,7 +108,9 @@ button, a, input, select, summary { touch-action: manipulation; }
 .family-settings-page .family-invite-panel, .family-settings-page .family-members-panel { padding: 20px; }
 .billing-page .billing-panel { max-width: 760px; width: 100%; box-sizing: border-box; }
 @media (max-width: 1000px) {
-  .accounts-page .account-card { grid-template-columns: minmax(0,1fr) auto; gap: 12px; }
+  .accounts-page .account-card { grid-template-columns: minmax(0,1fr); gap: 12px; }
+  .accounts-page .account-card h2 { overflow-wrap: anywhere; }
+  .account-balance { text-align: left; }
   .account-card .account-actions { grid-column: 1 / -1; }
   .imports-page { grid-template-columns: minmax(0,1fr); }
 }
@@ -121,9 +123,7 @@ button, a, input, select, summary { touch-action: manipulation; }
   .overview-controls { flex-wrap: wrap; }
   .overview-actions { flex: 1; min-width: 0; }
   .overview-actions label { flex: 1; min-width: 0; }
-  .accounts-page .account-card { padding: 16px; grid-template-columns: minmax(0,1fr); gap: 12px; }
-  .accounts-page .account-card h2 { overflow-wrap: anywhere; }
-  .account-balance { text-align: left; }
+  .accounts-page .account-card { padding: 16px; }
   .account-balance strong { font-size: 18px; }
   .account-balance span { font-size: 11px; }
   .account-card .account-actions button { flex: 1; min-height: 44px; }
