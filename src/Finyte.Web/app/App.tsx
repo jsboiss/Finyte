@@ -22,6 +22,7 @@ import { RecurringPage } from './recurring/RecurringPage'
 import { TransactionAccountChip, TransactionAmount } from './transactions/TransactionCard'
 import { TransactionCardList } from './transactions/TransactionCardList'
 import { TransactionPagination } from './transactions/TransactionPagination'
+import { TransactionResultTotals } from './transactions/TransactionResultTotals'
 import { TransactionQuickFilters, TransactionFilterChips } from './transactions/TransactionQuickFilters'
 import { TransactionFilterForm } from './transactions/TransactionFilters'
 import { defaultTransactionFilters, readTransactionRouteSearch, transactionRouteSearch, transactionSearchParams, type TransactionFilters } from './transactions/transactionSearch'
@@ -470,7 +471,7 @@ function TransactionsPage() {
       cell: x => (
         <div className="transaction-description">
           <strong>{x.getValue()}</strong>
-          {x.row.original.isInternalTransfer && <Link className="transfer-badge" to="/transactions" search={previous => ({ ...previous, transferView: 'confirmed' })}>Internal transfer · excluded from totals</Link>}
+          {x.row.original.isInternalTransfer && <Link className="transfer-badge" to="/transactions" search={previous => ({ ...previous, transferView: 'confirmed' })}>Internal transfer</Link>}
           {x.row.original.merchantName && x.row.original.merchantName.toLowerCase() !== x.getValue()?.toLowerCase() && <span>{x.row.original.merchantName}</span>}
         </div>
       ),
@@ -676,6 +677,13 @@ function TransactionsPage() {
           </tbody>
         </table>
       </section>
+
+      <TransactionResultTotals
+        internalTransfers={filters.internalTransfers}
+        isError={transactionsQuery.isError}
+        isLoading={isLoading}
+        totals={transactionsQuery.data?.totals}
+      />
 
       <TransactionPagination
         isLoading={isLoading}
