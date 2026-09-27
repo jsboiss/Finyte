@@ -35,7 +35,8 @@ public static class RecurringPatternDetector
         {
             return [];
         }
-        var asOf = options.AsOf ?? rows.Max(x => x.Transaction.PostedDate);
+        // A pattern can only be judged stopped against charges that were actually imported for its account.
+        var latestByAccount = rows.GroupBy(x => x.Transaction.AccountId).ToDictionary(x => x.Key, x => x.Max(y => y.Transaction.PostedDate));
         var results = new List<RecurringPatternCandidate>();
         foreach (var rowGroup in rows.GroupBy(x => new GroupKey(x.Transaction.AccountId, x.Transaction.Currency.Trim().ToUpperInvariant(), x.Field, x.Alias)))
         {
@@ -44,17 +45,24 @@ public static class RecurringPatternDetector
             {
                 continue;
             }
+            var latest = latestByAccount[rowGroup.Key.AccountId];
+            var asOf = options.AsOf is { } limit && limit < latest ? limit : latest;
             var found = new List<RecurringPatternCandidate>();
+            var explained = 0;
             foreach (var part in Partition(group))
             {
-                found.AddRange(DetectPart(rowGroup.Key, part, asOf));
+                var detected = DetectPart(rowGroup.Key, part, asOf);
+                found.AddRange(detected);
+                explained += detected.Sum(x => x.TransactionIds.Count);
                 if (options.IncludeEarly)
                 {
-                    found.AddRange(EarlyPairs(rowGroup.Key, part, found, asOf));
+                    var early = EarlyPairs(rowGroup.Key, part, found, asOf);
+                    found.AddRange(early.Candidates);
+                    explained += early.Explained;
                 }
             }
             // Busy everyday merchants form coincidental runs. A real subscription explains nearly all of its merchant's charges.
-            if (found.Sum(x => x.TransactionIds.Count) * 4 < group.Count * 3)
+            if (explained * 4 < group.Count * 3)
             {
                 continue;
             }
@@ -200,17 +208,19 @@ public static class RecurringPatternDetector
     }
 
     // Two payments one month apart are an early, clearly labelled suggestion. Every payment still needs review.
-    private static List<RecurringPatternCandidate> EarlyPairs(GroupKey key, Part part, IReadOnlyCollection<RecurringPatternCandidate> found, DateOnly asOf)
+    // Explained counts every paired payment, including stopped pairs that are not suggested, so a merchant's
+    // earlier plan does not make its current plan look like coincidental noise.
+    private static (List<RecurringPatternCandidate> Candidates, int Explained) EarlyPairs(GroupKey key, Part part, IReadOnlyCollection<RecurringPatternCandidate> found, DateOnly asOf)
     {
         if (IsGenericAlias(key.Alias))
         {
-            return [];
+            return ([], 0);
         }
         var used = found.SelectMany(x => x.TransactionIds).ToHashSet();
         var rest = part.Rows.Where(x => !used.Contains(x.Transaction.Id)).ToList();
         if (rest.Count is < 2 or > 24)
         {
-            return [];
+            return ([], 0);
         }
         var paired = new HashSet<Guid>();
         var pairs = new List<(RecurringPatternTransaction First, RecurringPatternTransaction Second)>();
@@ -235,15 +245,15 @@ public static class RecurringPatternDetector
         // Coincidental pairs at a busy merchant leave most of its other charges unexplained.
         if (pairs.Count == 0 || rest.Count - paired.Count > 1)
         {
-            return [];
+            return ([], 0);
         }
-        return pairs.Where(x => asOf.DayNumber - x.Second.PostedDate.DayNumber <= 45).Select(x =>
+        return (pairs.Where(x => asOf.DayNumber - x.Second.PostedDate.DayNumber <= 45).Select(x =>
         {
             var evidence = new List<string> { "Only two monthly payments so far, one month apart. Check both before tracking; a third payment will confirm the schedule." };
             AddAmountEvidence(evidence, [x.First, x.Second], key.Currency);
             return new RecurringPatternCandidate(Key(key, "monthly", x.First.PostedDate, part.Cluster), DisplayName(x.Second), key.AccountId, key.Currency,
                 "monthly", x.First.PostedDate, -x.Second.Amount, key.Field, key.Alias, [x.First.Id, x.Second.Id], evidence, IsEarly: true);
-        }).ToList();
+        }).ToList(), paired.Count);
     }
 
     private static void AddAmountEvidence(List<string> evidence, IReadOnlyList<RecurringPatternTransaction> rows, string currency)

@@ -102,8 +102,27 @@ public sealed class RecurringDetectionImprovementTests
     [Fact]
     public void StoppedTwoPaymentPatternsAreNotSuggested()
     {
-        var rows = new[] { Card(new DateOnly(2026, 1, 7), -9.99m, "RINGCO OULU FIN"), Card(new DateOnly(2026, 2, 7), -9.99m, "RINGCO OULU FIN") };
+        var rows = new[] { Card(new DateOnly(2026, 1, 7), -9.99m, "RINGCO OULU FIN"), Card(new DateOnly(2026, 2, 7), -9.99m, "RINGCO OULU FIN"),
+            Card(new DateOnly(2026, 5, 30), -45m, "CORNER CAFE") };
         Assert.Empty(RecurringPatternDetector.Detect(rows, new RecurringDetectionOptions(IncludeEarly: true, AsOf: new DateOnly(2026, 6, 1))));
+    }
+
+    [Fact]
+    public void StalenessIsMeasuredFromTheAccountsLatestImportedCharge()
+    {
+        var rows = new[] { Card(new DateOnly(2026, 1, 7), -9.99m, "RINGCO OULU FIN"), Card(new DateOnly(2026, 2, 7), -9.99m, "RINGCO OULU FIN") };
+        Assert.Single(RecurringPatternDetector.Detect(rows, new RecurringDetectionOptions(IncludeEarly: true, AsOf: new DateOnly(2026, 6, 1))));
+        var monthly = Enumerable.Range(1, 3).Select(x => Card(new DateOnly(2026, x, 5), -12m, "STREAMCO SYDNEY AUS")).ToList();
+        Assert.False(Assert.Single(RecurringPatternDetector.Detect(monthly, new RecurringDetectionOptions(AsOf: new DateOnly(2026, 6, 1)))).IsEnded);
+    }
+
+    [Fact]
+    public void AStoppedPlanStillCountsTowardItsMerchantsCoverage()
+    {
+        var rows = new[] { (6, 4), (7, 4), (7, 14), (8, 14) }.Select(x => Card(new DateOnly(2026, x.Item1, x.Item2), -2.99m, "STORAGECO BARANGAROO AU")).ToList();
+        rows.Add(Card(new DateOnly(2026, 9, 5), -45m, "CORNER CAFE"));
+        var candidate = Assert.Single(RecurringPatternDetector.Detect(rows, new RecurringDetectionOptions(IncludeEarly: true)));
+        Assert.Equal(new DateOnly(2026, 7, 14), candidate.AnchorDate);
     }
 
     [Fact]
@@ -131,6 +150,7 @@ public sealed class RecurringDetectionImprovementTests
     public void PatternsWithNoRecentPaymentAreMarkedEnded()
     {
         var rows = Enumerable.Range(1, 3).Select(x => Card(new DateOnly(2026, x, 5), -12m, "STREAMCO SYDNEY AUS")).ToList();
+        rows.Add(Card(new DateOnly(2026, 5, 30), -45m, "CORNER CAFE"));
         Assert.True(Assert.Single(RecurringPatternDetector.Detect(rows, new RecurringDetectionOptions(AsOf: new DateOnly(2026, 6, 1)))).IsEnded);
         Assert.False(Assert.Single(RecurringPatternDetector.Detect(rows, new RecurringDetectionOptions(AsOf: new DateOnly(2026, 4, 10)))).IsEnded);
     }
