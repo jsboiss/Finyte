@@ -81,6 +81,7 @@ export function readTransactionRouteSearch(search: Record<string, unknown>) {
 
 export function transactionRouteSearch(page: number, filters: TransactionFilters, transferView?: string): Record<string, unknown> & { transferView?: string } {
   const search: Record<string, unknown> & { transferView?: string } = Object.fromEntries(transactionSearchParams(page, 25, filters))
+  if (filters.accountIds.length > 0) { search.accountIds = filters.accountIds }
   if (filters.tagIds.length > 0) { search.tagIds = filters.tagIds }
   if (transferView) { search.transferView = transferView }
   return search
