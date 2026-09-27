@@ -8,6 +8,7 @@ public sealed record TransactionSearch
     public int Page { get; init; } = 1;
     public int PageSize { get; init; } = 25;
     public Guid? AccountId { get; init; }
+    public Guid[] AccountIds { get; init; } = [];
     public DateOnly? From { get; init; }
     public DateOnly? To { get; init; }
     public string? Search { get; init; }
@@ -63,6 +64,11 @@ public sealed record TransactionSearch
             errors["search"] = ["Search and category text must each be 200 characters or fewer."];
         }
 
+        if (AccountIds.Length > 100 || AccountIds.Contains(Guid.Empty))
+        {
+            errors["accountIds"] = ["Specify at most 100 non-empty account IDs."];
+        }
+
         if (TagIds.Length > 50 || TagIds.Contains(Guid.Empty))
         {
             errors["tagIds"] = ["Specify at most 50 non-empty tag IDs."];
@@ -110,6 +116,12 @@ public sealed record TransactionSearch
         if (AccountId is { } accountId)
         {
             query = query.Where(x => x.AccountId == accountId);
+        }
+
+        if (AccountIds.Length > 0)
+        {
+            var accountIds = AccountIds.Distinct().ToArray();
+            query = query.Where(x => accountIds.Contains(x.AccountId));
         }
 
         if (From is { } from)
