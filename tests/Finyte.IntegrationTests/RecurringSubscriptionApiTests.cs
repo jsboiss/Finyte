@@ -124,6 +124,57 @@ public sealed class RecurringSubscriptionApiTests
         Assert.Null(series.MissedOccurrenceDate);
     }
 
+    [Fact]
+    public async Task WindowsAfterTheImportedHistoryAreNotCalledMissingAndNextExpectedSkipsOldReviews()
+    {
+        await using var baseFactory = new FinyteApiFactory();
+        await using var factory = WithClock(baseFactory);
+        using var client = factory.CreateClient();
+        var accountId = await Seed(factory, client, account => Enumerable.Range(4, 3).Select(month => Row(account, month, 5, -20m, "STREAMCO SYDNEY AUS"))
+            .Append(Row(account, 7, 20, -45m, "CORNER CAFE")));
+        var found = Assert.Single((await client.GetFromJsonAsync<RecurringDiscoveryPage>($"{Url}/discovery"))!.Items);
+        var history = found.Transactions.Where(x => x.OccurrenceDate.Month < 6)
+            .Select(x => new RecurringHistoryInput(x.Snapshot.Id, x.OccurrenceDate, x.Snapshot.Fingerprint)).ToList();
+        var series = await Create(client, new CreateRecurringRequest("Streaming", accountId, "AUD", "monthly", found.AnchorDate, 20, "fixed", [], history));
+
+        var occurrences = (await client.GetFromJsonAsync<RecurringOccurrencePage>($"{Url}/{series.Id}/occurrences?from=2026-06-01&to=2026-09-30"))!.Items;
+        Assert.Equal(["no-payment-found", "no-payment-found", "not-imported", "due"], occurrences.Select(x => x.Status));
+        Assert.Equal(new DateOnly(2026, 6, 5), series.NextDueDate);
+        Assert.Equal(new DateOnly(2026, 9, 5), series.NextExpectedDate);
+    }
+
+    [Fact]
+    public async Task UpcomingCanRunToAPaydayOrADateWithTotalsPerCurrency()
+    {
+        await using var baseFactory = new FinyteApiFactory();
+        await using var factory = WithClock(baseFactory);
+        using var client = factory.CreateClient();
+        var accountId = await Seed(factory, client, _ => []);
+        await Create(client, Manual(accountId) with { Name = "Streaming", AnchorDate = new(2026, 9, 10), ExpectedAmount = 20 });
+        await Create(client, Manual(accountId) with { Name = "Power", AnchorDate = new(2026, 9, 20), ExpectedAmount = 100, Kind = "bill" });
+        Guid payCycleId;
+        using (var scope = factory.Services.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<FinyteDbContext>();
+            var tenantId = (await dbContext.Accounts.SingleAsync(x => x.Id == accountId)).TenantId;
+            var profile = new Finyte.Core.PayCycles.PayCycleProfile { TenantId = tenantId, Name = "Salary", Frequency = "fortnightly", AnchorDate = new(2026, 9, 4), Currency = "AUD" };
+            dbContext.PayCycleProfiles.Add(profile);
+            await dbContext.SaveChangesAsync();
+            payCycleId = profile.Id;
+        }
+
+        var payday = (await client.GetFromJsonAsync<RecurringUpcomingPage>($"{Url}/upcoming?payCycleId={payCycleId}"))!;
+        Assert.Equal(new DateOnly(2026, 9, 17), payday.To);
+        Assert.Equal("Streaming", Assert.Single(payday.Items).Name);
+        Assert.Equal(new RecurringUpcomingTotal("AUD", 20, 1), Assert.Single(payday.Totals!));
+
+        var month = (await client.GetFromJsonAsync<RecurringUpcomingPage>($"{Url}/upcoming?to=2026-09-30"))!;
+        Assert.Equal(new RecurringUpcomingTotal("AUD", 120, 2), Assert.Single(month.Totals!));
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.GetAsync($"{Url}/upcoming?to=2026-09-01")).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.GetAsync($"{Url}/upcoming?to=2026-12-31")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"{Url}/upcoming?payCycleId={Guid.NewGuid()}")).StatusCode);
+    }
+
     private static CreateRecurringRequest Manual(Guid accountId) => new("Music", accountId, "AUD", "monthly", new(2026, 9, 10), 20, "fixed", [], []);
 
     private static async Task<RecurringSeriesResponse> Create(HttpClient client, CreateRecurringRequest request)

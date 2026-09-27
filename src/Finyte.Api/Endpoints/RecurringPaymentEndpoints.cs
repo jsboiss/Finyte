@@ -76,8 +76,8 @@ public static class RecurringPaymentEndpoints
             page ?? 1, pageSize ?? 20, dismissed ?? false, cancellationToken, accountId, search, cadence, sort, hideEnded ?? false));
     }
 
-    private static async Task<IResult> Upcoming(int? days, Guid? accountId, HttpContext httpContext, RecurringPaymentService service, CancellationToken cancellationToken) =>
-        Results.Ok(await service.Upcoming(Tenant(httpContext).TenantId, days ?? 7, accountId, cancellationToken));
+    private static async Task<IResult> Upcoming(int? days, DateOnly? to, Guid? payCycleId, Guid? accountId, HttpContext httpContext, RecurringPaymentService service, CancellationToken cancellationToken) =>
+        Results.Ok(await service.Upcoming(Tenant(httpContext).TenantId, days, to, payCycleId, accountId, cancellationToken));
 
     private static async Task<IResult> DiscoveryDecision(RecurringDiscoveryDecisionRequest request, HttpContext httpContext, RecurringPaymentService service, CancellationToken cancellationToken)
     {

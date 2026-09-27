@@ -2,7 +2,8 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import type { Account } from '../accounts/accountsApi'
 import { httpClient } from '../api/httpClient'
-import { getSeries, getUpcoming, label, money, recurringError, recurringUrl, shortDate, type CostSummary, type Discovery, type Page, type Range, type Series, type SeriesKind } from './recurringApi'
+import { getPayCycles } from '../pay-cycles/payCyclesApi'
+import { getSeries, getUpcoming, label, money, recurringError, recurringUrl, shortDate, type CostSummary, type Discovery, type Page, type Range, type Series, type SeriesKind, type UpcomingRange } from './recurringApi'
 
 const keepActiveKey = 'finyte.recurring.keep-active'
 
@@ -19,7 +20,11 @@ export function RecurringOverview({ accounts, range, onSelect, onDiscover, onCha
   const [keepActive, setKeepActive] = useState(readKeepActive)
   const scope = accountId || undefined
   const series = useQuery({ queryKey: ['recurring', 'series', range, accountId], queryFn: () => getSeries(range, scope) })
-  const upcoming = useQuery({ queryKey: ['recurring', 'upcoming', 14, accountId], queryFn: () => getUpcoming(14, scope) })
+  const [horizon, setHorizon] = useState('')
+  const payCycles = useQuery({ queryKey: ['pay-cycles'], queryFn: getPayCycles })
+  const selectedHorizon = horizon || (payCycles.data?.[0] ? `pay:${payCycles.data[0].id}` : 'days:14')
+  const upcomingRange: UpcomingRange = selectedHorizon.startsWith('pay:') ? { payCycleId: selectedHorizon.slice(4) } : { days: Number(selectedHorizon.slice(5)) }
+  const upcoming = useQuery({ queryKey: ['recurring', 'upcoming', upcomingRange, accountId], queryFn: () => getUpcoming(upcomingRange, scope), enabled: !payCycles.isLoading })
   const discovery = useQuery({ queryKey: ['recurring', 'discovery-count', accountId], queryFn: () => httpClient<Page<Discovery>>({ url: `${recurringUrl}/discovery`, params: { page: 1, pageSize: 1, hideEnded: true, accountId: scope } }) })
   const stateChange = useMutation({
     mutationFn: ({ item, state }: { item: Series; state: string }) => httpClient<Series>({ method: 'PUT', url: `${recurringUrl}/${item.id}`, data: { name: item.name, cadence: item.cadence, anchorDate: item.anchorDate, expectedAmount: item.expectedAmount, amountMode: item.amountMode, state, kind: item.kind, expectedVersion: item.version } }),
@@ -56,8 +61,15 @@ export function RecurringOverview({ accounts, range, onSelect, onDiscover, onCha
       </ul>
     </section>}
 
-    {(upcoming.data?.items.length ?? 0) > 0 && <section className="panel" aria-label="Next 14 days">
-      <h2>Next 14 days</h2>
+    {(upcoming.data?.activeSeriesCount ?? 0) > 0 && <section className="panel recurring-due" aria-label="Due soon">
+      <div className="recurring-heading">
+        <div><h2>Due by {shortDate(upcoming.data!.to)}</h2>
+          <p className="recurring-muted">{upcoming.data!.totals.length === 0 ? 'Nothing expected in this period.' : upcoming.data!.totals.map(x => `${money(x.amount, x.currency)} · ${x.count} ${x.count === 1 ? 'payment' : 'payments'}`).join(' + ')}</p></div>
+        <label className="recurring-due-picker">Show<select value={selectedHorizon} onChange={event => setHorizon(event.target.value)}>
+          {payCycles.data?.map(x => <option key={x.id} value={`pay:${x.id}`}>Until next payday · {x.name}</option>)}
+          <option value="days:7">Next 7 days</option><option value="days:14">Next 14 days</option><option value="days:30">Next 30 days</option>
+        </select></label>
+      </div>
       <div className="recurring-chips">{upcoming.data!.items.map(item => <button type="button" className="recurring-chip" key={`${item.seriesId}-${item.date}`} onClick={() => onSelect(item.seriesId, item.date)}><time dateTime={item.date}>{shortDate(item.date)}</time><strong>{item.name}</strong><span>{money(item.expectedAmount, item.currency)}</span><small>{item.accountName}</small></button>)}</div>
     </section>}
 
@@ -74,7 +86,7 @@ export function RecurringOverview({ accounts, range, onSelect, onDiscover, onCha
 
 function SummaryStrip({ cost }: { cost: CostSummary }) {
   return <section className="recurring-summary" aria-label={`${cost.currency} recurring costs`}>
-    <div><span>Per month</span><strong>{money(cost.monthlyEstimate, cost.currency)}</strong><small>{money(cost.annualEstimate, cost.currency)} / year</small></div>
+    <div><span>Estimated per month</span><strong>{money(cost.monthlyEstimate, cost.currency)}</strong><small>{money(cost.annualEstimate, cost.currency)} / year</small></div>
     <div><span>Subscriptions</span><strong>{money(cost.subscriptionMonthlyEstimate, cost.currency)}</strong></div>
     <div><span>Bills and essentials</span><strong>{money(cost.billMonthlyEstimate, cost.currency)}</strong></div>
   </section>
@@ -93,7 +105,7 @@ function SeriesRow({ item, busy, onSelect, onState }: { item: Series; busy: bool
   return <li className="recurring-row">
     <button type="button" className="recurring-row-main" onClick={() => onSelect(item.id)}>
       <strong>{item.name}</strong>
-      <span className="recurring-muted">{item.accountName} · {label(item.cadence)}{item.nextDueDate ? ` · next ${shortDate(item.nextDueDate)}` : ''}</span>
+      <span className="recurring-muted">{item.accountName} · {label(item.cadence)}{item.nextExpectedDate ? ` · next ${shortDate(item.nextExpectedDate)}` : ''}</span>
       <span className="recurring-badges">
         {item.priceChanged && <span className="recurring-status recurring-warning">Price changed</span>}
         {item.state === 'active' && item.missedOccurrenceDate && <span className="recurring-status recurring-warning">Missed</span>}
