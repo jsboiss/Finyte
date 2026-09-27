@@ -58,3 +58,26 @@
 }
 
 @media(min-width:701px) { .calendar-payment strong { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; } }
+
+.recurring-page .recurring-overview-filter { max-width: 320px; }
+.recurring-page .recurring-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.recurring-page .recurring-summary > div { display: grid; gap: 4px; padding: 16px 18px; border: 1px solid #3e4945; border-radius: 8px; background: #1d2522; }
+.recurring-page .recurring-summary span, .recurring-page .recurring-summary small { color: var(--recurring-muted); font-size: 13px; }
+.recurring-page .recurring-summary strong { font-size: 24px; }
+.recurring-page .recurring-attention ul { display: grid; gap: 10px; }
+.recurring-page .recurring-attention li { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; padding: 10px 12px; border: 1px solid #8b7143; border-radius: 7px; }
+.recurring-page .recurring-chips { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 4px; }
+.recurring-page .recurring-chip { display: grid; gap: 2px; min-width: 150px; text-align: left; background: #202626; color: #e2e9e5; border: 1px solid #3f4a46; }
+.recurring-page .recurring-chip time, .recurring-page .recurring-chip small { color: var(--recurring-muted); font-size: 12px; }
+.recurring-page .recurring-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; align-items: start; }
+.recurring-page .recurring-rows { display: grid; }
+.recurring-page .recurring-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; align-items: center; padding: 12px 0; border-top: 1px solid #333d39; }
+.recurring-page .recurring-row:first-child { border-top: 0; }
+.recurring-page .recurring-row-main { display: grid; gap: 3px; text-align: left; background: none; color: inherit; padding: 0; border: 0; min-width: 0; }
+.recurring-page .recurring-row-amount { font-weight: 650; }
+.recurring-page .recurring-badges { display: flex; flex-wrap: wrap; gap: 6px; }
+.recurring-page .recurring-badges:empty { display: none; }
+.recurring-page .recurring-switch { display: flex; align-items: center; gap: 8px; grid-column: 1 / -1; font-size: 13px; color: var(--recurring-muted); }
+@media (max-width: 768px) {
+  .recurring-page .recurring-columns, .recurring-page .recurring-summary { grid-template-columns: minmax(0, 1fr); }
+}

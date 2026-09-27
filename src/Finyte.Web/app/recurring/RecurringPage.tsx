@@ -1,3 +1,4 @@
+import { RecurringOverview } from './RecurringOverview'
 import { RecurringCalendarView } from './RecurringCalendarView'
 import { Drawer } from '../shared/Drawer'
 import { Help } from '../shared/Help'
@@ -43,18 +44,8 @@ export function RecurringPage() {
     <div className="recurring-view-picker"><label>View<select value={view} onChange={event => { setView(event.target.value); setSelectedId(null); setSelectedDate(undefined); setCreating(false); setNotice('') }}><option value="tracked">Tracked payments</option><option value="discover">Discover patterns</option><option value="calendar">Calendar</option><option value="dismissed">Dismissed patterns</option></select></label><button type="button" disabled={series.isFetching} onClick={() => void refresh()}>Refresh</button></div>
     {creating && <Drawer title="Add recurring payment" onClose={() => setCreating(false)}><SeriesEditor accounts={accounts.data ?? []} onCancel={() => setCreating(false)} onSaved={async created => { setCreating(false); setSelectedId(created.id); await refresh('Recurring payment created. Review its payment history below.') }} /></Drawer>}
     {view === 'tracked' && <>
-
-      {!selected && <>
-        {(series.data?.costs.length ?? 0) > 0 && <section aria-label="Expected recurring costs"><div className="recurring-costs">{series.data?.costs.map(cost => <div className="recurring-cost" key={cost.currency}><div className="section-title"><span>{cost.currency} · {cost.activeSeriesCount} active series</span><Help title="About recurring estimates"><p>Estimates use your expected amounts, including variable bills. They are not payments due in a particular month. Paused and cancelled series are excluded. Currencies stay separate.</p></Help></div><strong>{money(cost.monthlyEstimate, cost.currency)} / month</strong><p className="recurring-muted">{money(cost.annualEstimate, cost.currency)} / year</p></div>)}</div></section>}
-        {series.isLoading && <p>Loading recurring payments…</p>}
-        {series.data?.items.length === 0 && !creating && <section className="panel"><h2>Find your regular payments</h2><p className="recurring-muted">1. Find patterns. 2. Review the payments. 3. Track the series.</p><div className="recurring-actions"><button onClick={() => setView('discover')} type="button">Discover patterns</button></div></section>}
-        <div className="recurring-list">{series.data?.items.map(item => <article className="panel" key={item.id}>
-          <div className="recurring-heading"><div><h2>{item.name}</h2><p className="recurring-muted">{item.accountName} · {label(item.cadence)} · {money(item.expectedAmount, item.currency)} expected {item.amountMode === 'variable' && '· Variable bill'}</p></div><span className="recurring-status">{label(item.state)}</span></div>
-          <p>{item.nextDueDate ? `Scheduled ${item.nextDueDate} · ${label(item.nextDueStatus)}` : label(item.nextDueStatus)}</p>
-          {item.needsReviewCount > 0 && <p className="recurring-warning">{item.needsReviewCount} previous confirmations changed and need review.</p>}
-          <div className="recurring-actions"><button aria-label={`Review ${item.name}`} onClick={() => { setSelectedId(item.id); setSelectedDate(undefined); setCreating(false); setNotice('') }} type="button">Review payments</button></div>
-        </article>)}</div>
-      </>}
+      {!selected && <RecurringOverview accounts={accounts.data ?? []} range={overviewRange} onDiscover={() => setView('discover')} onChanged={refresh}
+        onSelect={(id, date) => { setSelectedId(id); setSelectedDate(date); setCreating(false); setNotice('') }} />}
       {selected && <SeriesDetail key={`${selected.id}-${selectedDate ?? ""}`} series={selected} initialDate={selectedDate} accounts={accounts.data ?? []} onBack={() => setSelectedId(null)} onChanged={refresh} />}
     </>}
     {view === 'calendar' && <RecurringCalendarView series={series.data?.items ?? []} onSelect={(id, date) => { setSelectedId(id); setSelectedDate(date); setView('tracked') }} />}
