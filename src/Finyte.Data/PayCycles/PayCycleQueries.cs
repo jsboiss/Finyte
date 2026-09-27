@@ -51,9 +51,9 @@ public sealed class PayCycleQueries(FinyteDbContext dbContext, TimeProvider time
                 Description = x.Transaction.Description, MerchantName = x.Transaction.MerchantName, Amount = x.Transaction.Amount,
                 PostedAt = x.Transaction.PostedAt!.Value,
                 Category = x.Transaction.CategoryOverride != null && x.Transaction.CategoryOverride.Trim() != "" ? x.Transaction.CategoryOverride.Trim()
+                    : x.Transaction.CategoryFromRule != null && x.Transaction.CategoryFromRule.Trim() != "" ? x.Transaction.CategoryFromRule.Trim()
                     : x.Transaction.SecondaryCategory != null && x.Transaction.SecondaryCategory.Trim() != "" ? x.Transaction.SecondaryCategory.Trim()
-                    : x.Transaction.PrimaryCategory != null && x.Transaction.PrimaryCategory.Trim() != "" ? x.Transaction.PrimaryCategory.Trim()
-                    : x.Transaction.CategoryFromRule == null || x.Transaction.CategoryFromRule.Trim() == "" ? "Uncategorised" : x.Transaction.CategoryFromRule.Trim(),
+                    : x.Transaction.PrimaryCategory == null || x.Transaction.PrimaryCategory.Trim() == "" ? "Uncategorised" : x.Transaction.PrimaryCategory.Trim(),
                 // Confirmed debit/credit IDs are unique, so these joins cannot multiply ledger rows.
                 Kind = x.Debit != null && accountIds.Contains(x.Debit.CreditAccountId)
                     || y != null && accountIds.Contains(y.DebitAccountId) ? "within-scope"

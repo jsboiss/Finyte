@@ -102,15 +102,33 @@ public sealed class TransactionCategoryOverrideTests
     }
 
     [Fact]
-    public async Task AGuessNeverDisplacesTheCategoryTheBankSupplied()
+    public async Task AMerchantRuleReplacesTheCategoryTheBankSupplied()
     {
         await using var factory = new FinyteApiFactory();
         using var client = factory.CreateClient();
         var seed = await Seed(factory, client);
 
+        Assert.Equal("Department stores", await CategoryOf(client, seed.TransactionId));
+
         await CreateRule(client, "Kmart", "Transport");
 
-        Assert.Equal("Department stores", await CategoryOf(client, seed.TransactionId));
+        Assert.Equal("Transport", await CategoryOf(client, seed.TransactionId));
+        Assert.False(await HasOverride(client, seed.TransactionId));
+    }
+
+    [Fact]
+    public async Task ARuleMovesSpendBetweenBudgetsOnAConnectedAccount()
+    {
+        await using var factory = new FinyteApiFactory();
+        using var client = factory.CreateClient();
+        await Seed(factory, client);
+
+        Assert.Equal(45m, await PreviewSpend(client, "Department stores"));
+
+        await CreateRule(client, "Kmart", "Transport");
+
+        Assert.Equal(0m, await PreviewSpend(client, "Department stores"));
+        Assert.Equal(45m, await PreviewSpend(client, "Transport"));
     }
 
     [Fact]

@@ -128,7 +128,7 @@ public static partial class TransactionEndpoints
                 GetPostedDate(x.PostedAt ?? x.CreatedAt),
                 x.Description ?? "",
                 x.MerchantName,
-                TransactionCategories.Effective(x.CategoryOverride, x.SecondaryCategory, x.PrimaryCategory, x.CategoryFromRule),
+                TransactionCategories.Effective(x.CategoryOverride, x.CategoryFromRule, x.SecondaryCategory, x.PrimaryCategory),
                 x.CategoryOverride != null,
                 ToMinorUnits(x.Amount),
                 x.Currency,
