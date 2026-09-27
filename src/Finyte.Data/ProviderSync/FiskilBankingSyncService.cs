@@ -185,6 +185,9 @@ public sealed class FiskilBankingSyncService(FinyteDbContext dbContext, IFiskilB
                 ExecutedAt = executedAtUtc,
                 PrimaryCategory = transaction.PrimaryCategory,
                 SecondaryCategory = transaction.SecondaryCategory,
+                CategoryConfidence = transaction.CategoryConfidence,
+                MerchantCategoryCode = transaction.MerchantCategoryCode,
+                PaymentType = transaction.PaymentType,
                 MerchantName = transaction.MerchantName,
                 Reference = transaction.Reference,
                 RawJson = transaction.RawJson,
@@ -206,6 +209,9 @@ public sealed class FiskilBankingSyncService(FinyteDbContext dbContext, IFiskilB
         changed |= SetIfChanged(localTransaction.ExecutedAt, executedAtUtc, x => localTransaction.ExecutedAt = x);
         changed |= SetIfChanged(localTransaction.PrimaryCategory, transaction.PrimaryCategory, x => localTransaction.PrimaryCategory = x);
         changed |= SetIfChanged(localTransaction.SecondaryCategory, transaction.SecondaryCategory, x => localTransaction.SecondaryCategory = x);
+        changed |= SetIfChanged(localTransaction.CategoryConfidence, transaction.CategoryConfidence, x => localTransaction.CategoryConfidence = x);
+        changed |= SetIfChanged(localTransaction.MerchantCategoryCode, transaction.MerchantCategoryCode, x => localTransaction.MerchantCategoryCode = x);
+        changed |= SetIfChanged(localTransaction.PaymentType, transaction.PaymentType, x => localTransaction.PaymentType = x);
         changed |= SetIfChanged(localTransaction.MerchantName, transaction.MerchantName, x => localTransaction.MerchantName = x);
         changed |= SetIfChanged(localTransaction.Reference, transaction.Reference, x => localTransaction.Reference = x);
         changed |= SetIfChanged(localTransaction.RawJson, transaction.RawJson, x => localTransaction.RawJson = x);

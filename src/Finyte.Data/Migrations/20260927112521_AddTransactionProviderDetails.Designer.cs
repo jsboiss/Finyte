@@ -3,6 +3,7 @@ using System;
 using Finyte.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Finyte.Data.Migrations
 {
     [DbContext(typeof(FinyteDbContext))]
-    partial class FinyteDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260927112521_AddTransactionProviderDetails")]
+    partial class AddTransactionProviderDetails
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -130,49 +133,6 @@ namespace Finyte.Data.Migrations
                         .HasFilter("\"FiskilAccountId\" IS NOT NULL");
 
                     b.ToTable("accounts", (string)null);
-                });
-
-            modelBuilder.Entity("Finyte.Core.Accounts.AccountGroup", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(80)
-                        .HasColumnType("character varying(80)");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("TenantId", "Name")
-                        .IsUnique();
-
-                    b.ToTable("account_groups", (string)null);
-                });
-
-            modelBuilder.Entity("Finyte.Core.Accounts.AccountGroupMember", b =>
-                {
-                    b.Property<Guid>("GroupId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("AccountId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("GroupId", "AccountId");
-
-                    b.HasIndex("AccountId");
-
-                    b.ToTable("account_group_members", (string)null);
                 });
 
             modelBuilder.Entity("Finyte.Core.Accounts.InternalTransfer", b =>
@@ -1497,25 +1457,6 @@ namespace Finyte.Data.Migrations
                         .OnDelete(DeleteBehavior.SetNull);
                 });
 
-            modelBuilder.Entity("Finyte.Core.Accounts.AccountGroupMember", b =>
-                {
-                    b.HasOne("Finyte.Core.Accounts.Account", "Account")
-                        .WithMany()
-                        .HasForeignKey("AccountId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Finyte.Core.Accounts.AccountGroup", "Group")
-                        .WithMany("Members")
-                        .HasForeignKey("GroupId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Account");
-
-                    b.Navigation("Group");
-                });
-
             modelBuilder.Entity("Finyte.Core.Accounts.InternalTransfer", b =>
                 {
                     b.HasOne("Finyte.Core.Accounts.Transaction", "CreditTransaction")
@@ -1758,11 +1699,6 @@ namespace Finyte.Data.Migrations
             modelBuilder.Entity("Finyte.Core.Accounts.Account", b =>
                 {
                     b.Navigation("Transactions");
-                });
-
-            modelBuilder.Entity("Finyte.Core.Accounts.AccountGroup", b =>
-                {
-                    b.Navigation("Members");
                 });
 
             modelBuilder.Entity("Finyte.Core.Accounts.Transaction", b =>

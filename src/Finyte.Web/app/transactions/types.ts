@@ -20,6 +20,7 @@ export type Transaction = {
   tags: TransactionTag[]
   automaticTagExclusions?: string[]
   isInternalTransfer?: boolean
+  ruleMerchantName?: string
 }
 
 export type TransactionTotals = {
