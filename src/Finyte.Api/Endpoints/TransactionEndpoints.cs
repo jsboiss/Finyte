@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using Finyte.Api.Tenancy;
 using Finyte.Core.Accounts;
+using Finyte.Core.Recurring;
 using Finyte.Data.Tenancy;
 using Finyte.Data;
 using Finyte.Data.Analytics;
@@ -154,7 +155,8 @@ public static partial class TransactionEndpoints
                     .Select(y => new TransactionTagResponse(y.TagId, y.Tag == null ? "" : y.Tag.Name, y.Tag == null ? "#64748b" : y.Tag.Color,
                         y.Source, y.MerchantRuleId, y.MerchantRule == null ? null : y.MerchantRule.MerchantName))
                     .ToList(),
-                x.TagExclusions.Select(y => y.TagId).ToList()))
+                x.TagExclusions.Select(y => y.TagId).ToList(),
+                StatementNameCleaner.Clean(x.MerchantName ?? x.Description)))
             .ToListAsync(cancellationToken);
 
         return TypedResults.Ok(new TransactionPageResponse(transactions, currentPage, take, totalCount, totals));
@@ -536,7 +538,8 @@ public static partial class TransactionEndpoints
         string Currency,
         bool IsInternalTransfer,
         IReadOnlyList<TransactionTagResponse> Tags,
-        IReadOnlyList<Guid> AutomaticTagExclusions);
+        IReadOnlyList<Guid> AutomaticTagExclusions,
+        string RuleMerchantName);
 
     private sealed record TransactionPageResponse(
         IReadOnlyList<TransactionResponse> Items,
