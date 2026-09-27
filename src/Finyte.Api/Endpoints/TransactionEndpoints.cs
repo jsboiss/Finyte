@@ -42,6 +42,7 @@ public static partial class TransactionEndpoints
         int? page,
         int? pageSize,
         Guid? accountId,
+        [FromQuery] Guid[]? accountIds,
         DateOnly? from,
         DateOnly? to,
         string? search,
@@ -78,6 +79,7 @@ public static partial class TransactionEndpoints
             Page = page ?? 1,
             PageSize = pageSize ?? 25,
             AccountId = accountId,
+            AccountIds = accountIds ?? [],
             From = from,
             To = to,
             Search = search?.Trim(),
@@ -105,11 +107,11 @@ public static partial class TransactionEndpoints
         var currentPage = filters.Page;
         var take = filters.PageSize;
         var query = filters.Apply(dbContext.Transactions.AsNoTracking(), currentTenant.TenantId, calendar);
-        if (filters.AnalyticsOnly && filters.AccountId == null)
+        if (filters.AnalyticsOnly && filters.AccountId == null && filters.AccountIds.Length == 0)
         {
             var accounts = await dbContext.Accounts.AsNoTracking().Where(x => x.TenantId == currentTenant.TenantId).ToListAsync(cancellationToken);
-            var accountIds = accounts.Where(x => AccountPreferences.IncludeInAnalytics(x)).Select(x => x.Id).ToArray();
-            query = query.Where(x => accountIds.Contains(x.AccountId));
+            var analyticsAccountIds = accounts.Where(x => AccountPreferences.IncludeInAnalytics(x)).Select(x => x.Id).ToArray();
+            query = query.Where(x => analyticsAccountIds.Contains(x.AccountId));
         }
         if (filters.InternalTransfers == "exclude")
         {

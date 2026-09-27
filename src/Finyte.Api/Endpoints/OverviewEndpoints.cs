@@ -4,6 +4,7 @@ using Finyte.Data.Tenancy;
 using Finyte.Data;
 using Finyte.Data.Analytics;
 using Finyte.Data.Billing;
+using Microsoft.AspNetCore.Mvc;
 
 namespace Finyte.Api.Endpoints;
 
@@ -22,6 +23,8 @@ public static class OverviewEndpoints
 
     private static async Task<IResult> GetOverview(
         Guid? accountId,
+        [FromQuery] Guid[]? accountIds,
+        Guid? groupId,
         bool? includeInternalTransfers,
         TenantResolver tenantResolver,
         HttpContext httpContext,
@@ -38,6 +41,18 @@ public static class OverviewEndpoints
         {
             return Results.Problem("An active subscription is required to view the financial overview.", statusCode: StatusCodes.Status402PaymentRequired);
         }
+        var resolved = await ResolveScope(dbContext, currentTenant.TenantId, accountId, accountIds, groupId, cancellationToken);
+        if (resolved.Error is { } error)
+        {
+            return error;
+        }
+        if (resolved.Scope!.IsMultiple)
+        {
+            return Results.Ok(await new OverviewProjector(dbContext, calendars).ReadAccountSet(
+                new OverviewProjectionScope(currentTenant.TenantId, null, calendar.CurrentMonthKey, resolved.Scope.AccountIds, resolved.Scope.Label),
+                includeInternalTransfers == true, cancellationToken));
+        }
+        accountId = resolved.Scope.AccountId;
 
         if (includeInternalTransfers == true)
         {
@@ -53,6 +68,8 @@ public static class OverviewEndpoints
 
     private static async Task<IResult> RefreshOverview(
         Guid? accountId,
+        [FromQuery] Guid[]? accountIds,
+        Guid? groupId,
         bool? includeInternalTransfers,
         TenantResolver tenantResolver,
         HttpContext httpContext,
@@ -70,6 +87,18 @@ public static class OverviewEndpoints
         {
             return Results.Problem("An active subscription is required to refresh the financial overview.", statusCode: StatusCodes.Status402PaymentRequired);
         }
+        var resolved = await ResolveScope(dbContext, currentTenant.TenantId, accountId, accountIds, groupId, cancellationToken);
+        if (resolved.Error is { } error)
+        {
+            return error;
+        }
+        if (resolved.Scope!.IsMultiple)
+        {
+            return Results.Ok(await new OverviewProjector(dbContext, calendars).ReadAccountSet(
+                new OverviewProjectionScope(currentTenant.TenantId, null, calendar.CurrentMonthKey, resolved.Scope.AccountIds, resolved.Scope.Label),
+                includeInternalTransfers == true, cancellationToken));
+        }
+        accountId = resolved.Scope.AccountId;
 
         var monthKey = calendar.CurrentMonthKey;
         if (includeInternalTransfers == true)
@@ -112,5 +141,22 @@ public static class OverviewEndpoints
             cancellationToken);
 
         return Results.Ok(response);
+    }
+
+    internal static async Task<(ResolvedAccountScope? Scope, IResult? Error)> ResolveScope(FinyteDbContext dbContext, Guid tenantId, Guid? accountId,
+        Guid[]? accountIds, Guid? groupId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return (await AccountScopeResolver.Resolve(dbContext, tenantId, accountId, accountIds, groupId, cancellationToken), null);
+        }
+        catch (KeyNotFoundException exception)
+        {
+            return (null, Results.NotFound(exception.Message));
+        }
+        catch (ArgumentException exception)
+        {
+            return (null, Results.BadRequest(exception.Message));
+        }
     }
 }

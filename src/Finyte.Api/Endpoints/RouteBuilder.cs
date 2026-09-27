@@ -14,6 +14,7 @@ public static class RouteBuilder
         app.MapProviderConnectionEndpoints();
         app.MapSandboxSyncEndpoints();
         app.MapBankingAccountEndpoints();
+        app.MapAccountGroupEndpoints();
         app.MapImportEndpoints();
         app.MapInternalTransferEndpoints();
         app.MapTransactionEndpoints();

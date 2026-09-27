@@ -7,6 +7,7 @@ import { useState } from 'react'
 import { httpClient } from '../api/httpClient'
 import { exactAmount } from '../shared/formatters'
 import { accountTypeLabel, accountTypes, defaultAnalytics, getAccounts, type Account } from './accountsApi'
+import { AccountGroupsSection } from './AccountGroupsSection'
 import { balanceGuidance, balanceState } from './balanceState'
 
 type Editor = { account: Account }
@@ -44,6 +45,7 @@ export function AccountsPage() {
           </article>
         ))}
       </div>
+      {(accounts.data?.length ?? 0) > 1 && <AccountGroupsSection accounts={accounts.data ?? []} />}
             {editor && <Drawer title={`Account preferences · ${editor.account.name}`} onClose={() => setEditor(null)}><AccountEditor key={`${editor.account.id}-${editor.account.preferencesVersion}`} editor={editor} onCancel={() => setEditor(null)} onSaved={onSaved} onReload={async () => { await accounts.refetch(); setEditor(null) }} /></Drawer>}
     </section>
   )

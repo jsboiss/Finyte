@@ -24,7 +24,7 @@ public sealed record OverviewCurrencyScopeResponse(
     int ExcludedTransactions,
     IReadOnlyList<string> ExcludedCurrencies);
 
-public sealed record OverviewScopeResponse(Guid? AccountId, string Label);
+public sealed record OverviewScopeResponse(Guid? AccountId, string Label, IReadOnlyList<Guid>? AccountIds = null);
 
 public sealed record OverviewCashFlowRaceResponse(long IncomeMinorUnits, long ExpenseMinorUnits, long NetMinorUnits);
 

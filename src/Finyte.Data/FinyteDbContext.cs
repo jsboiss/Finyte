@@ -13,6 +13,8 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
 {
     public DbSet<Finyte.Core.PayCycles.PayCycleProfile> PayCycleProfiles => Set<Finyte.Core.PayCycles.PayCycleProfile>();
     public DbSet<Budget> Budgets => Set<Budget>();
+    public DbSet<AccountGroup> AccountGroups => Set<AccountGroup>();
+    public DbSet<AccountGroupMember> AccountGroupMembers => Set<AccountGroupMember>();
     public DbSet<RecurringPaymentSeries> RecurringPaymentSeries => Set<RecurringPaymentSeries>();
 
     public DbSet<RecurringPaymentAlias> RecurringPaymentAliases => Set<RecurringPaymentAlias>();
@@ -106,6 +108,20 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
             x.HasOne(y => y.Account).WithMany().HasForeignKey(y => y.AccountId).OnDelete(DeleteBehavior.Cascade);
         });
 
+        modelBuilder.Entity<AccountGroup>(x =>
+        {
+            x.ToTable("account_groups");
+            x.HasKey(y => y.Id);
+            x.Property(y => y.Name).HasMaxLength(80);
+            x.HasIndex(y => new { y.TenantId, y.Name }).IsUnique();
+        });
+        modelBuilder.Entity<AccountGroupMember>(x =>
+        {
+            x.ToTable("account_group_members");
+            x.HasKey(y => new { y.GroupId, y.AccountId });
+            x.HasOne(y => y.Group).WithMany(y => y.Members).HasForeignKey(y => y.GroupId).OnDelete(DeleteBehavior.Cascade);
+            x.HasOne(y => y.Account).WithMany().HasForeignKey(y => y.AccountId).OnDelete(DeleteBehavior.Cascade);
+        });
         Recurring.RecurringPaymentConfiguration.Configure(modelBuilder);
         modelBuilder.Entity<TransactionFileImport>(x =>
         {

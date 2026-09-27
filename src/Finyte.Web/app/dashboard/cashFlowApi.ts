@@ -1,15 +1,13 @@
 import { httpClient } from '../api/httpClient'
+import { allAccountsScope, appendScope } from './accountScope'
 import type { CashFlowRangeResponse, DashboardDateRange } from './types'
 
-export function getCashFlowQueryKey(accountId: string | null, range: DashboardDateRange, includeInternalTransfers = false) {
-  return ['cash-flow', accountId ?? 'all', range.from, range.to, includeInternalTransfers] as const
+export function getCashFlowQueryKey(scope: string, range: DashboardDateRange, includeInternalTransfers = false) {
+  return ['cash-flow', scope || allAccountsScope, range.from, range.to, includeInternalTransfers] as const
 }
 
-export async function getCashFlow(accountId: string | null, range: DashboardDateRange, includeInternalTransfers = false) {
-  const params = new URLSearchParams({ from: range.from, to: range.to, includeInternalTransfers: String(includeInternalTransfers) })
-  if (accountId) {
-    params.set('accountId', accountId)
-  }
+export async function getCashFlow(scope: string, range: DashboardDateRange, includeInternalTransfers = false) {
+  const params = appendScope(new URLSearchParams({ from: range.from, to: range.to, includeInternalTransfers: String(includeInternalTransfers) }), scope)
 
   return httpClient<CashFlowRangeResponse>({
     method: 'GET',
