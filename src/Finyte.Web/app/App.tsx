@@ -20,6 +20,7 @@ import { ImportsPage } from './imports/ImportsPage'
 import { TransferCorrections } from './transfers/TransferCorrections'
 import { PayCyclesPage } from './pay-cycles/PayCyclesPage'
 import { RecurringPage } from './recurring/RecurringPage'
+import { TagSuggestionsPage } from './tags/TagSuggestionsPage'
 import { TransactionAccountChip, TransactionAmount } from './transactions/TransactionCard'
 import { TransactionCardList } from './transactions/TransactionCardList'
 import { TransactionPagination } from './transactions/TransactionPagination'
@@ -246,6 +247,9 @@ function getPageTitle(pathname: string) {
   }
   if (pathname.startsWith('/recurring')) {
     return 'Recurring payments'
+  }
+  if (pathname.startsWith('/tag-suggestions')) {
+    return 'Tag suggestions'
   }
   if (pathname.startsWith('/accounts')) {
     return 'Accounts'
@@ -502,7 +506,9 @@ function TransactionsPage() {
           excludedTagIds={x.row.original.automaticTagExclusions}
           onChange={(y, z) => setTransactionTagIds(x.row.original.id, y, z)}
           onRestore={() => restoreAutomaticTagsMutation.mutate(x.row.original.id)}
-          disabled={updateTransactionTagsMutation.isPending || restoreAutomaticTagsMutation.isPending}
+          disabled={updateTransactionTagsMutation.isPending || restoreAutomaticTagsMutation.isPending || createMerchantRuleMutation.isPending}
+          ruleMerchantName={x.row.original.ruleMerchantName}
+          onAlways={tagId => createMerchantRuleMutation.mutate({ merchantName: x.row.original.ruleMerchantName ?? '', tagId })}
         />
       ),
     }),
@@ -510,7 +516,7 @@ function TransactionsPage() {
       header: 'Amount',
       cell: x => <TransactionAmount allocation={allocationFor(x.row.original)} amountMinorUnits={x.getValue()} currencyCode={x.row.original.currency} />,
     }),
-  ], [allocationFor, setTransactionTagIds, tagsQuery.data, restoreAutomaticTagsMutation, updateTransactionTagsMutation.isPending])
+  ], [allocationFor, setTransactionTagIds, tagsQuery.data, restoreAutomaticTagsMutation, updateTransactionTagsMutation.isPending, createMerchantRuleMutation])
   // TanStack Table intentionally returns stateful functions that React Compiler cannot memoize.
   // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
@@ -564,6 +570,7 @@ function TransactionsPage() {
                 <p>Labels</p>
                 <h2>Tags</h2>
               </div>
+              <Link to="/tag-suggestions">Tag suggestions</Link>
             </div>
             <div className="tag-form">
               <input aria-label="New tag name" onChange={x => setTagName(x.target.value)} placeholder="New tag" value={tagName} />
@@ -666,7 +673,9 @@ function TransactionsPage() {
             excludedTagIds={x.automaticTagExclusions}
             onChange={(y, z) => setTransactionTagIds(x.id, y, z)}
             onRestore={() => restoreAutomaticTagsMutation.mutate(x.id)}
-            disabled={updateTransactionTagsMutation.isPending || restoreAutomaticTagsMutation.isPending}
+            disabled={updateTransactionTagsMutation.isPending || restoreAutomaticTagsMutation.isPending || createMerchantRuleMutation.isPending}
+            ruleMerchantName={x.ruleMerchantName}
+            onAlways={tagId => createMerchantRuleMutation.mutate({ merchantName: x.ruleMerchantName ?? '', tagId })}
           />
         )}
         transactions={visibleTransactions}
@@ -713,13 +722,15 @@ function TransactionsPage() {
   )
 }
 
-function TagEditor({ allTags, selectedTags, excludedTagIds = [], onChange, onRestore, disabled }: {
+function TagEditor({ allTags, selectedTags, excludedTagIds = [], onChange, onRestore, disabled, ruleMerchantName, onAlways }: {
   allTags: TransactionTag[]
   selectedTags: TransactionTag[]
   excludedTagIds?: string[]
   onChange: (tagIds: string[], manualTagIds?: string[]) => void
   onRestore: () => void
   disabled: boolean
+  ruleMerchantName?: string
+  onAlways?: (tagId: string) => void
 }) {
   const [isOpen, setIsOpen] = useState(false)
   const [popupPosition, setPopupPosition] = useState<{ left: number; maxHeight: number; placement: 'above' | 'below'; top: number }>({ left: 0, maxHeight: 280, placement: 'below', top: 0 })
@@ -829,6 +840,15 @@ function TagEditor({ allTags, selectedTags, excludedTagIds = [], onChange, onRes
               )}
             </div>
           ))}
+          {onAlways && ruleMerchantName && (
+            <label className="tag-always-rule">
+              Always tag {ruleMerchantName} as
+              <select disabled={disabled} onChange={y => { if (y.target.value) { setIsOpen(false); onAlways(y.target.value) } }} value="">
+                <option value="">Choose a tag</option>
+                {allTags.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
+              </select>
+            </label>
+          )}
           <button disabled={disabled || excludedTagIds.length === 0} onClick={() => { setIsOpen(false); onRestore() }} type="button">Restore removed automatic tags</button>
           <p className="tag-rule-help">Restoring keeps manual tags and allows current and future merchant rules to add removed tags again.</p>
         </div>
@@ -1240,6 +1260,7 @@ const accountsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/acc
 const payCyclesRoute = createRoute({ getParentRoute: () => rootRoute, path: '/pay-cycles', component: PayCyclesPage })
 const budgetsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/budgets', component: BudgetsPage })
 const recurringRoute = createRoute({ getParentRoute: () => rootRoute, path: '/recurring', component: RecurringPage })
+const tagSuggestionsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/tag-suggestions', component: TagSuggestionsPage })
 const transfersRoute = createRoute({
   getParentRoute: () => rootRoute, path: '/transfers',
   beforeLoad: ({ search }) => { throw redirect({ to: '/transactions', search: { transferView: search.view ?? 'confirmed' }, replace: true }) },
@@ -1247,7 +1268,7 @@ const transfersRoute = createRoute({
     view: typeof search.view === 'string' && ['suggested', 'confirmed', 'dismissed', 'needs-review'].includes(search.view) ? search.view : undefined,
   }),
 })
-const routeTree = rootRoute.addChildren([indexRoute, connectionsRoute, transactionsRoute, billingRoute, settingsRoute, importsRoute, transfersRoute, accountsRoute, budgetsRoute, payCyclesRoute, recurringRoute])
+const routeTree = rootRoute.addChildren([indexRoute, connectionsRoute, transactionsRoute, billingRoute, settingsRoute, importsRoute, transfersRoute, accountsRoute, budgetsRoute, payCyclesRoute, recurringRoute, tagSuggestionsRoute])
 const router = createRouter({ routeTree })
 
 declare module '@tanstack/react-router' {
