@@ -12,6 +12,7 @@ import { DashboardMetricGrid } from './components/DashboardMetricGrid'
 import { DashboardModuleFrame } from './components/DashboardModuleFrame'
 import { getOverview, getOverviewQueryKey, refreshOverview } from './overviewApi'
 import { CashFlowModule } from './modules/CashFlowModule'
+import { ComingUpModule } from './modules/ComingUpModule'
 import { CashFlowRaceModule } from './modules/CashFlowRaceModule'
 import { SpendByTagChart } from './modules/SpendByTagChart'
 import { transactionLink } from './transactionLinks'
@@ -102,6 +103,8 @@ export function DashboardPage() {
       </div>
 
       <DashboardMetricGrid metrics={metrics} />
+
+      <ComingUpModule accountId={accountId} />
 
 
       <CashFlowRaceModule overview={overview} />
