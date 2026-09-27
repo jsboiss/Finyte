@@ -60,10 +60,10 @@ public static class RecurringPaymentEndpoints
         return app;
     }
 
-    private static async Task<IResult> List(DateOnly? from, DateOnly? to, HttpContext httpContext, RecurringPaymentService service, TimeProvider timeProvider, CancellationToken cancellationToken)
+    private static async Task<IResult> List(DateOnly? from, DateOnly? to, Guid? accountId, HttpContext httpContext, RecurringPaymentService service, TimeProvider timeProvider, CancellationToken cancellationToken)
     {
         var today = DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime);
-        return Results.Ok(await service.List(Tenant(httpContext).TenantId, from ?? today.AddDays(-1096), to ?? today.AddDays(366), cancellationToken));
+        return Results.Ok(await service.List(Tenant(httpContext).TenantId, from ?? today.AddDays(-1096), to ?? today.AddDays(366), cancellationToken, accountId));
     }
 
     private static async Task<IResult> Discover(DateOnly? from, DateOnly? to, int? page, int? pageSize, bool? dismissed, Guid? accountId, string? search, string? cadence, string? sort, bool? hideEnded, HttpContext httpContext,

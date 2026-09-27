@@ -17,12 +17,12 @@ public sealed class RecurringPaymentService(FinyteDbContext dbContext, TimeProvi
     private static DateOnly MinimumDate { get; } = new(1900, 1, 1);
     private static DateOnly MaximumDate { get; } = new(9998, 12, 31);
 
-    public async Task<RecurringSeriesList> List(Guid tenantId, DateOnly from, DateOnly to, CancellationToken cancellationToken)
+    public async Task<RecurringSeriesList> List(Guid tenantId, DateOnly from, DateOnly to, CancellationToken cancellationToken, Guid? accountId = null)
     {
         ValidateRange(from, to);
         await using var snapshot = await ReadSnapshot(cancellationToken);
         var series = await dbContext.RecurringPaymentSeries.AsNoTracking().Include(x => x.Aliases)
-            .Where(x => x.TenantId == tenantId).OrderBy(x => x.Name).ThenBy(x => x.Id).ToListAsync(cancellationToken);
+            .Where(x => x.TenantId == tenantId && (accountId == null || x.AccountId == accountId)).OrderBy(x => x.Name).ThenBy(x => x.Id).ToListAsync(cancellationToken);
         var items = new List<RecurringSeriesResponse>();
         foreach (var item in series)
         {
@@ -30,7 +30,9 @@ public sealed class RecurringPaymentService(FinyteDbContext dbContext, TimeProvi
         }
         var costs = series.Where(x => x.State == "active").GroupBy(x => x.Currency)
             .Select(x => new RecurringCostSummary(x.Key, decimal.Round(x.Sum(y => AnnualCost(y)) / 12, 2),
-                decimal.Round(x.Sum(y => AnnualCost(y)), 2), x.Count(), x.Count(y => y.AmountMode == "variable")))
+                decimal.Round(x.Sum(y => AnnualCost(y)), 2), x.Count(), x.Count(y => y.AmountMode == "variable"),
+                decimal.Round(x.Where(y => y.Kind == "subscription").Sum(y => AnnualCost(y)) / 12, 2),
+                decimal.Round(x.Where(y => y.Kind == "bill").Sum(y => AnnualCost(y)) / 12, 2)))
             .OrderBy(x => x.Currency).ToList();
         return new RecurringSeriesList(items, costs, from, to);
     }
@@ -100,6 +102,7 @@ public sealed class RecurringPaymentService(FinyteDbContext dbContext, TimeProvi
     public async Task<RecurringSeriesResponse> Create(Guid tenantId, string userId, CreateRecurringRequest request, CancellationToken cancellationToken)
     {
         ValidateSettings(request.Name, request.Cadence, request.AnchorDate, request.ExpectedAmount, request.AmountMode, "active");
+        ValidateKind(request.Kind);
         if (request.AccountId == Guid.Empty || string.IsNullOrWhiteSpace(request.Currency) || request.Currency.Length != 3
             || !request.Currency.All(x => char.IsAsciiLetter(x)) || request.History?.Count > 300 || request.Aliases?.Count > 20
             || request.History?.Any(x => x is null) == true || request.Aliases?.Any(x => x is null) == true)
@@ -123,7 +126,7 @@ public sealed class RecurringPaymentService(FinyteDbContext dbContext, TimeProvi
         {
             TenantId = tenantId, AccountId = account.Id, Currency = currency, Name = request.Name.Trim(), Cadence = request.Cadence,
             AnchorDate = request.AnchorDate, ExpectedAmount = request.ExpectedAmount, AmountMode = request.AmountMode,
-            CreatedAt = timeProvider.GetUtcNow(), UpdatedAt = timeProvider.GetUtcNow()
+            Kind = request.Kind ?? "subscription", CreatedAt = timeProvider.GetUtcNow(), UpdatedAt = timeProvider.GetUtcNow()
         };
         foreach (var alias in request.Aliases ?? [])
         {
@@ -141,6 +144,7 @@ public sealed class RecurringPaymentService(FinyteDbContext dbContext, TimeProvi
     public async Task<RecurringSeriesResponse> Update(Guid tenantId, Guid seriesId, UpdateRecurringRequest request, CancellationToken cancellationToken)
     {
         ValidateSettings(request.Name, request.Cadence, request.AnchorDate, request.ExpectedAmount, request.AmountMode, request.State);
+        ValidateKind(request.Kind);
         await using var transaction = await WriteLock(tenantId, [], cancellationToken);
         var series = await Find(tenantId, seriesId, cancellationToken);
         CheckVersion(series, request.ExpectedVersion);
@@ -150,6 +154,7 @@ public sealed class RecurringPaymentService(FinyteDbContext dbContext, TimeProvi
         series.ExpectedAmount = request.ExpectedAmount;
         series.AmountMode = request.AmountMode;
         series.State = request.State;
+        series.Kind = request.Kind ?? series.Kind;
         Changed(series);
         await Save(transaction, cancellationToken);
         return await Summary(series, DefaultFrom(), DefaultTo(), cancellationToken);
@@ -381,11 +386,16 @@ public sealed class RecurringPaymentService(FinyteDbContext dbContext, TimeProvi
             .Select(x => x.CustomName ?? x.Name).SingleOrDefaultAsync(cancellationToken) ?? "Account unavailable";
         var occurrences = await OccurrenceRows(series, from, to, cancellationToken);
         var next = occurrences.FirstOrDefault(x => x.Status is "needs-review" or "no-payment-found" or "due" or "upcoming");
+        var lastPaid = occurrences.Where(x => x.Status == "paid" && x.PaidAmount is not null).MaxBy(x => x.Date);
+        var missed = series.State == "active"
+            ? occurrences.Where(x => x.Status == "no-payment-found" && x.Date >= Today.AddDays(-45)).MaxBy(x => x.Date)?.Date
+            : null;
         return new RecurringSeriesResponse(series.Id, series.Name, series.AccountId, accountName, series.Currency, series.Cadence,
             series.AnchorDate, series.ExpectedAmount, series.AmountMode, series.State, series.Version,
             series.Aliases.OrderBy(x => x.Field).ThenBy(x => x.Value).Select(x => new RecurringAliasResponse(x.Id, x.Field, x.Value)).ToList(),
             series.State == "active" ? next?.Date : null, series.State == "active" ? next?.Status ?? "none-in-range" : series.State,
-            await NeedsReviewCount(series, cancellationToken));
+            await NeedsReviewCount(series, cancellationToken), series.Kind, lastPaid?.PaidAmount, lastPaid?.Date,
+            series.AmountMode == "fixed" && lastPaid?.PaidAmount is { } paid && paid != series.ExpectedAmount, missed);
     }
 
     private async Task<int> NeedsReviewCount(RecurringPaymentSeries series, CancellationToken cancellationToken)
@@ -537,6 +547,14 @@ public sealed class RecurringPaymentService(FinyteDbContext dbContext, TimeProvi
             || state is not "active" and not "paused" and not "cancelled")
         {
             throw new ArgumentException("Provide a name up to 120 characters, supported cadence, valid anchor date, positive amount with at most two decimals, fixed/variable amount mode and active/paused/cancelled state.");
+        }
+    }
+
+    private static void ValidateKind(string? kind)
+    {
+        if (kind is not null and not "subscription" and not "bill")
+        {
+            throw new ArgumentException("Choose subscription or bill.");
         }
     }
 
