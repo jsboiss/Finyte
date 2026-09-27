@@ -13,6 +13,11 @@ services:
       ConnectionStrings__Finyte: *sample-database
       Database__MigrateOnStartup: "true"
       DevData__SeedOnStartup: "false"
+      Fiskil__ClientId: ${FINYTE_FISKIL_CLIENT_ID:-}
+      Fiskil__ClientSecret: ${FINYTE_FISKIL_CLIENT_SECRET:-}
+      Fiskil__Sandbox__Enabled: ${FINYTE_FISKIL_SANDBOX_ENABLED:-false}
+      Fiskil__Sandbox__EndUserId: ${FINYTE_FISKIL_SANDBOX_END_USER_ID:-}
+      Fiskil__Sandbox__ConsentId: ${FINYTE_FISKIL_SANDBOX_CONSENT_ID:-}
       Temporal__Enabled: "true"
       Temporal__Address: host.docker.internal:7233
       Temporal__Namespace: default
@@ -26,6 +31,8 @@ services:
       dockerfile: src/Finyte.Worker/Dockerfile
       provenance: false
     environment:
+      Fiskil__ClientId: ${FINYTE_FISKIL_CLIENT_ID:-}
+      Fiskil__ClientSecret: ${FINYTE_FISKIL_CLIENT_SECRET:-}
       ConnectionStrings__Finyte: *sample-database
       Temporal__Enabled: "true"
       Temporal__Address: host.docker.internal:7233
