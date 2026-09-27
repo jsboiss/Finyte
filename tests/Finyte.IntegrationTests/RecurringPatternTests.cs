@@ -24,7 +24,7 @@ public sealed class RecurringPatternTests
     [Fact]
     public void MonthlyPriceChangesKeepOneSeriesAndUseLatestObservedAmount()
     {
-        var rows = Monthly();
+        var rows = Monthly().Select(x => x with { MerchantName = null, Description = "Direct Debit 123456 POWERCO 998877" }).ToList();
         rows[1] = rows[1] with { Amount = -18 };
         rows[2] = rows[2] with { Amount = -30 };
         var candidate = Assert.Single(RecurringPatternDetector.Detect(rows));

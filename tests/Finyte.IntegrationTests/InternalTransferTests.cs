@@ -432,8 +432,8 @@ public sealed class InternalTransferTests
             StripeSubscriptionId = $"sub_{tenantId:N}", StripePriceId = "price_test", Status = "active",
             CurrentPeriodEnd = DateTimeOffset.UtcNow.AddDays(30), CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow
         });
-        var debitAccount = new Account { TenantId = tenantId, Name = "Everyday", CurrentBalance = 300, CreatedAt = DateTimeOffset.UtcNow };
-        var creditAccount = new Account { TenantId = tenantId, Name = "Savings", CurrentBalance = 700, CreatedAt = DateTimeOffset.UtcNow };
+        var debitAccount = new Account { TenantId = tenantId, Name = "Everyday", CurrentBalance = 300, BalanceAsOf = DateTimeOffset.UtcNow.AddMinutes(1), CreatedAt = DateTimeOffset.UtcNow };
+        var creditAccount = new Account { TenantId = tenantId, Name = "Savings", CurrentBalance = 700, BalanceAsOf = DateTimeOffset.UtcNow.AddMinutes(1), CreatedAt = DateTimeOffset.UtcNow };
         dbContext.Accounts.AddRange(debitAccount, creditAccount);
         var debit = Transaction(tenantId, debitAccount.Id, -100, 31);
         var credit = Transaction(tenantId, creditAccount.Id, 100, 1);

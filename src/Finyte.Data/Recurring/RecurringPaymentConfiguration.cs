@@ -16,6 +16,7 @@ public static class RecurringPaymentConfiguration
             x.Property(y => y.Cadence).HasMaxLength(16);
             x.Property(y => y.AmountMode).HasMaxLength(16);
             x.Property(y => y.State).HasMaxLength(16);
+            x.Property(y => y.Kind).HasMaxLength(16).HasDefaultValue("subscription");
             x.Property(y => y.ExpectedAmount).HasPrecision(18, 2);
             x.Property(y => y.Version).IsConcurrencyToken();
             x.HasIndex(y => new { y.TenantId, y.Name });

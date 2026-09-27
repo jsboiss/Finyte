@@ -7,13 +7,16 @@ export const cadences = ['weekly', 'fortnightly', 'monthly', 'quarterly', 'yearl
 export type AliasField = 'merchant' | 'description'
 export type AliasInput = { field: AliasField; value: string }
 export type Alias = AliasInput & { id: string }
+export type SeriesKind = 'subscription' | 'bill'
 export type Series = {
   id: string; name: string; accountId: string; accountName: string; currency: string
   cadence: string; anchorDate: string; expectedAmount: number; amountMode: string
   state: string; version: number; aliases: Alias[]; nextDueDate: string | null
-  nextDueStatus: string; needsReviewCount: number
+  nextDueStatus: string; needsReviewCount: number; kind: SeriesKind
+  lastPaidAmount: number | null; lastPaidDate: string | null; priceChanged: boolean; missedOccurrenceDate: string | null
 }
-export type SeriesList = { items: Series[]; costs: { currency: string; monthlyEstimate: number; annualEstimate: number; activeSeriesCount: number; variableSeriesCount: number }[] }
+export type CostSummary = { currency: string; monthlyEstimate: number; annualEstimate: number; activeSeriesCount: number; variableSeriesCount: number; subscriptionMonthlyEstimate: number; billMonthlyEstimate: number }
+export type SeriesList = { items: Series[]; costs: CostSummary[] }
 export type Range = { from: string; to: string }
 export type Page<T> = { items: T[]; totalCount: number; page: number; pageSize: number }
 export type Snapshot = {
@@ -25,7 +28,9 @@ export type Discovery = {
   key: string; name: string; accountId: string; accountName: string; currency: string
   cadence: string; anchorDate: string; expectedAmount: number; aliasField: AliasField; aliasValue: string
   transactions: { snapshot: Snapshot; occurrenceDate: string }[]; evidence: string[]; dismissed: boolean
+  isEarly: boolean; isEnded: boolean; suggestedKind: SeriesKind
 }
+export type Upcoming = { seriesId: string; name: string; kind: SeriesKind; accountId: string; accountName: string; currency: string; date: string; expectedAmount: number }
 export type Occurrence = { date: string; windowFrom: string; windowTo: string; status: string; expectedAmount: number; paidAmount: number | null; transactionId: string | null }
 export type Candidate = { snapshot: Snapshot; suggestedOccurrenceDate: string; aliasMatch: boolean; amountChanged: boolean; evidence: string[]; decisionStatus: string | null; currentlyAssignedSeriesId: string | null; ranking: { version: string; score: number; confidence: string; matchKind: string; reasons: string[]; competingSeriesIds: string[]; competingPaymentCount: number } }
 export type Review = { id: string; transactionId: string; occurrenceDate: string; action: string; snapshot: Snapshot; currentStatus: string; currentTransaction: Snapshot | null; reviewedByUserId: string; reviewedAt: string }
@@ -49,6 +54,14 @@ export function recurringError(error: Error) {
   return 'Unable to complete this request. Refresh and try again.'
 }
 
-export function getSeries(range: Range) {
-  return httpClient<SeriesList>({ url: recurringUrl, params: range })
+export function getSeries(range: Range, accountId?: string) {
+  return httpClient<SeriesList>({ url: recurringUrl, params: { ...range, accountId } })
+}
+
+export function getUpcoming(days: number, accountId?: string) {
+  return httpClient<{ items: Upcoming[]; activeSeriesCount: number }>({ url: `${recurringUrl}/upcoming`, params: { days, accountId } })
+}
+
+export function shortDate(value: string) {
+  return new Date(`${value}T00:00:00Z`).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', timeZone: 'UTC' })
 }

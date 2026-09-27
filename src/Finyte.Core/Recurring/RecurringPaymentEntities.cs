@@ -12,6 +12,7 @@ public sealed class RecurringPaymentSeries
     public decimal ExpectedAmount { get; set; }
     public required string AmountMode { get; set; }
     public string State { get; set; } = "active";
+    public string Kind { get; set; } = "subscription";
     public int Version { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
