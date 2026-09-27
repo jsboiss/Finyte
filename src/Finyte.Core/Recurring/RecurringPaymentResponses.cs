@@ -17,7 +17,8 @@ public sealed record RecurringSeriesResponse(Guid Id, string Name, Guid AccountI
 public sealed record RecurringCostSummary(string Currency, decimal MonthlyEstimate, decimal AnnualEstimate, int ActiveSeriesCount, int VariableSeriesCount);
 public sealed record RecurringSeriesList(IReadOnlyList<RecurringSeriesResponse> Items, IReadOnlyList<RecurringCostSummary> Costs, DateOnly From, DateOnly To);
 public sealed record RecurringDiscoveryResponse(string Key, string Name, Guid AccountId, string AccountName, string Currency, string Cadence,
-    DateOnly AnchorDate, decimal ExpectedAmount, string AliasField, string AliasValue, IReadOnlyList<RecurringDiscoveryTransaction> Transactions, IReadOnlyList<string> Evidence, bool Dismissed);
+    DateOnly AnchorDate, decimal ExpectedAmount, string AliasField, string AliasValue, IReadOnlyList<RecurringDiscoveryTransaction> Transactions, IReadOnlyList<string> Evidence, bool Dismissed,
+    bool IsEarly = false, bool IsEnded = false, string SuggestedKind = "subscription");
 public sealed record RecurringDiscoveryTransaction(RecurringTransactionEvidence Snapshot, DateOnly OccurrenceDate);
 public sealed record RecurringDiscoveryPage(IReadOnlyList<RecurringDiscoveryResponse> Items, int TotalCount, int Page, int PageSize, DateOnly From, DateOnly To);
 public sealed record RecurringOccurrenceResponse(DateOnly Date, DateOnly WindowFrom, DateOnly WindowTo, string Status, decimal ExpectedAmount,

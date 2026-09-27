@@ -35,7 +35,7 @@ public sealed class RecurringPaymentService(FinyteDbContext dbContext, TimeProvi
         return new RecurringSeriesList(items, costs, from, to);
     }
 
-    public async Task<RecurringDiscoveryPage> Discover(Guid tenantId, DateOnly from, DateOnly to, int page, int pageSize, bool dismissed, CancellationToken cancellationToken, Guid? accountId = null, string? search = null, string? cadence = null, string? sort = null)
+    public async Task<RecurringDiscoveryPage> Discover(Guid tenantId, DateOnly from, DateOnly to, int page, int pageSize, bool dismissed, CancellationToken cancellationToken, Guid? accountId = null, string? search = null, string? cadence = null, string? sort = null, bool hideEnded = false)
     {
         ValidateRange(from, to);
         ValidatePage(page, pageSize);
@@ -61,18 +61,20 @@ public sealed class RecurringPaymentService(FinyteDbContext dbContext, TimeProvi
         var decisions = await dbContext.RecurringDiscoveryDecisions.AsNoTracking().Where(x => x.TenantId == tenantId)
             .Select(x => x.CandidateKey).ToHashSetAsync(cancellationToken);
         var patterns = RecurringPatternDetector.Detect(rows.Select(x => new RecurringPatternTransaction(x.Id, x.AccountId, x.Currency,
-            x.Amount, DateOnly.FromDateTime(x.PostedAt!.Value.UtcDateTime), x.MerchantName, x.Description, x.Reference)).ToList());
+            x.Amount, DateOnly.FromDateTime(x.PostedAt!.Value.UtcDateTime), x.MerchantName, x.Description, x.Reference)).ToList(),
+            new RecurringDetectionOptions(IncludeEarly: true, AsOf: to < Today ? to : Today));
         var filtered = patterns.Where(x => decisions.Contains(x.Key) == dismissed
+            && (!hideEnded || !x.IsEnded)
             && (string.IsNullOrWhiteSpace(search) || x.Name.Contains(search.Trim(), StringComparison.OrdinalIgnoreCase))
             && (cadence is null || x.Cadence == cadence));
         var candidates = (sort == "amount"
-            ? filtered.OrderBy(x => x.Currency).ThenByDescending(x => x.ExpectedAmount).ThenBy(x => x.Key)
-            : filtered.OrderBy(x => x.Name).ThenBy(x => x.Key)).ToList();
+            ? filtered.OrderBy(x => x.IsEnded).ThenBy(x => x.Currency).ThenByDescending(x => x.ExpectedAmount).ThenBy(x => x.Key)
+            : filtered.OrderBy(x => x.IsEnded).ThenBy(x => x.Name).ThenBy(x => x.Key)).ToList();
         var byId = rows.ToDictionary(x => x.Id);
         var items = candidates.Skip((page - 1) * pageSize).Take(pageSize).Select(x => new RecurringDiscoveryResponse(x.Key,
             x.Name, x.AccountId, AccountName(byId[x.TransactionIds[0]]), x.Currency, x.Cadence, x.AnchorDate, x.ExpectedAmount,
             x.AliasField, x.AliasValue, x.TransactionIds.Select(y => new RecurringDiscoveryTransaction(Evidence(byId[y]),
-                RecurringCalendar.Resolve(x.Cadence, x.AnchorDate, DateOnly.FromDateTime(byId[y].PostedAt!.Value.UtcDateTime)).Date)).ToList(), x.Evidence, dismissed)).ToList();
+                RecurringCalendar.Resolve(x.Cadence, x.AnchorDate, DateOnly.FromDateTime(byId[y].PostedAt!.Value.UtcDateTime)).Date)).ToList(), x.Evidence, dismissed, x.IsEarly, x.IsEnded, SuggestedKind(x.AliasValue))).ToList();
         return new RecurringDiscoveryPage(items, candidates.Count, page, pageSize, from, to);
     }
 
@@ -550,6 +552,7 @@ public sealed class RecurringPaymentService(FinyteDbContext dbContext, TimeProvi
     {
         "weekly" => 52m, "fortnightly" => 26m, "monthly" => 12m, "quarterly" => 4m, _ => 1m
     });
+    private static string SuggestedKind(string alias) => alias.StartsWith("direct debit", StringComparison.Ordinal) || alias.StartsWith("transfer", StringComparison.Ordinal) ? "bill" : "subscription";
     private DateOnly DefaultFrom() => Today.AddDays(-1096);
     private DateOnly DefaultTo() => Today.AddDays(366);
     private static DateTimeOffset Timestamp(DateOnly date) => new(date.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));

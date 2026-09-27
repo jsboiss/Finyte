@@ -66,12 +66,12 @@ public static class RecurringPaymentEndpoints
         return Results.Ok(await service.List(Tenant(httpContext).TenantId, from ?? today.AddDays(-1096), to ?? today.AddDays(366), cancellationToken));
     }
 
-    private static async Task<IResult> Discover(DateOnly? from, DateOnly? to, int? page, int? pageSize, bool? dismissed, Guid? accountId, string? search, string? cadence, string? sort, HttpContext httpContext,
+    private static async Task<IResult> Discover(DateOnly? from, DateOnly? to, int? page, int? pageSize, bool? dismissed, Guid? accountId, string? search, string? cadence, string? sort, bool? hideEnded, HttpContext httpContext,
         RecurringPaymentService service, TimeProvider timeProvider, CancellationToken cancellationToken)
     {
         var today = DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime);
         return Results.Ok(await service.Discover(Tenant(httpContext).TenantId, from ?? today.AddDays(-1096), to ?? today,
-            page ?? 1, pageSize ?? 20, dismissed ?? false, cancellationToken, accountId, search, cadence, sort));
+            page ?? 1, pageSize ?? 20, dismissed ?? false, cancellationToken, accountId, search, cadence, sort, hideEnded ?? false));
     }
 
     private static async Task<IResult> DiscoveryDecision(RecurringDiscoveryDecisionRequest request, HttpContext httpContext, RecurringPaymentService service, CancellationToken cancellationToken)
