@@ -76,7 +76,6 @@ public sealed class OverviewCurrencyScopeTests
 
         if (includeForeignCurrency)
         {
-            // Sorts after "Everyday", so AnalyticsCurrency keeps choosing AUD and the assertions stay deterministic.
             var savings = Account(tenantId, "Savings", "USD", 900m, now);
             dbContext.Accounts.Add(savings);
             dbContext.Transactions.Add(Transaction(savings, 400m, 12));
