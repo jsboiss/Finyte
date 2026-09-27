@@ -143,8 +143,8 @@ function Breakdown({ profile }: { profile: PayCycleProfile }) {
         {data.missingAccountIds.length > 0 && <p role="alert">Some saved accounts are no longer available. Edit this profile to review its scope.</p>}
       </section>
       <div className="pay-cycle-metrics">
-        <article className="panel"><span>External credits</span><strong>{amount(data.totals.externalCredits)}</strong><Help title="About credits"><p>Income, refunds and other credits. Confirmed transfers are separate.</p></Help></article>
-        <article className="panel"><span>Spending</span><strong>{amount(data.totals.spending)}</strong><Help title="About spending"><p>Posted debits excluding confirmed transfers. Credits are not automatically treated as refunds.</p></Help></article>
+        <article className="panel"><span>External credits</span><strong>{amount(data.totals.externalCredits)}</strong><Help title="About credits"><p>Salary, refunds and other credits. Confirmed transfers are separate.</p><p>Spending is counted gross: a refund appears here as a credit and is never subtracted from the spending figure.</p></Help></article>
+        <article className="panel"><span>Spending</span><strong>{amount(data.totals.spending)}</strong><Help title="About spending"><p>Posted debits excluding confirmed transfers. Credits are not automatically treated as refunds.</p><p>This is gross spending. Refunding a purchase leaves the original debit counted here and adds a credit above, so neither figure is rewritten after the fact.</p></Help></article>
         <article className="panel"><span>Net moved to savings</span><strong>{amount(data.totals.netSavingsTransfers)}</strong><p>{amount(data.totals.savingsTransfersOut)} out, less {amount(data.totals.savingsTransfersIn)} returned.</p></article>
         <article className="panel"><span>Net account movement</span><strong>{amount(data.totals.netMovement)}</strong><Help title="About net movement"><p>All counted credits minus debits. This is not your account balance or money available to spend.</p></Help></article>
       </div>

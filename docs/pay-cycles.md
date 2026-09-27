@@ -17,7 +17,7 @@ Only rows with a posted date, the profile currency, and status null, empty, `pos
 Every counted transaction belongs to exactly one audit bucket:
 
 - `external-credit`: positive rows without a valid confirmed transfer; this includes income, refunds and other credits, not verified salary.
-- `spending`: negative rows without a valid confirmed transfer. Credits do not automatically offset spending.
+- `spending`: negative rows without a valid confirmed transfer. Credits do not automatically offset spending, because spending is reported gross (see below).
 - `savings-out` / `savings-in`: confirmed transfers between tracked accounts and saved savings destinations.
 - `transfer-out` / `transfer-in`: confirmed transfers to/from other accounts outside the tracked scope.
 - `within-scope`: a confirmed transfer leg whose counterpart account is also tracked.
@@ -26,6 +26,8 @@ Every counted transaction belongs to exactly one audit bucket:
 Transfer decisions use the existing shared validity query. Suggested, dismissed or stale pairs do not hide ordinary activity. Each leg counts on its own posted date, so different settlement dates can leave a nonzero within-scope movement in a cycle. A counterpart in the next cycle or after today's cutoff never cancels a current debit. Savings out and savings returns are shown separately; net savings is out minus returns, not a savings-account balance.
 
 `netMovement` is the signed sum of all counted rows: external credits minus spending, savings out and other transfers out, plus savings returns, other transfers in and signed within-scope movement. It describes changes from recorded activity, not available funds or an account balance. `expectedIncomeDifference` is external credits minus optional expected income; it does not claim those credits are salary. Category totals cover only spending, preferring the ledger's secondary category, then primary, then Uncategorised.
+
+Spending is gross, never net of refunds. A refund lands in `external-credit` and the purchase it reverses stays in `spending`, so a past cycle's spending figure never changes once its transactions have posted. This is a decided position, recorded against issue #38 on 25 September 2026, and it is why the buckets are exhaustive and disjoint: every counted row appears exactly once, and the totals reconcile against the audit list without any row being adjusted by another. A net-of-refund mode would need refund matching, a cross-period policy and a partial-refund policy, none of which are decided, and would have to be an explicit opt-in rather than a change to these figures.
 
 Summary queries aggregate the whole cycle before paginating the audit rows. Kind filters affect the audit count/page only. Stable posted-date/ID ordering makes pagination deterministic for an unchanged ledger. PostgreSQL reads use a repeatable-read snapshot so totals and the audit page in a response remain consistent during provider ingestion; separate page requests can reflect new ledger activity. There is no projection cache: imports, transfer decisions, provider corrections and preference changes appear on the next request.
 
