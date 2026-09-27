@@ -3,6 +3,7 @@ export type OverviewResponse = {
   scope: {
     accountId: string | null
     label: string
+    accountIds?: string[] | null
   }
   monthKey: string
   currency: string

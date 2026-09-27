@@ -1,16 +1,19 @@
 import { Help } from '../shared/Help'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link } from '@tanstack/react-router'
+import { Link, useNavigate, useSearch } from '@tanstack/react-router'
 import { RefreshCcw } from '../shared/Icons'
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
+import { getAccountGroups } from '../accounts/accountGroupsApi'
 import { getAccounts, type Account as AccountResponse } from '../accounts/accountsApi'
 import { BillingAccessPanel } from '../billing/BillingAccessPanel'
 import { getBillingAccess } from '../billing/billingApi'
 import { AppSelect } from '../shared/AppSelect'
+import { Drawer } from '../shared/Drawer'
 import { currentMonth } from '../shared/calendar'
 import { compactCurrency, formatMonth } from '../shared/formatters'
 import { DashboardMetricGrid } from './components/DashboardMetricGrid'
 import { DashboardModuleFrame } from './components/DashboardModuleFrame'
+import { allAccountsScope, scopeAccountIds } from './accountScope'
 import { getOverview, getOverviewQueryKey, refreshOverview } from './overviewApi'
 import { CashFlowModule } from './modules/CashFlowModule'
 import { ComingUpModule } from './modules/ComingUpModule'
@@ -19,10 +22,14 @@ import { SpendByTagChart } from './modules/SpendByTagChart'
 import { transactionLink } from './transactionLinks'
 import type { DashboardMetric, OverviewAccountOption, OverviewResponse } from './types'
 
-const allAccountsValue = 'all'
+const chooseSeveralValue = 'choose-several'
 
 export function DashboardPage() {
-  const [selectedAccountId, setSelectedAccountId] = useState(allAccountsValue)
+  const search = useSearch({ strict: false }) as { scope?: string }
+  const navigate = useNavigate()
+  const selectedScope = search.scope || allAccountsScope
+  const setScope = (scope: string) => void navigate({ to: '/', search: { scope: scope === allAccountsScope ? undefined : scope } })
+  const [choosing, setChoosing] = useState<string[] | null>(null)
   const [includeInternalTransfers, setIncludeInternalTransfers] = useState(false)
   const queryClient = useQueryClient()
   const billingAccessQuery = useQuery({
@@ -37,27 +44,33 @@ export function DashboardPage() {
     enabled: hasBillingAccess,
     staleTime: 60_000,
   })
-  const accountId = selectedAccountId === allAccountsValue ? null : selectedAccountId
+  const groupsQuery = useQuery({ queryKey: ['account-groups'], queryFn: getAccountGroups, enabled: hasBillingAccess, staleTime: 60_000 })
+  const selectedIds = scopeAccountIds(selectedScope)
+  const accountId = selectedIds?.length === 1 ? selectedIds[0] : null
   const overviewQuery = useQuery({
-    queryKey: getOverviewQueryKey(accountId, includeInternalTransfers),
-    queryFn: () => getOverview(accountId, includeInternalTransfers),
+    queryKey: getOverviewQueryKey(selectedScope, includeInternalTransfers),
+    queryFn: () => getOverview(selectedScope, includeInternalTransfers),
     enabled: hasBillingAccess,
     refetchInterval: x => refreshInterval(x.state.data?.freshness),
     staleTime: 60_000,
   })
   const refreshOverviewMutation = useMutation({
-    mutationFn: (scope: { accountId: string | null; includeInternalTransfers: boolean }) => refreshOverview(scope.accountId, scope.includeInternalTransfers),
+    mutationFn: (scope: { scope: string; includeInternalTransfers: boolean }) => refreshOverview(scope.scope, scope.includeInternalTransfers),
     onSuccess: (x, scope) => {
-      queryClient.setQueryData(getOverviewQueryKey(scope.accountId, scope.includeInternalTransfers), x)
+      queryClient.setQueryData(getOverviewQueryKey(scope.scope, scope.includeInternalTransfers), x)
     },
   })
-  const accountOptions = useMemo<OverviewAccountOption[]>(() => [
-    { id: allAccountsValue, label: 'All accounts' },
+  const accountOptions: OverviewAccountOption[] = [
+    { id: allAccountsScope, label: 'All accounts' },
+    ...(groupsQuery.data ?? []).map(x => ({ id: `group:${x.id}`, label: `Group: ${x.name}` })),
     ...(accountsQuery.data ?? []).map(x => ({ id: x.id, label: x.name })),
-  ], [accountsQuery.data])
+    ...(selectedScope.startsWith('set:') ? [{ id: selectedScope, label: `${selectedIds?.length ?? 0} accounts` }] : []),
+    { id: chooseSeveralValue, label: 'Choose several…' },
+  ]
 
-  const overview = overviewQuery.data ?? { ...createEmptyOverview(accountId, selectedAccountId, accountsQuery.data), includeInternalTransfers }
-  const balanceAccounts = accountsQuery.data?.filter(x => accountId === null || x.id === accountId)
+  const overview = overviewQuery.data ?? { ...createEmptyOverview(accountId, accountsQuery.data), includeInternalTransfers }
+  const overviewAccountIds = overview.scope.accountIds ?? (overview.scope.accountId ? [overview.scope.accountId] : null)
+  const balanceAccounts = accountsQuery.data?.filter(x => overviewAccountIds === null || overviewAccountIds.includes(x.id))
   const hasBalances = !!balanceAccounts?.length && balanceAccounts.every(x => x.balanceAsOf !== null)
   const metrics: DashboardMetric[] = [
     balanceMetric(overview, hasBalances),
@@ -81,13 +94,13 @@ export function DashboardPage() {
       <div className="overview-controls"><div className="page-title"><h1>Dashboard</h1><Help title="About these totals"><p>Every total on this page counts {overview.currency} only. Money in and money out {includeInternalTransfers ? 'include' : 'exclude'} matched internal transfers. Balances include all account movements.</p>
         <p>Money in is every credit that is not a matched internal transfer. It is not verified salary, and refunds are not deducted from spending.</p>
         {currencyExclusionNote(overview) && <p>{currencyExclusionNote(overview)}</p>}
-        {accountId === null && (accountsQuery.data?.filter(x => !x.includeInAnalytics).length ?? 0) > 0 && <p>{accountsQuery.data?.filter(x => !x.includeInAnalytics).length} accounts excluded from combined spending and income.</p>}
+        {selectedScope === allAccountsScope && (accountsQuery.data?.filter(x => !x.includeInAnalytics).length ?? 0) > 0 && <p>{accountsQuery.data?.filter(x => !x.includeInAnalytics).length} accounts excluded from combined spending and income.</p>}
         <label className="transfer-comparison-toggle"><input type="checkbox" checked={includeInternalTransfers} onChange={x => setIncludeInternalTransfers(x.target.checked)} /><span>Include confirmed internal transfers</span></label>
         <p><Link to="/accounts">Account preferences</Link></p>
       </Help></div>
         <div className="overview-actions">
           <label>
-            <AppSelect aria-label="Account" value={selectedAccountId} onChange={x => setSelectedAccountId(x.target.value)}>
+            <AppSelect aria-label="Account" value={selectedScope} onChange={x => x.target.value === chooseSeveralValue ? setChoosing(selectedIds ?? []) : setScope(x.target.value)}>
               {accountOptions.map(x => <option key={x.id} value={x.id}>{x.label}</option>)}
             </AppSelect>
           </label>
@@ -96,7 +109,7 @@ export function DashboardPage() {
             aria-label="Refresh overview"
             className="icon-button desktop-refresh-button"
             disabled={overviewQuery.isFetching || refreshOverviewMutation.isPending}
-            onClick={() => refreshOverviewMutation.mutate({ accountId, includeInternalTransfers })}
+            onClick={() => refreshOverviewMutation.mutate({ scope: selectedScope, includeInternalTransfers })}
             title="Refresh overview"
             type="button"
           >
@@ -105,9 +118,17 @@ export function DashboardPage() {
         </div>
       </div>
 
+      {choosing && <Drawer title="Choose accounts" onClose={() => setChoosing(null)}>
+        <div className="account-scope-picker">
+          {(accountsQuery.data ?? []).map(x => <label className="transaction-filter-checkbox" key={x.id}><input type="checkbox" checked={choosing.includes(x.id)} onChange={y => setChoosing(y.target.checked ? [...choosing, x.id] : choosing.filter(z => z !== x.id))} /><span>{x.name}</span></label>)}
+          <button type="button" onClick={() => { setScope(choosing.length === 0 ? allAccountsScope : choosing.length === 1 ? choosing[0] : `set:${choosing.join(',')}`); setChoosing(null) }}>Show {choosing.length === 0 ? 'all accounts' : choosing.length === 1 ? '1 account' : `${choosing.length} accounts`}</button>
+          <p><Link to="/accounts">Save a group on the Accounts page</Link> to reuse a set of accounts.</p>
+        </div>
+      </Drawer>}
+
       <DashboardMetricGrid metrics={metrics} />
 
-      <ComingUpModule accountId={accountId} />
+      <ComingUpModule accountIds={overviewAccountIds} />
 
 
       <CashFlowRaceModule overview={overview} />
@@ -172,10 +193,10 @@ function LockedDashboard() {
   )
 }
 
-function createEmptyOverview(accountId: string | null, selectedAccountId: string, accounts?: AccountResponse[]): OverviewResponse {
+function createEmptyOverview(accountId: string | null, accounts?: AccountResponse[]): OverviewResponse {
   const monthKey = currentMonth()
   const label = accountId
-    ? accounts?.find(x => x.id === selectedAccountId)?.name ?? 'Selected account'
+    ? accounts?.find(x => x.id === accountId)?.name ?? 'Selected account'
     : 'All accounts'
 
   return {

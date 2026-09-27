@@ -1,5 +1,6 @@
 export type TransactionFilters = {
   accountId: string
+  accountIds: string[]
   from: string
   to: string
   search: string
@@ -19,7 +20,7 @@ export type TransactionFilters = {
 }
 
 export const defaultTransactionFilters: TransactionFilters = {
-  accountId: '', from: '', to: '', search: '', category: '', tagIds: [],
+  accountId: '', accountIds: [], from: '', to: '', search: '', category: '', tagIds: [],
   amountMode: 'absolute', tagMatch: 'any', untagged: false, minAmount: '', maxAmount: '', currency: '', sort: '-date',
   postedOnly: false, analyticsOnly: false, direction: 'all', internalTransfers: 'include',
 }
@@ -30,6 +31,9 @@ export function transactionSearchParams(page: number, pageSize: number, filters:
     if (filters[key]) {
       params.set(key, filters[key])
     }
+  }
+  for (const accountId of filters.accountIds) {
+    params.append('accountIds', accountId)
   }
   for (const tagId of filters.tagIds) {
     params.append('tagIds', tagId)
@@ -55,6 +59,7 @@ export function readTransactionSearch(search = window.location.search) {
   }
   // Preserve signed semantics for existing bookmarked amount filters.
   if (!params.has('amountMode') && (params.has('minAmount') || params.has('maxAmount'))) { filters.amountMode = 'signed' }
+  filters.accountIds = params.getAll('accountIds')
   filters.tagIds = params.getAll('tagIds')
   filters.tagMatch = params.get('tagMatch') === 'all' ? 'all' : 'any'
   filters.untagged = params.get('untagged') === 'true'

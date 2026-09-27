@@ -1,3 +1,4 @@
+import { scopeOf } from '../accountScope'
 import { WalletCards } from '../../shared/Icons'
 import { CashFlowDashboardModule } from '../components/CashFlowDashboardModule'
 import type { OverviewResponse } from '../types'
@@ -16,7 +17,7 @@ export function CashFlowRaceModule({ overview }: { overview: OverviewResponse })
           currencyCode={overview.currency}
           data={data}
           isLoading={state.isLoading}
-          key={`${overview.scope.accountId}-${overview.includeInternalTransfers}`}
+          key={`${scopeOf(overview)}-${overview.includeInternalTransfers}`}
         />
       )}
     </CashFlowDashboardModule>

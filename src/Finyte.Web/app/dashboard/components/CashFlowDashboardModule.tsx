@@ -1,3 +1,4 @@
+import { scopeOf } from '../accountScope'
 import type { ReactNode } from 'react'
 import { createEmptyCashFlow, getCashFlow, getCashFlowQueryKey } from '../cashFlowApi'
 import { cashFlowTimeframes } from '../timeframes'
@@ -18,9 +19,9 @@ export function CashFlowDashboardModule({
   return (
     <TimeframedDashboardModule
       createEmptySource={x => createEmptyCashFlow(x, overview.currency)}
-      getQueryKey={x => getCashFlowQueryKey(overview.scope.accountId, x, overview.includeInternalTransfers)}
+      getQueryKey={x => getCashFlowQueryKey(scopeOf(overview), x, overview.includeInternalTransfers)}
       icon={icon}
-      load={x => getCashFlow(overview.scope.accountId, x, overview.includeInternalTransfers)}
+      load={x => getCashFlow(scopeOf(overview), x, overview.includeInternalTransfers)}
       pickerVariant="compact"
       timeframes={cashFlowTimeframes}
       title={title}
