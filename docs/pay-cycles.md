@@ -4,15 +4,15 @@ Pay cycles use a family's saved payday schedule and explicit account selection. 
 
 ## Periods and scope
 
-The anchor is a known payday in UTC. Weekly and fortnightly cycles repeat every 7 or 14 days in both directions from it. Monthly cycles use its day of month, clamped in shorter months without carrying the clamp forward: a January 31 anchor gives February 28 (29 in leap years), then March 31. No weekend or holiday adjustment is applied. The period starts on payday and ends immediately before the next payday.
+The anchor is any recent payday, as a calendar day (see [financial dates](financial-dates.md)). Weekly and fortnightly cycles repeat every 7 or 14 days in both directions from it. Monthly cycles use its day of month, clamped in shorter months without carrying the clamp forward: a January 31 anchor gives February 28 (29 in leap years), then March 31. No weekend or holiday adjustment is applied. The period starts on payday and ends immediately before the next payday.
 
-The supported anchor and lookup dates are 1900-01-01 through 9998-12-31. Responses give inclusive `from` and `to`, plus dates to request the previous/next cycle. Current cycles observe through today UTC, completed cycles through their end date. Future cycles return no actual transactions or totals, even if future-dated rows exist. Expected income remains a full-cycle comparison. It is never included in actual totals.
+The supported anchor and lookup dates are 1900-01-01 through 9998-12-31. Responses give inclusive `from` and `to`, plus dates to request the previous/next cycle. Current cycles observe through today in the household calendar, completed cycles through their end date. Future cycles return no actual transactions or totals, even if future-dated rows exist. Expected income remains a full-cycle comparison. It is never included in actual totals.
 
 Each profile has one currency and 1–100 explicit tracked account IDs, plus up to 100 disjoint savings destination IDs. All selections must belong to the family and have the profile currency when saved. The UI initially selects accounts included in analytics; the saved selection is independent of later account classification changes. Selected accounts excluded from the dashboard still count here. Names remain current. Unavailable saved IDs are reported rather than widening the scope. Account IDs are stored as PostgreSQL UUID arrays; there is no implicit account deletion cascade that changes profile scope.
 
 ## Actual activity and reconciliation
 
-Only rows with a posted timestamp, the profile currency, and status null, empty, `posted` or `POSTED` count. Missing dates are never replaced with ingestion dates. Unposted rows and other currencies in the observed dates are counted separately; all undated rows in the tracked accounts are reported because they cannot be assigned to a cycle. No currency conversion is performed.
+Only rows with a posted date, the profile currency, and status null, empty, `posted` or `POSTED` count. Missing dates are never replaced with ingestion dates. Unposted rows and other currencies in the observed dates are counted separately; all undated rows in the tracked accounts are reported because they cannot be assigned to a cycle. No currency conversion is performed.
 
 Every counted transaction belongs to exactly one audit bucket:
 

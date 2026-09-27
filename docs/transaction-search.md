@@ -12,7 +12,7 @@ This uses Finance's search as a prototype, with explicit tag matching, signed am
 | --- | --- |
 | `page`, `pageSize` | One-based page, default 1; size 1–250, default 25. Out-of-range pages return empty items with the filtered total. Invalid or overflowing offsets return 400. |
 | `accountId` | Exact account ID. Omit for all family accounts. Unknown or foreign IDs produce no results. |
-| `from`, `to` | Inclusive `yyyy-MM-dd` UTC calendar dates. Uses `PostedAt`, falling back to `CreatedAt`, consistently with the displayed date. The upper bound includes the whole final day. |
+| `from`, `to` | Inclusive `yyyy-MM-dd` calendar dates. Uses `PostedDate`, falling back to the calendar day of `CreatedAt` for unposted rows, consistently with the displayed date. The upper bound includes the whole final day. |
 | `search` | Literal, case-insensitive substring in description, merchant name or reference. Trimmed; maximum 200 characters. `%`, `_` and backslashes are ordinary characters, not wildcard syntax. |
 | `category` | Case-insensitive substring in either provider category; maximum 200 characters. |
 | `tagIds` | Repeat the parameter for multiple exact tag IDs, at most 50. Duplicate IDs are ignored. Names are not identifiers. |

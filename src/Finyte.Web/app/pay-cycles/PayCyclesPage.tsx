@@ -4,12 +4,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { isAxiosError } from 'axios'
 import { useState } from 'react'
-import { getAccounts, type Account } from '../accounts/accountsApi'
+import { accountTypeLabel, getAccounts, type Account } from '../accounts/accountsApi'
 import { httpClient } from '../api/httpClient'
+import { initialRoles, type AccountRole } from './accountRoles'
+import { dateLabel, todayDate } from '../shared/calendar'
 import { getBreakdown, getPayCycles, kinds, money, type PayCycleProfile } from './payCyclesApi'
 import './payCycles.css'
 
-const today = () => new Date().toISOString().slice(0, 10)
+const periodStatusLabel: Record<string, string> = { current: 'Current cycle', completed: 'Completed cycle', future: 'Future cycle' }
 
 export function PayCyclesPage() {
   const queryClient = useQueryClient()
@@ -25,13 +27,13 @@ export function PayCyclesPage() {
   })
 
   return <section className="page pay-cycles-page">
-    <header className="page-header"><div><h1>Pay cycles</h1><Help title="How pay cycles work"><p>Choose a known payday and accounts to track. Cycles show recorded activity and savings transfers. Expected income is a comparison, not a balance. Dates use UTC and only posted activity in the selected currency counts.</p></Help></div><button type="button" disabled={!accounts.data?.length || editor !== null} onClick={() => { setEditor('new'); setMessage('') }}>New pay cycle</button></header>
+    <header className="page-header"><div><h1>Pay cycles</h1><Help title="How pay cycles work"><p>Choose a recent payday and the accounts to track. Cycles show recorded activity and savings transfers. Expected income is a comparison, not a balance. Dates are the calendar days your bank reports, and only posted activity in the selected currency counts.</p></Help></div><button type="button" disabled={!accounts.data?.length || editor !== null} onClick={() => { setEditor('new'); setMessage('') }}>New pay cycle</button></header>
 
     {message && <p role="status">{message}</p>}
     {(accounts.isLoading || profiles.isLoading) && <p>Loading pay cycles…</p>}
     {(profiles.error || accounts.error) && <p role="alert">{errorMessage(profiles.error ?? accounts.error)} <button type="button" onClick={() => { void profiles.refetch(); void accounts.refetch() }}>Retry</button></p>}
     {accounts.data?.length === 0 && <p><Link to="/imports">Add an account</Link> before creating a pay cycle.</p>}
-    {profiles.data?.length === 0 && accounts.data && accounts.data.length > 0 && editor === null && <p>No pay cycles yet. Create a schedule using a known payday.</p>}
+    {profiles.data?.length === 0 && accounts.data && accounts.data.length > 0 && editor === null && <p>No pay cycles yet. Create a schedule from a recent payday.</p>}
     {editor !== null && accounts.data && <Drawer title={editor === 'new' ? 'New pay cycle' : 'Edit pay cycle'} onClose={() => setEditor(null)}><ProfileEditor key={editor === 'new' ? 'new' : `${editor.id}-${editor.version}`} profile={editor === 'new' ? undefined : editor} accounts={accounts.data}
       onCancel={() => setEditor(null)} onReload={async () => { setEditor(null); await profiles.refetch() }}
       onSaved={async item => { setEditor(null); setSelectedId(item.id); setMessage(`${item.name} saved.`); await queryClient.invalidateQueries({ queryKey: ['pay-cycles'] }) }} /></Drawer>}
@@ -55,17 +57,27 @@ function ProfileEditor({ profile, accounts, onCancel, onSaved, onReload }: {
   const defaultCurrency = profile?.currency ?? accounts.find(x => x.includeInAnalytics)?.currency ?? accounts[0]?.currency ?? 'AUD'
   const [name, setName] = useState(profile?.name ?? '')
   const [frequency, setFrequency] = useState(profile?.frequency ?? 'fortnightly')
-  const [anchorDate, setAnchorDate] = useState(profile?.anchorDate ?? today())
+  const [anchorDate, setAnchorDate] = useState(profile?.anchorDate ?? todayDate())
   const [currency, setCurrency] = useState(defaultCurrency)
   const [expectedIncome, setExpectedIncome] = useState(profile?.expectedIncome?.toString() ?? '')
-  const [accountIds, setAccountIds] = useState(profile?.accountIds ?? accounts.filter(x => x.includeInAnalytics && x.currency === defaultCurrency).map(x => x.id))
-  const [savingsIds, setSavingsIds] = useState(profile?.savingsAccountIds ?? [])
+  const [roles, setRoles] = useState(() => initialRoles(accounts, profile))
+  const [currencyNotice, setCurrencyNotice] = useState('')
+  const inCurrency = accounts.filter(x => x.currency === currency)
+  const accountIds = inCurrency.filter(x => roles[x.id] === 'spending').map(x => x.id)
+  const savingsIds = inCurrency.filter(x => roles[x.id] === 'savings').map(x => x.id)
+  const unconfirmed = inCurrency.filter(x => x.accountType === 'other' && roles[x.id] === 'excluded')
   const mutation = useMutation({
     mutationFn: () => httpClient<PayCycleProfile>({ method: profile ? 'PUT' : 'POST', url: profile ? `/api/pay-cycles/${profile.id}` : '/api/pay-cycles',
       data: { name, frequency, anchorDate, currency, expectedIncome: expectedIncome === '' ? null : expectedIncome, accountIds, savingsAccountIds: savingsIds, expectedVersion: profile?.version } }),
     onSuccess: onSaved,
   })
-  const toggle = (ids: string[], id: string) => ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id]
+
+  const changeCurrency = (next: string) => {
+    const moving = accounts.filter(x => x.currency === next)
+    setCurrency(next)
+    setRoles(x => ({ ...x, ...initialRoles(moving) }))
+    setCurrencyNotice(moving.length === 0 ? '' : `Your ${currency} choices no longer apply. The ${moving.length === 1 ? 'account' : `${moving.length} accounts`} below started from suggested roles.`)
+  }
 
   return <form className="panel pay-cycle-editor" onSubmit={event => { event.preventDefault(); mutation.mutate() }}>
 
@@ -74,22 +86,30 @@ function ProfileEditor({ profile, accounts, onCancel, onSaved, onReload }: {
       <div className="pay-cycle-fields">
         <label>Name<input required maxLength={120} value={name} onChange={event => setName(event.target.value)} placeholder="Household payday" /></label>
         <label>Frequency<select value={frequency} onChange={event => setFrequency(event.target.value)}><option value="weekly">Weekly</option><option value="fortnightly">Fortnightly</option><option value="monthly">Monthly</option></select></label>
-        <label>Known payday (UTC)<input type="date" required min="1900-01-01" max="9998-12-31" value={anchorDate} onChange={event => setAnchorDate(event.target.value)} /></label>
-        <label>Currency<select value={currency} onChange={event => { setCurrency(event.target.value); setAccountIds([]); setSavingsIds([]) }}>
+        <label>A recent payday<input type="date" required min="1900-01-01" max="9998-12-31" value={anchorDate} onChange={event => setAnchorDate(event.target.value)} /></label>
+        <label>Currency<select value={currency} onChange={event => changeCurrency(event.target.value)}>
           {[...new Set([defaultCurrency, ...accounts.map(x => x.currency)])].sort().map(x => <option key={x}>{x}</option>)}
         </select></label>
         <label>Expected income per cycle (optional)<input type="number" min="0" step="0.01" value={expectedIncome} onChange={event => setExpectedIncome(event.target.value)} placeholder="No target" /></label>
       </div>
-      <Help><p>Each cycle starts on payday and ends the day before the next one. Monthly schedules use the same day of month, clamped to the last day in shorter months. No weekend or holiday adjustment is applied.</p></Help>
-      <div className="pay-cycle-selections">
-        <fieldset><legend>Accounts to track</legend><p>Explicit selection. Dashboard preferences do not change this scope.</p>
-          {accounts.filter(x => x.currency === currency).map(x => <label className="pay-cycle-checkbox" key={x.id}><input type="checkbox" checked={accountIds.includes(x.id)} onChange={() => { setAccountIds(toggle(accountIds, x.id)); setSavingsIds(savingsIds.filter(y => y !== x.id)) }} />{x.name}{!x.includeInAnalytics && ' · Excluded from dashboard'}</label>)}
-        </fieldset>
-        <fieldset><legend>Savings destinations (optional)</legend><p>Confirmed transfers to and from these accounts are shown as savings movements. Destinations sit outside the tracked accounts.</p>
-          {accounts.filter(x => x.currency === currency && !accountIds.includes(x.id)).map(x => <label className="pay-cycle-checkbox" key={x.id}><input type="checkbox" checked={savingsIds.includes(x.id)} onChange={() => setSavingsIds(toggle(savingsIds, x.id))} />{x.name}</label>)}
-          {accounts.every(x => x.currency !== currency || accountIds.includes(x.id)) && <p>No other accounts in this currency.</p>}
-        </fieldset>
-      </div>
+      <Help><p>Any payday works: cycles repeat forwards and backwards from it. Each cycle starts on payday and ends the day before the next one. Monthly schedules use the same day of month, clamped to the last day in shorter months. No weekend or holiday adjustment is applied.</p></Help>
+      <fieldset className="pay-cycle-roles"><legend>What each account is for</legend>
+        <p>Spending accounts are tracked for income and spending. Savings destinations are not tracked, but confirmed transfers to and from them are shown as savings movements. Each account does one job, and dashboard preferences do not change this scope.</p>
+        {currencyNotice && <p role="status">{currencyNotice}</p>}
+        {inCurrency.length === 0 && <p role="alert">No accounts are held in {currency}. Choose another currency, or <Link to="/imports">add a {currency} account</Link>.</p>}
+        {inCurrency.map(x => <label className="pay-cycle-role" key={x.id}>
+          <span>{x.name}<small>{accountTypeLabel(x.accountType)}{!x.includeInAnalytics && ' · Excluded from dashboard'}</small></span>
+          <select value={roles[x.id] ?? 'excluded'} onChange={event => { setRoles(y => ({ ...y, [x.id]: event.target.value as AccountRole })); setCurrencyNotice('') }}>
+            <option value="spending">Spending</option>
+            <option value="savings">Savings destination</option>
+            <option value="excluded">Not part of this pay cycle</option>
+          </select>
+        </label>)}
+        {unconfirmed.length > 0 && <p>{unconfirmed.map(x => x.name).join(', ')} {unconfirmed.length === 1 ? 'has no account type' : 'have no account type'}, so no role was suggested. Give {unconfirmed.length === 1 ? 'it' : 'them'} a role if {unconfirmed.length === 1 ? 'it belongs' : 'they belong'} in this pay cycle.</p>}
+        <p className="pay-cycle-scope">{accountIds.length === 0
+          ? 'Choose at least one spending account before saving.'
+          : `Saving will track ${accountIds.length === 1 ? '1 spending account' : `${accountIds.length} spending accounts`} and ${savingsIds.length === 0 ? 'no savings destinations' : savingsIds.length === 1 ? '1 savings destination' : `${savingsIds.length} savings destinations`} in ${currency}.`}</p>
+      </fieldset>
       <div className="pay-cycle-toolbar"><button type="submit" disabled={accountIds.length === 0}>{mutation.isPending ? 'Saving…' : 'Save pay cycle'}</button><button type="button" className="pay-cycle-secondary" onClick={onCancel}>Cancel</button></div>
     </fieldset>
     {mutation.error && <p role="alert">{errorMessage(mutation.error)} {isAxiosError(mutation.error) && mutation.error.response?.status === 409 && <button type="button" onClick={() => void onReload()}>Discard edits and reload</button>}</p>}
@@ -97,8 +117,8 @@ function ProfileEditor({ profile, accounts, onCancel, onSaved, onReload }: {
 }
 
 function Breakdown({ profile }: { profile: PayCycleProfile }) {
-  const [date, setDate] = useState(today())
-  const [draftDate, setDraftDate] = useState(today())
+  const [date, setDate] = useState(todayDate())
+  const [draftDate, setDraftDate] = useState(todayDate())
   const [page, setPage] = useState(1)
   const [kind, setKind] = useState('')
   const query = useQuery({ queryKey: ['pay-cycles', 'breakdown', profile.id, date, page, kind], queryFn: () => getBreakdown(profile.id, date, page, kind) })
@@ -110,15 +130,15 @@ function Breakdown({ profile }: { profile: PayCycleProfile }) {
     <form className="pay-cycle-toolbar" onSubmit={event => { event.preventDefault(); go(draftDate) }}>
       <button type="button" disabled={!data?.previousDate} onClick={() => data?.previousDate && go(data.previousDate)}>Previous cycle</button>
       <label>Cycle containing date<input type="date" required min="1900-01-01" max="9998-12-31" value={draftDate} onChange={event => setDraftDate(event.target.value)} /></label>
-      <button type="submit">Show cycle</button><button type="button" className="pay-cycle-secondary" onClick={() => go(today())}>Current cycle</button>
+      <button type="submit">Show cycle</button><button type="button" className="pay-cycle-secondary" onClick={() => go(todayDate())}>Current cycle</button>
       <button type="button" disabled={!data?.nextDate} onClick={() => data?.nextDate && go(data.nextDate)}>Next cycle</button>
     </form>
     {query.isLoading && <p>Loading breakdown…</p>}
     {query.error && <p role="alert">{errorMessage(query.error)} <button type="button" onClick={() => void query.refetch()}>Retry</button></p>}
     {data && <>
       <section className="panel pay-cycle-intro">
-        <h2>{data.from} to {data.to} · {data.periodStatus}</h2>
-        <p>{data.observedThrough ? `Recorded activity through ${data.observedThrough} (UTC).` : 'Future cycle. No actual activity is counted yet.'} {data.totals.transactionCount} transactions counted in {profile.currency}.</p>
+        <h2>{dateLabel(data.from)} – {dateLabel(data.to)} · {periodStatusLabel[data.periodStatus] ?? data.periodStatus}</h2>
+        <p>{data.observedThrough ? `Recorded activity through ${dateLabel(data.observedThrough)}.` : 'Future cycle. No actual activity is counted yet.'} {data.totals.transactionCount} transactions counted in {profile.currency}. Dates follow the {data.dateBasis} calendar.</p>
         <p>Tracked: {data.accounts.map(x => x.name).join(', ') || 'No available accounts'}. Savings destinations: {data.savingsAccounts.map(x => x.name).join(', ') || 'None'}.</p>
         {data.missingAccountIds.length > 0 && <p role="alert">Some saved accounts are no longer available. Edit this profile to review its scope.</p>}
       </section>
@@ -136,7 +156,7 @@ function Breakdown({ profile }: { profile: PayCycleProfile }) {
         <div className="pay-cycle-toolbar"><h2>Transactions behind the numbers</h2><label>Show transaction type<select value={kind} onChange={event => { setKind(event.target.value); setPage(1) }}><option value="">All counted transactions</option>{kinds.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label></div>
         <p>{data.transactions.totalCount} matching transactions. Summary figures above always cover all counted transactions in the cycle.</p>
         <ol className="pay-cycle-transactions">{data.transactions.items.map(x => <li key={x.id}>
-          <div><strong>{x.description || x.merchantName || 'Transaction'}</strong><span>{x.postedAt.slice(0, 10)} · {x.accountName}</span><span>{kinds.find(y => y[0] === x.kind)?.[1]} · {x.category}</span></div><strong>{amount(x.amount)}</strong>
+          <div><strong>{x.description || x.merchantName || 'Transaction'}</strong><span>{dateLabel(x.postedDate)} · {x.accountName}</span><span>{kinds.find(y => y[0] === x.kind)?.[1]} · {x.category}</span></div><strong>{amount(x.amount)}</strong>
         </li>)}</ol>
         {data.transactions.totalCount === 0 && <p>No transactions match this selection.</p>}
         <div className="pay-cycle-toolbar"><button type="button" disabled={page <= 1 || query.isFetching} onClick={() => setPage(page - 1)}>Previous page</button><span>Page {page} of {Math.max(1, Math.ceil(data.transactions.totalCount / data.transactions.pageSize))}</span><button type="button" disabled={page * data.transactions.pageSize >= data.transactions.totalCount || query.isFetching} onClick={() => setPage(page + 1)}>Next page</button></div>

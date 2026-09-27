@@ -5,7 +5,7 @@ Budgets are family-owned spending limits, available at `/budgets` with an active
 ## Counting rules
 
 - A budget has exactly one currency. Only transactions with that currency count, even when their account reports a different currency. No exchange-rate conversion occurs.
-- Actual spending is the positive total of negative, dated, posted transactions through the current UTC calendar day. Legacy null/empty statuses count as posted, consistent with other Finyte analytics. Pending, undated, future-dated, zero and positive transactions do not count. Credits are not inferred to be refunds.
+- Actual spending is the positive total of negative, dated, posted transactions through the current day in the household calendar (see [financial dates](financial-dates.md)). Legacy null/empty statuses count as posted, consistent with other Finyte analytics. Pending, undated, future-dated, zero and positive transactions do not count. Credits are not inferred to be refunds.
 - Valid confirmed internal transfers are excluded using the shared transfer query. A stale confirmation stops excluding the corrected transaction until reviewed again.
 - `matchMode: all` explicitly means all eligible spending. `selected` matches exact primary or secondary category names (case insensitive), **or** any selected tag. A transaction matching several categories/tags counts once. Category matching is not a merchant or substring search.
 - `accountScope: analytics` follows account preferences, including accounts added later. `selected` counts only those accounts, overriding their combined-analytics preference as direct account views do. Transaction currency filtering still applies.
@@ -14,9 +14,9 @@ Budgets are family-owned spending limits, available at `/budgets` with an active
 
 ## Periods and history
 
-Weekly and fortnightly schedules repeat every 7 or 14 days from a known starting date. Monthly schedules recur on the anchor's day, clamping to the last day of shorter months without drifting: January 31 -> February 28/29 -> March 31. The schedule extends before the anchor. Period endpoints shown to users are inclusive; database queries use an exclusive next-day boundary. Dates use UTC calendar days.
+Weekly and fortnightly schedules repeat every 7 or 14 days from a known starting date. Monthly schedules recur on the anchor's day, clamping to the last day of shorter months without drifting: January 31 -> February 28/29 -> March 31. The schedule extends before the anchor. Period endpoints shown to users are inclusive and queries compare the stored `PostedDate` directly.
 
-Each period gets the full current limit; there is no carry-forward or proration. Negative remaining amounts show an overspend. `observedThrough` is the last UTC day with eligible observations, or null for a future period. Selecting an old date chooses a period, **not** an immutable historical snapshot. History is recalculated from current transactions, tags, account preferences and budget settings. This makes provider corrections and transfer reviews visible immediately.
+Each period gets the full current limit; there is no carry-forward or proration. Negative remaining amounts show an overspend. `observedThrough` is the last calendar day with eligible observations, or null for a future period. Selecting an old date chooses a period, **not** an immutable historical snapshot. History is recalculated from current transactions, tags, account preferences and budget settings. This makes provider corrections and transfer reviews visible immediately.
 
 ## API
 
@@ -30,7 +30,7 @@ All routes require an authenticated family and subscription; family IDs are reso
 | `POST /api/budgets` | Create a definition. Returns 201, initial version 0. |
 | `PUT /api/budgets/{id}` | Replace settings atomically. Requires `expectedVersion`; increments version. |
 | `DELETE /api/budgets/{id}?expectedVersion=0` | Delete a definition and its selection links only; preserves transactions. |
-| `GET /api/budgets/{id}/periods?date=2026-09-08&count=6` | Containing period first, then prior periods. Defaults to UTC today and six; count 1–12. Includes limit, spent, remaining, usedPercent, transactionCount and observedThrough. |
+| `GET /api/budgets/{id}/periods?date=2026-09-08&count=6` | Containing period first, then prior periods. Defaults to today in the household calendar and six; count 1–12. Includes limit, spent, remaining, usedPercent, transactionCount and observedThrough. |
 | `GET /api/budgets/{id}/transactions?date=2026-09-08&page=1&pageSize=25` | Paginated audit using exactly the same inclusion query as summaries. Count before paging; posted timestamp descending then ID. Date required, size 1–100. Ledger amounts remain negative. |
 
 Example definition:
@@ -60,7 +60,7 @@ PUT adds `expectedVersion`. Limits must be positive with at most two decimal pla
 
 Budgets calculate live; no Temporal workflow or projection migration is required. The placeholder frontend invalidates budget queries after imports, account preferences, tag changes and transfer decisions.
 
-Review follow-up: history uses one SQL aggregation across all requested dates, grouped by UTC day and currency. Each period includes excludedCurrencies (currency and transaction count) for otherwise matching spending, without mixing currencies or converting money. Budget and pay-cycle boundaries use the same AnchoredPeriods implementation, included identically in both sibling branches so neither feature depends on the other.
+Review follow-up: history uses one SQL aggregation across all requested dates, grouped by posted calendar day and currency. Each period includes excludedCurrencies (currency and transaction count) for otherwise matching spending, without mixing currencies or converting money. Budget and pay-cycle boundaries use the same AnchoredPeriods implementation, included identically in both sibling branches so neither feature depends on the other.
 
 ## Category picker and preview
 
@@ -68,4 +68,4 @@ The editor searches existing categories and optional tags. Search only narrows t
 
 Complete the budget details to see a preview before saving. Its date selects a period using the chosen frequency and anchor. Changing the definition, scope or date replaces the preview query and cancels obsolete requests; saving is disabled until the current preview succeeds. Empty matches are valid but explained. A failed preview offers retry and cannot be mistaken for a zero total. Categories and tags use OR matching; multiple matches still count a transaction once.
 
-See `docs/issue-30/README.md` for mobile verification and the development-only synthetic fixture. The fixture is outside the production entry point and never calls the API.
+The development-only synthetic fixture at `src/Finyte.Web/tests/budget-review.html` exercises the editor without the API. It is outside the production entry point.

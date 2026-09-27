@@ -33,3 +33,10 @@
   .pay-cycle-transactions li { flex-wrap: wrap; }
   .pay-cycles-page .page-header { flex-wrap: wrap; gap: 16px; }
 }
+
+.pay-cycle-roles { display: grid; gap: 10px; }
+.pay-cycle-role { align-items: center; display: flex; gap: 12px; justify-content: space-between; }
+.pay-cycle-role > span { display: grid; }
+.pay-cycle-role small { color: #9aa0a6; }
+.pay-cycle-role select { min-width: 220px; }
+.pay-cycle-scope { font-weight: 650; margin: 4px 0 0; }
