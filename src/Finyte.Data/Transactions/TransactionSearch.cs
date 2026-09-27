@@ -1,4 +1,5 @@
 using Finyte.Core.Accounts;
+using Finyte.Core.Scheduling;
 
 namespace Finyte.Data.Transactions;
 
@@ -90,7 +91,7 @@ public sealed record TransactionSearch
         return errors;
     }
 
-    public IQueryable<Transaction> Apply(IQueryable<Transaction> transactions, Guid tenantId)
+    public IQueryable<Transaction> Apply(IQueryable<Transaction> transactions, Guid tenantId, FinancialCalendar calendar)
     {
         var query = transactions.Where(x => x.TenantId == tenantId);
         if (PostedOnly)
@@ -113,13 +114,13 @@ public sealed record TransactionSearch
 
         if (From is { } from)
         {
-            var fromInstant = new DateTimeOffset(from.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+            var fromInstant = calendar.StartOf(from);
             query = query.Where(x => (x.PostedAt ?? x.CreatedAt) >= fromInstant);
         }
 
         if (To is { } to && to < DateOnly.MaxValue)
         {
-            var untilInstant = new DateTimeOffset(to.AddDays(1).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+            var untilInstant = calendar.EndExclusive(to);
             query = query.Where(x => (x.PostedAt ?? x.CreatedAt) < untilInstant);
         }
 

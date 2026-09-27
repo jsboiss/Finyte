@@ -721,6 +721,11 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
             x.Property(y => y.FinancialDataVersion)
                 .IsConcurrencyToken();
 
+            x.Property(y => y.TimeZoneId)
+                .HasMaxLength(64)
+                .HasDefaultValue("Australia/Sydney")
+                .IsRequired();
+
             x.Property(y => y.CreatedAt)
                 .IsRequired();
 

@@ -16,7 +16,7 @@ Transfers remain visible in the transaction list with a link to the confirmed-tr
 
 ## Detection and scope
 
-Suggestions require two posted transactions in the same family, on different accounts, with equal opposite amounts in the same currency and UTC posting dates no more than three calendar days apart. The default money-out date range is the last 90 days; users can choose up to 366 days at a time. Candidate counterparts can fall three days outside that window. Results are paginated, 50 pairs per page.
+Suggestions require two posted transactions in the same family, on different accounts, with equal opposite amounts in the same currency and posted calendar days no more than three days apart. The default money-out date range is the last 90 days; users can choose up to 366 days at a time. Candidate counterparts can fall three days outside that window. Results are paginated, 50 pairs per page.
 
 Fee differences, FX conversions, split transfers, and transfers for which only one side is available are deliberately not matched. Equal amounts and dates do not establish that a transfer occurred: refunds and unrelated payments require user judgement. No external bank action is performed.
 

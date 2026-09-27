@@ -390,7 +390,8 @@ public sealed class BudgetApiTests
         var after = Transaction(account, -80);
         after.PostedAt = new DateTimeOffset(2025, 10, 1, 0, 0, 0, TimeSpan.Zero);
         var before = Transaction(account, -4);
-        before.PostedAt = new DateTimeOffset(2025, 8, 31, 23, 59, 59, TimeSpan.Zero);
+        // A provider-stamped local evening stays on its own calendar day.
+        before.PostedAt = new DateTimeOffset(2025, 8, 31, 23, 59, 59, TimeSpan.FromHours(10)).ToUniversalTime();
         var debit = Transaction(account, -50);
         var credit = Transaction(loan, 50);
         dbContext.Transactions.AddRange(tagged, secondary, substring, pending, undated, foreignCurrency, after, before, debit, credit, Transaction(account, 100), Transaction(loan, -900));

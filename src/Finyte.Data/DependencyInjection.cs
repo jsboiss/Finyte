@@ -15,6 +15,7 @@ public static class DependencyInjection
 
         services.AddDbContext<FinyteDbContext>(x => x.UseNpgsql(connectionString));
         services.AddSingleton(TimeProvider.System);
+        services.AddScoped<Tenancy.TenantCalendars>();
         services.AddScoped<IOverviewProjector, OverviewProjector>();
         services.AddScoped<IProjectionDispatcher, ProjectionDispatcher>();
         services.AddScoped<IProjectionInvalidator, ProjectionInvalidator>();

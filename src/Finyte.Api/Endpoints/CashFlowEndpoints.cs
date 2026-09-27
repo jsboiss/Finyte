@@ -3,6 +3,7 @@ using Finyte.Core.Accounts;
 using Finyte.Core.Analytics;
 using Finyte.Data;
 using Finyte.Data.Billing;
+using Finyte.Data.Tenancy;
 using Finyte.Data.Transfers;
 using Microsoft.EntityFrameworkCore;
 
@@ -28,6 +29,7 @@ public static class CashFlowEndpoints
         HttpContext httpContext,
         IBillingAccess billingAccess,
         FinyteDbContext dbContext,
+        TenantCalendars calendars,
         CancellationToken cancellationToken)
     {
         var currentTenant = await tenantResolver.Resolve(httpContext.User, cancellationToken);
@@ -48,8 +50,10 @@ public static class CashFlowEndpoints
             return Results.BadRequest("Cash flow ranges cannot exceed 366 days.");
         }
 
-        var fromTimestamp = new DateTimeOffset(from.Year, from.Month, from.Day, 0, 0, 0, TimeSpan.Zero);
-        var toTimestamp = new DateTimeOffset(to.Year, to.Month, to.Day, 0, 0, 0, TimeSpan.Zero).AddDays(1);
+        var calendar = await calendars.For(currentTenant.TenantId, cancellationToken);
+        var fromTimestamp = calendar.StartOf(from);
+        var toTimestamp = calendar.EndExclusive(to);
+        var timeZoneId = calendar.TimeZoneId;
         var accounts = await dbContext.Accounts
             .AsNoTracking()
             .Where(x => x.TenantId == currentTenant.TenantId && (accountId == null || x.Id == accountId))
@@ -69,7 +73,7 @@ public static class CashFlowEndpoints
             transactionQuery = transactionQuery.ExcludeInternalTransfers(dbContext, currentTenant.TenantId);
         }
         var dailyTotals = await transactionQuery
-            .GroupBy(x => x.PostedAt!.Value.Date)
+            .GroupBy(x => TimeZoneInfo.ConvertTimeBySystemTimeZoneId(x.PostedAt!.Value.UtcDateTime, timeZoneId).Date)
             .Select(x => new
             {
                 Date = x.Key,
@@ -83,8 +87,7 @@ public static class CashFlowEndpoints
 
         foreach (var dailyTotal in dailyTotals)
         {
-            var date = DateOnly.FromDateTime(dailyTotal.Date);
-            if (!days.TryGetValue(date, out var day))
+            if (!days.TryGetValue(DateOnly.FromDateTime(dailyTotal.Date), out var day))
             {
                 continue;
             }

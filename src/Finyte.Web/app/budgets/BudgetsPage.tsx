@@ -5,6 +5,7 @@ import { isAxiosError } from 'axios'
 import { useState } from 'react'
 import { getAccounts } from '../accounts/accountsApi'
 import { httpClient } from '../api/httpClient'
+import { dateLabel, todayDate } from '../shared/calendar'
 import { exactAmount } from '../shared/formatters'
 import type { TransactionTag } from '../transactions/types'
 import './budgets.css'
@@ -15,10 +16,8 @@ type Budget = {
 }
 type Period = { from: string; to: string; limit: number; spent: number; remaining: number; usedPercent: number; transactionCount: number; observedThrough: string | null; excludedCurrencies: { currency: string; transactionCount: number }[] }
 type Periods = { budgetId: string; version: number; currency: string; periods: Period[] }
-type TransactionPage = { totalCount: number; items: { id: string; accountName: string; description: string | null; merchantName: string | null; postedAt: string; amount: number; currency: string }[] }
-const today = () => new Date().toISOString().slice(0, 10)
+type TransactionPage = { totalCount: number; items: { id: string; accountName: string; description: string | null; merchantName: string | null; postedAt: string; postedDate: string; amount: number; currency: string }[] }
 const money = (amount: number, currency: string) => exactAmount(amount, currency)
-const dateLabel = (date: string) => new Date(`${date}T00:00:00Z`).toLocaleDateString('en-AU', { timeZone: 'UTC', day: 'numeric', month: 'short', year: 'numeric' })
 
 export function BudgetsPage() {
   const queryClient = useQueryClient()
@@ -63,13 +62,13 @@ export function BudgetEditor({ budget, onSaved, onCancel, onReload }: { budget?:
   const [limit, setLimit] = useState(budget ? String(budget.limit) : '')
   const [currency, setCurrency] = useState(budget?.currency ?? 'AUD')
   const [frequency, setFrequency] = useState(budget?.frequency ?? 'monthly')
-  const [anchor, setAnchor] = useState(budget?.anchorDate ?? `${today().slice(0, 7)}-01`)
+  const [anchor, setAnchor] = useState(budget?.anchorDate ?? `${todayDate().slice(0, 7)}-01`)
   const [mode, setMode] = useState(budget?.matchMode ?? 'all')
   const [categories, setCategories] = useState<string[]>(budget?.categories ?? [])
   const availableCategories = useQuery({ queryKey: ['budgets', 'categories'], queryFn: () => httpClient<string[]>({ url: '/api/budgets/categories' }) })
   const [search, setSearch] = useState('')
   const [tagSearch, setTagSearch] = useState('')
-  const [previewDate, setPreviewDate] = useState(today)
+  const [previewDate, setPreviewDate] = useState(todayDate)
   const [tagIds, setTagIds] = useState(budget?.tagIds ?? [])
   const [scope, setScope] = useState(budget?.accountScope ?? 'analytics')
   const [accountIds, setAccountIds] = useState(budget?.accountIds ?? [])
@@ -102,10 +101,10 @@ export function BudgetEditor({ budget, onSaved, onCancel, onReload }: { budget?:
         <label>Limit per period<input required type="number" inputMode="decimal" min="0.01" step="0.01" value={limit} onChange={event => setLimit(event.target.value)} /></label>
         <label>Currency<input required pattern="[A-Za-z]{3}" maxLength={3} value={currency} onChange={event => setCurrency(event.target.value.toUpperCase())} /></label>
         <label>Period<select value={frequency} onChange={event => setFrequency(event.target.value)}><option value="weekly">Weekly</option><option value="fortnightly">Fortnightly</option><option value="monthly">Monthly</option></select></label>
-        <label>Known period start<input type="date" required min="1901-01-01" max="9990-12-31" value={anchor} onChange={event => setAnchor(event.target.value)} /></label>
+        <label>A recent period start<input type="date" required min="1901-01-01" max="9990-12-31" value={anchor} onChange={event => setAnchor(event.target.value)} /></label>
         <label>Spending to count<select value={mode} onChange={event => setMode(event.target.value)}><option value="all">All spending</option><option value="selected">Selected categories or tags</option></select></label>
       </div>
-      <Help><p>The start date anchors the repeating schedule, including past periods. Monthly schedules clamp to the last day of shorter months, then return to the original day.</p></Help>
+      <Help><p>Any day a period started works: the schedule repeats forwards and backwards from it. Monthly schedules clamp to the last day of shorter months, then return to the original day. Dates are the calendar days your bank reports.</p></Help>
       {mode === 'selected' && <>
         <p>Choose categories such as groceries, or optional tags such as holidays. A transaction counts if it matches <strong>any</strong> selection, and counts only once.</p>
         <fieldset className="budget-choices"><legend>Categories</legend>
@@ -143,11 +142,11 @@ export function BudgetEditor({ budget, onSaved, onCancel, onReload }: { budget?:
         {valid && preview.error && <p role="alert">{errorMessage(preview.error)} <button type="button" onClick={() => void preview.refetch()}>Retry preview</button></p>}
         {valid && preview.isSuccess && !preview.isFetching && preview.data && <>
           <h4>{dateLabel(preview.data.from)} – {dateLabel(preview.data.to)}</h4>
-          <p>{preview.data.observedThrough ? `Actual spending through ${dateLabel(preview.data.observedThrough)} (UTC).` : 'Future period: no actual spending yet.'}</p>
+          <p>{preview.data.observedThrough ? `Actual spending through ${dateLabel(preview.data.observedThrough)}.` : 'Future period: no actual spending yet.'}</p>
           <strong>{money(preview.data.spent, preview.data.currency)} · {preview.data.transactionCount} transactions</strong>
           {preview.data.excludedCurrencies.length > 0 && <p>Excluded currencies: {preview.data.excludedCurrencies.map(x => `${x.transactionCount} ${x.currency} transactions`).join(', ')}. No conversion.</p>}
           {!preview.data.transactionCount && <p>No matching spending in this period. Try another preview date or check your categories, tags and accounts.</p>}
-          {!!preview.data.items.length && <><h4>Latest examples (up to 5)</h4>{preview.data.items.map(transaction => <article key={transaction.id}><div><strong>{transaction.merchantName || transaction.description || 'Transaction'}</strong><p>{dateLabel(transaction.postedAt.slice(0, 10))} · {transaction.accountName}</p></div><strong>{money(-transaction.amount, transaction.currency)}</strong></article>)}</>}
+          {!!preview.data.items.length && <><h4>Latest examples (up to 5)</h4>{preview.data.items.map(transaction => <article key={transaction.id}><div><strong>{transaction.merchantName || transaction.description || 'Transaction'}</strong><p>{dateLabel(transaction.postedDate)} · {transaction.accountName}</p></div><strong>{money(-transaction.amount, transaction.currency)}</strong></article>)}</>}
         </>}
       </section>
       <div className="budget-actions"><button type="submit" disabled={!valid || !preview.isSuccess || preview.isFetching}>{save.isPending ? 'Saving…' : 'Save budget'}</button><button type="button" onClick={onCancel}>Cancel</button></div>
@@ -157,7 +156,7 @@ export function BudgetEditor({ budget, onSaved, onCancel, onReload }: { budget?:
 }
 
 function BudgetDetail({ budget, onEdit, onDelete, busy }: { budget: Budget; onEdit: () => void; onDelete: () => void; busy: boolean }) {
-  const [date, setDate] = useState(today)
+  const [date, setDate] = useState(todayDate)
   const [auditDate, setAuditDate] = useState<string | null>(null)
   const periods = useQuery({ queryKey: ['budgets', 'periods', budget.id, budget.version, date], queryFn: () => httpClient<Periods>({ url: `/api/budgets/${budget.id}/periods`, params: { date, count: 6 } }), enabled: !!date })
   const current = periods.data?.periods[0]
@@ -191,7 +190,7 @@ function BudgetAudit({ budget, date, onClose }: { budget: Budget; date: string; 
     {transactions.isFetching && <p>Loading transactions…</p>}
     {transactions.error && <p role="alert">{errorMessage(transactions.error)} <button type="button" onClick={() => void transactions.refetch()}>Retry</button></p>}
     {transactions.data && <><p>{transactions.data.totalCount} transactions in this period</p>
-      {transactions.data.items.map(transaction => <article key={transaction.id}><div><strong>{transaction.merchantName || transaction.description || 'Transaction'}</strong><p>{dateLabel(new Date(transaction.postedAt).toISOString().slice(0, 10))} · {transaction.accountName}</p></div><strong>{money(-transaction.amount, transaction.currency)}</strong></article>)}
+      {transactions.data.items.map(transaction => <article key={transaction.id}><div><strong>{transaction.merchantName || transaction.description || 'Transaction'}</strong><p>{dateLabel(transaction.postedDate)} · {transaction.accountName}</p></div><strong>{money(-transaction.amount, transaction.currency)}</strong></article>)}
       {!transactions.data.items.length && <p>No transactions on this page.</p>}
       <div className="budget-actions"><button type="button" disabled={page === 1 || transactions.isFetching} onClick={() => setPage(x => x - 1)}>Previous transactions</button><span>Page {page} of {Math.max(1, Math.ceil(transactions.data.totalCount / 10))}</span><button type="button" disabled={page * 10 >= transactions.data.totalCount || transactions.isFetching} onClick={() => setPage(x => x + 1)}>Next transactions</button></div>
     </>}
