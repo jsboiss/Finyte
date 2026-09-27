@@ -42,6 +42,21 @@ public sealed class MerchantKeywordCatalogTests
     [InlineData("")]
     public void DoesNotMatchInsideWords(string merchant) => Assert.Null(MerchantKeywordCatalog.Suggest(merchant));
 
+    [Theory]
+    [InlineData("FOOD_AND_DRINK", "FOOD_AND_DRINK_GROCERIES", "Groceries")]
+    [InlineData("FOOD_AND_DRINK", "FOOD_AND_DRINK_OTHER_FOOD_AND_DRINK", "Eating out")]
+    [InlineData("RENT_AND_UTILITIES", "RENT_AND_UTILITIES_RENT", "Home")]
+    [InlineData("RENT_AND_UTILITIES", "RENT_AND_UTILITIES_GAS_AND_ELECTRICITY", "Bills and utilities")]
+    [InlineData("SERVICES", "SERVICES_INSURANCE", "Bills and utilities")]
+    [InlineData("MERCHANDISE", "MERCHANDISE_ONLINE_MARKETPLACES", "Shopping")]
+    [InlineData("TRANSPORTATION", "TRANSPORTATION_GAS", "Fuel")]
+    [InlineData("TRANSPORTATION", "TRANSPORTATION_PUBLIC_TRANSIT", "Transport")]
+    [InlineData("ENTERTAINMENT", null, "Entertainment")]
+    [InlineData("INCOME", "INCOME_SALARY", null)]
+    [InlineData(null, null, null)]
+    public void MapsBankCategoriesToStarterTags(string? primary, string? secondary, string? expected) =>
+        Assert.Equal(expected, MerchantKeywordCatalog.CategoryTag(primary, secondary));
+
     [Fact]
     public void StarterTagsAreTwelveDistinctNamesAndEveryKeywordTargetsOne()
     {

@@ -44,7 +44,7 @@ public sealed class TagSuggestionApiTests
 
         var accept = new AcceptTagSuggestionsRequest([new("COLES", null, "Groceries"), new("STREAMCO SYDNEY AUS", null, "Subscriptions")]);
         var accepted = await (await client.PostAsJsonAsync($"{Url}/accept", accept)).Content.ReadFromJsonAsync<AcceptTagSuggestionsResponse>();
-        Assert.Equal(new AcceptTagSuggestionsResponse(2, 2), accepted);
+        Assert.Equal(new AcceptTagSuggestionsResponse(2, 2, 0), accepted);
         using (var scope = factory.Services.CreateScope())
         {
             var dbContext = scope.ServiceProvider.GetRequiredService<FinyteDbContext>();
@@ -60,7 +60,7 @@ public sealed class TagSuggestionApiTests
         Assert.Equal(after.Coverage[0].TotalMinorUnits, after.Coverage[0].TaggedMinorUnits);
 
         var again = await (await client.PostAsJsonAsync($"{Url}/accept", accept)).Content.ReadFromJsonAsync<AcceptTagSuggestionsResponse>();
-        Assert.Equal(new AcceptTagSuggestionsResponse(0, 0), again);
+        Assert.Equal(new AcceptTagSuggestionsResponse(0, 0, 0), again);
     }
 
     [Fact]
@@ -102,6 +102,58 @@ public sealed class TagSuggestionApiTests
         }
         var transfers = Assert.Single((await client.GetFromJsonAsync<TagSuggestionsResponse>(Url))!.Groups, x => x.TagName == "Transfers");
         Assert.Equal(["Transfer to xx4444 CommBank app Sam", "Transfer to xx3333 CommBank app Jamie"], transfers.Merchants.Select(x => x.RuleMerchantName));
+    }
+
+    [Fact]
+    public async Task BankCategoriesComeBeforeMerchantKeywords()
+    {
+        await using var baseFactory = new FinyteApiFactory();
+        await using var factory = WithClock(baseFactory);
+        using var client = factory.CreateClient();
+        await Seed(factory, client, billing: true);
+        using (var scope = factory.Services.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<FinyteDbContext>();
+            var account = await dbContext.Accounts.SingleAsync(x => x.Name == "Everyday");
+            foreach (var day in new[] { 4, 18 })
+            {
+                var power = Row(account, 8, day, -120m, "PAYMENT TO SYNERGY RETAIL 123");
+                power.MerchantName = "Synergy";
+                power.PrimaryCategory = "RENT_AND_UTILITIES";
+                power.SecondaryCategory = "RENT_AND_UTILITIES_GAS_AND_ELECTRICITY";
+                var fuel = Row(account, 8, day, -60m, "COLES EXPRESS 999 SPRINGFIELD");
+                fuel.PrimaryCategory = "TRANSPORTATION";
+                fuel.SecondaryCategory = "TRANSPORTATION_GAS";
+                dbContext.Transactions.AddRange(power, fuel);
+            }
+            await dbContext.SaveChangesAsync();
+        }
+        var suggestions = (await client.GetFromJsonAsync<TagSuggestionsResponse>(Url))!;
+        var bills = Assert.Single(suggestions.Groups, x => x.TagName == "Bills and utilities");
+        var synergy = Assert.Single(bills.Merchants);
+        Assert.Equal("Synergy", synergy.RuleMerchantName);
+        Assert.Equal("Bank category: RENT_AND_UTILITIES_GAS_AND_ELECTRICITY", synergy.Reason);
+        Assert.Contains(Assert.Single(suggestions.Groups, x => x.TagName == "Fuel").Merchants, x => x.RuleMerchantName.StartsWith("COLES EXPRESS"));
+    }
+
+    [Fact]
+    public async Task ApplyingOnceTagsExistingPaymentsWithoutARule()
+    {
+        await using var baseFactory = new FinyteApiFactory();
+        await using var factory = WithClock(baseFactory);
+        using var client = factory.CreateClient();
+        await Seed(factory, client, billing: true);
+
+        var accepted = await (await client.PostAsJsonAsync($"{Url}/accept",
+            new AcceptTagSuggestionsRequest([new("STREAMCO SYDNEY AUS", null, "Subscriptions", "once")]))).Content.ReadFromJsonAsync<AcceptTagSuggestionsResponse>();
+        Assert.Equal(new AcceptTagSuggestionsResponse(1, 0, 2), accepted);
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<FinyteDbContext>();
+        Assert.Empty(dbContext.MerchantTagRules);
+        var tagged = await dbContext.Transactions.Include(x => x.TagAssignments).Where(x => x.Description!.StartsWith("STREAMCO")).ToListAsync();
+        Assert.All(tagged, x => Assert.Equal(TransactionTagSource.Manual, Assert.Single(x.TagAssignments).Source));
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync($"{Url}/accept",
+            new AcceptTagSuggestionsRequest([new("STREAMCO SYDNEY AUS", null, "Subscriptions", "sometimes")]))).StatusCode);
     }
 
     [Fact]

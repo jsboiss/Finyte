@@ -61,5 +61,34 @@ public static class MerchantKeywordCatalog
     private static bool IsGeneric(string keyword, string tag) =>
         tag == "Transfers" || Ordered.Any(x => x.Keyword.StartsWith($"{keyword} ", StringComparison.Ordinal));
 
+    private static readonly (string Prefix, string Tag)[] CategoryTags =
+    [
+        ("FOOD_AND_DRINK_GROCERIES", "Groceries"), ("FOOD_AND_DRINK", "Eating out"),
+        ("RENT_AND_UTILITIES_RENT", "Home"), ("RENT_AND_UTILITIES", "Bills and utilities"), ("SERVICES_INSURANCE", "Bills and utilities"),
+        ("LOAN_PAYMENTS", "Bills and utilities"), ("HOME_IMPROVEMENT", "Home"), ("MERCHANDISE", "Shopping"),
+        ("TRANSPORTATION_GAS", "Fuel"), ("TRANSPORTATION", "Transport"), ("TRAVEL", "Travel"), ("ENTERTAINMENT", "Entertainment"),
+        ("MEDICAL", "Health"), ("TRANSFER_OUT", "Transfers")
+    ];
+
+    public static string? CategoryTag(string? primary, string? secondary)
+    {
+        foreach (var value in new[] { secondary, primary })
+        {
+            var code = value?.Trim().ToUpperInvariant();
+            if (string.IsNullOrEmpty(code))
+            {
+                continue;
+            }
+            foreach (var (prefix, tag) in CategoryTags)
+            {
+                if (code == prefix || code.StartsWith(prefix + "_", StringComparison.Ordinal))
+                {
+                    return tag;
+                }
+            }
+        }
+        return null;
+    }
+
     public static StarterTag? Starter(string name) => StarterTags.FirstOrDefault(x => string.Equals(x.Name, name, StringComparison.OrdinalIgnoreCase));
 }

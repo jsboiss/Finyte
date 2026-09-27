@@ -45,7 +45,9 @@ public sealed class TagSuggestionService(FinyteDbContext dbContext, TenantCalend
             }
             var display = StatementNameCleaner.Clean(group.First().MerchantName ?? group.First().Description);
             var keyword = MerchantKeywordCatalog.Suggest(group.Key);
-            var ruleName = keyword is { AtStart: true, Generic: false }
+            var categoryTag = group.Select(x => MerchantKeywordCatalog.CategoryTag(x.PrimaryCategory, x.SecondaryCategory)).Where(x => x is not null)
+                .GroupBy(x => x!).OrderByDescending(x => x.Count()).ThenBy(x => x.Key, StringComparer.Ordinal).FirstOrDefault()?.Key;
+            var ruleName = keyword is { AtStart: true, Generic: false } && (categoryTag is null || categoryTag == keyword.TagName)
                 ? string.Join(' ', display.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(keyword.Keyword.Split(' ').Length))
                 : display;
             var ruleKey = MerchantTagMatcher.Normalize(ruleName);
@@ -94,6 +96,10 @@ public sealed class TagSuggestionService(FinyteDbContext dbContext, TenantCalend
             {
                 throw new ArgumentException("Give each suggestion either an existing tag or a tag name of up to 80 characters.");
             }
+            if (item.Mode is not null and not "rule" and not "once")
+            {
+                throw new ArgumentException("Choose to create a rule or to tag existing payments once.");
+            }
         }
 
         await using var databaseTransaction = await tagService.BeginMutation(tenantId, cancellationToken);
@@ -101,6 +107,7 @@ public sealed class TagSuggestionService(FinyteDbContext dbContext, TenantCalend
         var rules = await tagService.GetRules(tenantId, cancellationToken);
         var createdTags = 0;
         var createdRules = 0;
+        var once = new List<(string Key, TransactionTag Tag)>();
         foreach (var item in items)
         {
             TransactionTag tag;
@@ -124,6 +131,11 @@ public sealed class TagSuggestionService(FinyteDbContext dbContext, TenantCalend
             }
             var merchantName = item.MerchantName!.Trim();
             var merchantKey = MerchantTagMatcher.Normalize(merchantName);
+            if (item.Mode == "once")
+            {
+                once.Add((merchantKey, tag));
+                continue;
+            }
             if (rules.Any(x => x.MerchantKey == merchantKey && x.TagId == tag.Id)
                 || dbContext.MerchantTagRules.Local.Any(x => x.TenantId == tenantId && x.MerchantKey == merchantKey && x.TagId == tag.Id))
             {
@@ -135,7 +147,26 @@ public sealed class TagSuggestionService(FinyteDbContext dbContext, TenantCalend
             });
             createdRules++;
         }
-        if (createdRules > 0 || createdTags > 0)
+        var taggedTransactions = 0;
+        if (once.Count > 0)
+        {
+            var untagged = await dbContext.Transactions.AsNoTracking()
+                .Where(x => x.TenantId == tenantId && x.Amount < 0 && !x.TagAssignments.Any(y => y.Tag != null && y.Tag.TenantId == tenantId))
+                .Select(x => new { x.Id, x.MerchantName, x.Description })
+                .ToListAsync(cancellationToken);
+            foreach (var row in untagged)
+            {
+                if (once.FirstOrDefault(x => MerchantTagMatcher.Matches(row.MerchantName, row.Description, x.Key)).Tag is { } tag)
+                {
+                    dbContext.TransactionTagAssignments.Add(new TransactionTagAssignment
+                    {
+                        TransactionId = row.Id, TagId = tag.Id, Tag = tag, Source = TransactionTagSource.Manual, CreatedAt = DateTimeOffset.UtcNow
+                    });
+                    taggedTransactions++;
+                }
+            }
+        }
+        if (createdRules > 0 || createdTags > 0 || taggedTransactions > 0)
         {
             await tagService.ReconcileTenant(tenantId, cancellationToken);
             await projectionInvalidator.TenantProjectionDataChanged(tenantId, "tag suggestions accepted", cancellationToken);
@@ -145,7 +176,7 @@ public sealed class TagSuggestionService(FinyteDbContext dbContext, TenantCalend
         {
             await databaseTransaction.CommitAsync(cancellationToken);
         }
-        return new AcceptTagSuggestionsResponse(createdTags, createdRules);
+        return new AcceptTagSuggestionsResponse(createdTags, createdRules, taggedTransactions);
     }
 
     private static long MinorUnits(decimal amount) => (long)decimal.Round(Math.Abs(amount) * 100, MidpointRounding.AwayFromZero);
@@ -169,6 +200,14 @@ public sealed class TagSuggestionService(FinyteDbContext dbContext, TenantCalend
             rows.AddRange(group);
             if (TagName is not null)
             {
+                return;
+            }
+            var mapped = group.Select(x => (Code: x.SecondaryCategory ?? x.PrimaryCategory, Tag: MerchantKeywordCatalog.CategoryTag(x.PrimaryCategory, x.SecondaryCategory)))
+                .Where(x => x.Tag is not null).GroupBy(x => x.Tag!).OrderByDescending(x => x.Count()).ThenBy(x => x.Key, StringComparer.Ordinal).FirstOrDefault();
+            if (mapped is not null)
+            {
+                TagName = tags.FirstOrDefault(x => string.Equals(x.Name, mapped.Key, StringComparison.OrdinalIgnoreCase))?.Name ?? mapped.Key;
+                reason = $"Bank category: {mapped.First().Code}";
                 return;
             }
             if (keyword is not null)
@@ -200,6 +239,6 @@ public sealed record TagCoverage(string Currency, long TaggedMinorUnits, long To
 public sealed record MerchantSuggestion(string RuleMerchantName, IReadOnlyList<string> Examples, int TransactionCount, long SpendMinorUnits, string Currency, string? Reason);
 public sealed record TagSuggestionGroup(string TagName, Guid? TagId, string Color, IReadOnlyList<MerchantSuggestion> Merchants);
 public sealed record TagSuggestionsResponse(DateOnly From, DateOnly To, IReadOnlyList<TagCoverage> Coverage, IReadOnlyList<TagSuggestionGroup> Groups, IReadOnlyList<MerchantSuggestion> NeedsTag);
-public sealed record AcceptTagSuggestionItem(string? MerchantName, Guid? TagId, string? TagName);
+public sealed record AcceptTagSuggestionItem(string? MerchantName, Guid? TagId, string? TagName, string? Mode = null);
 public sealed record AcceptTagSuggestionsRequest(IReadOnlyList<AcceptTagSuggestionItem>? Items);
-public sealed record AcceptTagSuggestionsResponse(int CreatedTags, int CreatedRules);
+public sealed record AcceptTagSuggestionsResponse(int CreatedTags, int CreatedRules, int TaggedTransactions = 0);
