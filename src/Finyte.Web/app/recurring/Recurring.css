@@ -85,3 +85,6 @@
   .recurring-page .recurring-summary > div:first-child { grid-column: 1 / -1; }
   .recurring-page .recurring-summary strong { font-size: 20px; }
 }
+.recurring-page .recurring-due-picker { max-width: 260px; }
+.recurring-page .recurring-advanced { grid-column: 1 / -1; }
+.recurring-page .recurring-advanced > summary { font-size: 14px; }

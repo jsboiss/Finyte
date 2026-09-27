@@ -13,7 +13,7 @@ export type Series = {
   cadence: string; anchorDate: string; expectedAmount: number; amountMode: string
   state: string; version: number; aliases: Alias[]; nextDueDate: string | null
   nextDueStatus: string; needsReviewCount: number; kind: SeriesKind
-  lastPaidAmount: number | null; lastPaidDate: string | null; priceChanged: boolean; missedOccurrenceDate: string | null
+  lastPaidAmount: number | null; lastPaidDate: string | null; priceChanged: boolean; missedOccurrenceDate: string | null; nextExpectedDate: string | null
 }
 export type CostSummary = { currency: string; monthlyEstimate: number; annualEstimate: number; activeSeriesCount: number; variableSeriesCount: number; subscriptionMonthlyEstimate: number; billMonthlyEstimate: number }
 export type SeriesList = { items: Series[]; costs: CostSummary[] }
@@ -42,6 +42,7 @@ export function money(amount: number, currency: string) {
 export function label(value: string) {
   if (value === 'due') { return 'payment window open' }
   if (value === 'none-in-range') { return 'no outstanding dates in this range' }
+  if (value === 'not-imported') { return 'not in imported data yet' }
   return value.replaceAll('-', ' ')
 }
 
@@ -58,8 +59,12 @@ export function getSeries(range: Range, accountId?: string) {
   return httpClient<SeriesList>({ url: recurringUrl, params: { ...range, accountId } })
 }
 
-export function getUpcoming(days: number, accountId?: string) {
-  return httpClient<{ items: Upcoming[]; activeSeriesCount: number }>({ url: `${recurringUrl}/upcoming`, params: { days, accountId } })
+export type UpcomingTotal = { currency: string; amount: number; count: number }
+export type UpcomingRange = { days?: number; to?: string; payCycleId?: string }
+export type UpcomingPage = { items: Upcoming[]; activeSeriesCount: number; to: string; totals: UpcomingTotal[] }
+
+export function getUpcoming(range: UpcomingRange, accountId?: string) {
+  return httpClient<UpcomingPage>({ url: `${recurringUrl}/upcoming`, params: { ...range, accountId } })
 }
 
 export function shortDate(value: string) {
