@@ -2409,5 +2409,20 @@ td {
 .transaction-amount-allocated { display: grid; gap: 2px; justify-items: end; }
 .transaction-amount-allocated small { color: #9aa0a6; font-size: 11px; white-space: nowrap; }
 .tag-allocation-note { color: #9aa0a6; font-size: 12px; margin: 0 0 4px; }
+
+.account-groups { display: grid; gap: 12px; margin-top: 16px; }
+.account-groups-heading { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start; justify-content: space-between; }
+.account-groups-heading p { color: #9aa0a6; margin: 4px 0 0; max-width: 60ch; }
+.account-group-list { display: grid; }
+.account-group-list li { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; padding: 10px 0; border-top: 1px solid #333d39; }
+.account-group-list li:first-child { border-top: 0; }
+.account-group-list li > div:first-child { display: grid; gap: 2px; min-width: 0; }
+.account-group-list small { color: #9aa0a6; overflow-wrap: anywhere; }
+.account-group-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.account-group-form, .account-scope-picker { display: grid; gap: 12px; }
+.account-group-form label { display: grid; gap: 6px; }
+.account-group-form fieldset { display: grid; gap: 8px; border: 0; padding: 0; margin: 0; }
+.transaction-account-filters { display: grid; gap: 6px; border: 0; padding: 0; margin: 0; }
+.transaction-account-filters small { color: #9aa0a6; font-weight: 400; }
 .tag-always-rule { display: grid; gap: 6px; font-size: 13px; overflow-wrap: anywhere; }
 .tag-always-rule select { min-height: 34px; }

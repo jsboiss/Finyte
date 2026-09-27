@@ -5,6 +5,7 @@ using Finyte.Data;
 using Finyte.Data.Billing;
 using Finyte.Data.Tenancy;
 using Finyte.Data.Transfers;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace Finyte.Api.Endpoints;
@@ -24,6 +25,8 @@ public static class CashFlowEndpoints
         DateOnly from,
         DateOnly to,
         Guid? accountId,
+        [FromQuery] Guid[]? accountIds,
+        Guid? groupId,
         bool? includeInternalTransfers,
         TenantResolver tenantResolver,
         HttpContext httpContext,
@@ -50,21 +53,30 @@ public static class CashFlowEndpoints
             return Results.BadRequest("Cash flow ranges cannot exceed 366 days.");
         }
 
+        var resolved = await OverviewEndpoints.ResolveScope(dbContext, currentTenant.TenantId, accountId, accountIds, groupId, cancellationToken);
+        if (resolved.Error is { } error)
+        {
+            return error;
+        }
+        var scope = resolved.Scope!;
+        var explicitScope = scope.AccountId != null || scope.AccountIds != null;
         var calendar = await calendars.For(currentTenant.TenantId, cancellationToken);
         var fromTimestamp = calendar.StartOf(from);
         var toTimestamp = calendar.EndExclusive(to);
         var timeZoneId = calendar.TimeZoneId;
         var accounts = await dbContext.Accounts
             .AsNoTracking()
-            .Where(x => x.TenantId == currentTenant.TenantId && (accountId == null || x.Id == accountId))
+            .Where(x => x.TenantId == currentTenant.TenantId && (scope.AccountId == null || x.Id == scope.AccountId)
+                && (scope.AccountIds == null || scope.AccountIds.Contains(x.Id)))
             .OrderBy(x => x.CustomName ?? x.Name).ThenBy(x => x.Id)
             .ToListAsync(cancellationToken);
-        var currency = AccountPreferences.AnalyticsCurrency(accounts, accountId);
-        var accountIds = accounts.Where(x => accountId != null || AccountPreferences.IncludeInAnalytics(x)).Select(x => x.Id).ToList();
+        var currency = AccountPreferences.AnalyticsCurrency(accounts, explicitScope ? accounts.FirstOrDefault()?.Id : null);
+        var scopeAccountIds = accounts.Where(x => explicitScope || AccountPreferences.IncludeInAnalytics(x)).Select(x => x.Id).ToList();
         var transactionQuery = dbContext.Transactions
             .AsNoTracking()
             .Where(x => x.TenantId == currentTenant.TenantId
-                && accountIds.Contains(x.AccountId)
+                && scopeAccountIds.Contains(x.AccountId)
+                && x.Currency == currency
                 && x.PostedAt >= fromTimestamp
                 && x.PostedAt < toTimestamp
                 && (x.Status == null || x.Status == "" || x.Status.ToLower() == "posted"));

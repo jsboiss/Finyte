@@ -1244,7 +1244,9 @@ function getReadableTextColor(backgroundColor: string) {
 }
 
 const rootRoute = createRootRoute({ component: DashboardShell })
-const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', component: DashboardPage })
+const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', component: DashboardPage,
+  validateSearch: (search: Record<string, unknown>): { scope?: string } => (typeof search.scope === 'string' && search.scope ? { scope: search.scope } : {}),
+})
 const connectionsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/connections', component: ConnectionsPage })
 const transactionsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/transactions', component: TransactionsPage,
   validateSearch: (search: Record<string, unknown>) => {

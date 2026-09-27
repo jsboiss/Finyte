@@ -37,6 +37,7 @@ export function TransactionFilterChips({ filters, accounts, tags, onApply }: { f
   if (filters.direction !== 'all') { add(filters.direction === 'debit' ? 'Money out' : 'Money in', { direction: 'all' }) }
   if (filters.minAmount || filters.maxAmount) { add(`${filters.amountMode === 'signed' ? 'Signed' : 'Amount'}: ${filters.minAmount === filters.maxAmount ? `exactly ${filters.minAmount}` : `${filters.minAmount || 'any'} to ${filters.maxAmount || 'any'} (inclusive)`}`, { minAmount: '', maxAmount: '' }) }
   if (filters.amountMode === 'signed') { add('Signed mode', { amountMode: 'absolute', minAmount: '', maxAmount: '' }) }
+  if (filters.accountIds.length > 0) { add(`Accounts: ${filters.accountIds.map(id => accounts.find(x => x.id === id)?.name ?? 'Selected account').join(', ')}`, { accountIds: [] }) }
   if (filters.accountId) { add(`Account: ${accounts.find(x => x.id === filters.accountId)?.name ?? 'Selected account'}`, { accountId: '' }) }
   if (filters.from || filters.to) { add(`Dates: ${filters.from || 'any'} to ${filters.to || 'any'}`, { from: '', to: '' }) }
   if (filters.category) { add(`Category: ${filters.category}`, { category: '' }) }

@@ -13,6 +13,8 @@ export function TransactionFilterForm({ filters, accounts, tags, onApply }: Tran
   const [draft, setDraft] = useState(filters)
   const [error, setError] = useState('')
   const currencies = [...new Set(accounts.map(x => x.currency))].sort()
+  const selectedAccounts = draft.accountIds.length > 0 ? draft.accountIds : draft.accountId ? [draft.accountId] : []
+  const chooseAccounts = (ids: string[]) => setDraft(x => ({ ...x, accountId: ids.length === 1 ? ids[0] : '', accountIds: ids.length > 1 ? ids : [] }))
   const change = <T extends keyof TransactionFilters>(key: T, value: TransactionFilters[T]) => {
     setDraft(x => ({ ...x, [key]: value }))
     setError('')
@@ -42,13 +44,15 @@ export function TransactionFilterForm({ filters, accounts, tags, onApply }: Tran
           <input aria-label="To date" type="date" value={draft.to} onChange={x => change('to', x.target.value)} />
         </div>
       </label>
-      <label className="filter-field">
-        <span>Account</span>
-        <select value={draft.accountId} onChange={x => change('accountId', x.target.value)}>
-          <option value="">All accounts</option>
-          {accounts.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
-        </select>
-      </label>
+      <fieldset className="transaction-account-filters">
+        <legend>Accounts <small>(none ticked means all)</small></legend>
+        {accounts.map(x => (
+          <label className="transaction-filter-checkbox" key={x.id}>
+            <input type="checkbox" checked={selectedAccounts.includes(x.id)} onChange={y => chooseAccounts(y.target.checked ? [...selectedAccounts, x.id] : selectedAccounts.filter(z => z !== x.id))} />
+            <span>{x.name}</span>
+          </label>
+        ))}
+      </fieldset>
       <label className="filter-field">
         <span>Search</span>
         <input maxLength={200} placeholder="Description, merchant or reference" value={draft.search} onChange={x => change('search', x.target.value)} />
