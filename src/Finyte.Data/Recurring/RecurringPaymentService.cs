@@ -617,7 +617,7 @@ public sealed class RecurringPaymentService(FinyteDbContext dbContext, TimeProvi
     {
         "weekly" => 52m, "fortnightly" => 26m, "monthly" => 12m, "quarterly" => 4m, _ => 1m
     });
-    private static string SuggestedKind(string alias) => alias.StartsWith("direct debit", StringComparison.Ordinal) || alias.StartsWith("transfer", StringComparison.Ordinal) ? "bill" : "subscription";
+    private static string SuggestedKind(string alias) => RecurringPatternDetector.IsBillAlias(alias) ? "bill" : "subscription";
     private static DateOnly DefaultFrom(FinancialCalendar calendar) => calendar.Today.AddDays(-1096);
     private static DateOnly DefaultTo(FinancialCalendar calendar) => calendar.Today.AddDays(366);
     private static string AccountName(Transaction row) => row.Account is null ? "Account unavailable" : AccountPreferences.DisplayName(row.Account);

@@ -22,7 +22,7 @@ public sealed class RecurringDetectionImprovementTests
     [Fact]
     public void ForeignAmountsInTheStatementDoNotSplitAGroup()
     {
-        var rows = new[] { (1, -7.05m, "5.00"), (2, -7.27m, "5.00"), (3, -14.94m, "10.40") }
+        var rows = new[] { (1, -7.05m, "5.00"), (2, -7.27m, "5.00"), (3, -7.41m, "5.20") }
             .Select(x => Row(new DateOnly(2026, x.Item1, 2), x.Item2, $"CLOUDHOST SAN FRANCISCO CA USA Card xx1234 USD {x.Item3} Value Date: 30/0{x.Item1}/2026")).ToList();
         Assert.Equal(3, Assert.Single(RecurringPatternDetector.Detect(rows)).TransactionIds.Count);
     }
@@ -144,6 +144,32 @@ public sealed class RecurringDetectionImprovementTests
         Assert.Empty(RecurringPatternDetector.Detect(weekly));
         var monthly = new[] { -80m, -120m, -95m }.Select((amount, index) => Row(new DateOnly(2026, index + 1, 20), amount, "Direct Debit 123456 POWERCO 998877")).ToList();
         Assert.Single(RecurringPatternDetector.Detect(monthly));
+    }
+
+    [Fact]
+    public void MonthlyShoppingWithWidelyVaryingAmountsIsNotASubscription()
+    {
+        var amounts = new[] { -28.75m, -150m, -62.40m, -91.10m, -45m, -120.35m, -33.20m, -62.40m };
+        var rows = amounts.Select((amount, index) => Card(new DateOnly(2026, 1, 12).AddMonths(index), amount, "COLES 0382 SOMEWHERE")).ToList();
+        Assert.Empty(RecurringPatternDetector.Detect(rows, new RecurringDetectionOptions(IncludeEarly: true)));
+    }
+
+    [Fact]
+    public void AModestPriceRiseOnACardSubscriptionIsStillOneSeries()
+    {
+        var rows = new[] { -9.99m, -9.99m, -11.99m }.Select((amount, index) => Card(new DateOnly(2026, 1, 7).AddMonths(index), amount, "STREAMCO SYDNEY AUS")).ToList();
+        Assert.Equal(11.99m, Assert.Single(RecurringPatternDetector.Detect(rows)).ExpectedAmount);
+    }
+
+    [Fact]
+    public void AOneOffPurchaseBesideASubscriptionIsNotCalledAPlanChange()
+    {
+        var rows = Enumerable.Range(0, 9).Select(x => Card(new DateOnly(2026, 1, 6).AddMonths(x), -9.99m, "STREAMCO SYDNEY AUS")).ToList();
+        rows.Add(Card(new DateOnly(2026, 7, 6), -50m, "STREAMCO SYDNEY AUS"));
+        var candidate = Assert.Single(RecurringPatternDetector.Detect(rows));
+        Assert.Equal(9, candidate.TransactionIds.Count);
+        Assert.DoesNotContain(candidate.Evidence, x => x.Contains("Plan or price changed"));
+        Assert.Contains("A separate charge of 50 AUD on 2026-07-06 is not part of this pattern.", candidate.Evidence);
     }
 
     [Fact]

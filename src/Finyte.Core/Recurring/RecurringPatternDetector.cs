@@ -86,13 +86,13 @@ public static class RecurringPatternDetector
         }
         if (busiest != 2)
         {
-            return [new Part(group, null, null)];
+            return [new Part(group, null, null, null)];
         }
         var byAmount = group.OrderBy(x => -x.Transaction.Amount).ThenBy(x => x.Transaction.Id).ToList();
         var cut = Enumerable.Range(1, byAmount.Count - 1).MaxBy(x => byAmount[x].Transaction.Amount / byAmount[x - 1].Transaction.Amount);
         if (byAmount[cut].Transaction.Amount / byAmount[cut - 1].Transaction.Amount < 1.25m)
         {
-            return [new Part(group, null, null)];
+            return [new Part(group, null, null, null)];
         }
         var low = byAmount.Take(cut).Select(x => x.Transaction.Id).ToHashSet();
         var shared = group.Where((x, index) =>
@@ -103,13 +103,25 @@ public static class RecurringPatternDetector
         bool Continues(bool isLow) => group.Any(x => low.Contains(x.Transaction.Id) == isLow && x.Transaction.PostedDate.DayNumber > lastShared.DayNumber + 3);
         if (!singleWindow || Continues(true) == Continues(false))
         {
-            return [new Part(group.Where(x => low.Contains(x.Transaction.Id)).ToList(), "low", null),
-                new Part(group.Where(x => !low.Contains(x.Transaction.Id)).ToList(), "high", null)];
+            return [new Part(group.Where(x => low.Contains(x.Transaction.Id)).ToList(), "low", null, null),
+                new Part(group.Where(x => !low.Contains(x.Transaction.Id)).ToList(), "high", null, null)];
         }
-        // The prices meet once and only one continues: an upgrade or downgrade billed the final old charge beside the first new one.
         var endingIsLow = !Continues(true);
-        var dropped = shared.Where(x => low.Contains(x.Transaction.Id) == endingIsLow).Select(x => x.Transaction.Id).ToHashSet();
-        return [new Part(group.Where(x => !dropped.Contains(x.Transaction.Id)).ToList(), null, lastShared)];
+        var dropped = shared.Where(x => low.Contains(x.Transaction.Id) == endingIsLow).ToList();
+        var continuingStart = group.Where(x => low.Contains(x.Transaction.Id) != endingIsLow).Min(x => x.Transaction.PostedDate);
+        var rows = group.Where(x => !dropped.Contains(x)).ToList();
+        return continuingStart.DayNumber >= lastShared.DayNumber - 3
+            ? [new Part(rows, null, lastShared, null)]
+            : [new Part(rows, null, null, dropped[0].Transaction)];
+    }
+
+    public static bool IsBillAlias(string alias) =>
+        alias.StartsWith("direct debit", StringComparison.Ordinal) || alias.StartsWith("transfer", StringComparison.Ordinal);
+
+    private static bool StablePrice(IEnumerable<RecurringPatternTransaction> rows)
+    {
+        var amounts = rows.Select(x => -x.Amount).ToList();
+        return amounts.Count == 0 || amounts.Max() <= amounts.Min() * 1.25m;
     }
 
     private static List<RecurringPatternCandidate> DetectPart(GroupKey key, Part part, DateOnly asOf)
@@ -149,9 +161,9 @@ public static class RecurringPatternDetector
                 AddFit(possible, cadence, anchor, run);
             }
         }
-        // Weekly subscriptions charge a fixed price; weekly spend that varies widely is shopping.
-        possible.RemoveAll(x => x.Cadence is "weekly" or "fortnightly"
-            && x.Rows.Max(y => -y.Row.Transaction.Amount) > x.Rows.Min(y => -y.Row.Transaction.Amount) * 1.25m);
+        var variableBill = IsBillAlias(key.Alias);
+        possible.RemoveAll(x => (x.Cadence is "weekly" or "fortnightly" || !variableBill)
+            && !StablePrice(x.Rows.Select(y => y.Row.Transaction).Where(y => part.PlanChange is not { } changed || y.PostedDate >= changed)));
 
         var ordered = possible.OrderByDescending(x => x.Rows.Count).ThenBy(x => x.TotalResidual)
             .ThenBy(x => x.Rows[0].Occurrence.Date).ThenBy(x => x.Cadence, StringComparer.Ordinal)
@@ -185,6 +197,10 @@ public static class RecurringPatternDetector
             if (part.PlanChange is { } changed)
             {
                 evidence.Add($"Plan or price changed on {changed.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}. The earlier price's final charge on that day is not included.");
+            }
+            if (part.Excluded is { } excluded)
+            {
+                evidence.Add($"A separate charge of {(-excluded.Amount).ToString("0.##", CultureInfo.InvariantCulture)} {key.Currency} on {excluded.PostedDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)} is not part of this pattern.");
             }
             if (IsGenericAlias(key.Alias))
             {
@@ -346,7 +362,7 @@ public static class RecurringPatternDetector
     }
 
     private sealed record GroupKey(Guid AccountId, string Currency, string Field, string Alias);
-    private sealed record Part(List<PatternRow> Rows, string? Cluster, DateOnly? PlanChange);
+    private sealed record Part(List<PatternRow> Rows, string? Cluster, DateOnly? PlanChange, RecurringPatternTransaction? Excluded);
     private sealed record PatternRow(RecurringPatternTransaction Transaction, string Field, string Alias);
     private sealed record SlotRow(PatternRow Row, RecurringOccurrence Occurrence);
     private sealed record PatternFit(string Cadence, DateOnly Anchor, List<SlotRow> Rows, int TotalResidual);
