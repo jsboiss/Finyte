@@ -36,7 +36,7 @@ public sealed class RecurringSubscriptionApiTests
         var ended = Assert.Single(all.Items, x => x.AliasValue == "direct debit 111111 gymco 222222");
         Assert.True(ended.IsEnded);
         Assert.Equal("bill", ended.SuggestedKind);
-        Assert.Equal(ended.Key, all.Items[^1].Key); // Ended patterns sort last.
+        Assert.Equal(ended.Key, all.Items[^1].Key);
         var current = (await client.GetFromJsonAsync<RecurringDiscoveryPage>($"{Url}/discovery?hideEnded=true"))!;
         Assert.DoesNotContain(current.Items, x => x.IsEnded);
         Assert.Contains(current.Items, x => x.Key == early.Key);
@@ -121,7 +121,7 @@ public sealed class RecurringSubscriptionApiTests
         var history = found.Transactions.Select(x => new RecurringHistoryInput(x.Snapshot.Id, x.OccurrenceDate, x.Snapshot.Fingerprint)).ToList();
         var series = await Create(client, new CreateRecurringRequest("Streaming", accountId, "AUD", "monthly", found.AnchorDate, 20, "fixed", [], history));
         Assert.Equal(new DateOnly(2026, 6, 5), series.LastPaidDate);
-        Assert.Null(series.MissedOccurrenceDate); // History ends 5 June; July and August were never imported.
+        Assert.Null(series.MissedOccurrenceDate);
     }
 
     private static CreateRecurringRequest Manual(Guid accountId) => new("Music", accountId, "AUD", "monthly", new(2026, 9, 10), 20, "fixed", [], []);

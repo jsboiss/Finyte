@@ -2,8 +2,6 @@ using System.Text.RegularExpressions;
 
 namespace Finyte.Core.Recurring;
 
-// Bank statement lines repeat per-charge details (value dates, masked cards, foreign amounts) that would
-// otherwise give every charge from one merchant a different name.
 public static class StatementNameCleaner
 {
     public static string Clean(string? value)

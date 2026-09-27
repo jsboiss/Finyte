@@ -11,7 +11,7 @@ function readKeepActive(): string[] {
 }
 
 function writeKeepActive(values: string[]) {
-  try { localStorage.setItem(keepActiveKey, JSON.stringify(values)) } catch { /* Storage can be unavailable; the prompt simply returns. */ }
+  try { localStorage.setItem(keepActiveKey, JSON.stringify(values)) } catch { return }
 }
 
 export function RecurringOverview({ accounts, range, onSelect, onDiscover, onChanged }: { accounts: Account[]; range: Range; onSelect: (id: string, date?: string) => void; onDiscover: () => void; onChanged: (message?: string) => Promise<void> }) {

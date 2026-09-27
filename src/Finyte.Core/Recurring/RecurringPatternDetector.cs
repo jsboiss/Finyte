@@ -35,7 +35,6 @@ public static class RecurringPatternDetector
         {
             return [];
         }
-        // A pattern can only be judged stopped against charges that were actually imported for its account.
         var latestByAccount = rows.GroupBy(x => x.Transaction.AccountId).ToDictionary(x => x.Key, x => x.Max(y => y.Transaction.PostedDate));
         var results = new List<RecurringPatternCandidate>();
         foreach (var rowGroup in rows.GroupBy(x => new GroupKey(x.Transaction.AccountId, x.Transaction.Currency.Trim().ToUpperInvariant(), x.Field, x.Alias)))
@@ -61,7 +60,6 @@ public static class RecurringPatternDetector
                     explained += early.Explained;
                 }
             }
-            // Busy everyday merchants form coincidental runs. A real subscription explains nearly all of its merchant's charges.
             if (explained * 4 < group.Count * 3)
             {
                 continue;
@@ -72,7 +70,6 @@ public static class RecurringPatternDetector
         return results.OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.AccountId).ThenBy(x => x.AnchorDate).ToList();
     }
 
-    // Two charges from one merchant in the same billing window are either two plans or a plan change.
     private static IEnumerable<Part> Partition(List<PatternRow> group)
     {
         var busiest = 1;
@@ -223,9 +220,6 @@ public static class RecurringPatternDetector
         return results;
     }
 
-    // Two payments one month apart are an early, clearly labelled suggestion. Every payment still needs review.
-    // Explained counts every paired payment, including stopped pairs that are not suggested, so a merchant's
-    // earlier plan does not make its current plan look like coincidental noise.
     private static (List<RecurringPatternCandidate> Candidates, int Explained) EarlyPairs(GroupKey key, Part part, IReadOnlyCollection<RecurringPatternCandidate> found, DateOnly asOf)
     {
         if (IsGenericAlias(key.Alias))
@@ -258,7 +252,6 @@ public static class RecurringPatternDetector
             paired.Add(matches[0].Id);
             pairs.Add((first, matches[0]));
         }
-        // Coincidental pairs at a busy merchant leave most of its other charges unexplained.
         if (pairs.Count == 0 || rest.Count - paired.Count > 1)
         {
             return ([], 0);
