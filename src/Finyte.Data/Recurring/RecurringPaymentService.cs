@@ -25,10 +25,11 @@ public sealed class RecurringPaymentService(FinyteDbContext dbContext, TimeProvi
         await using var snapshot = await ReadSnapshot(cancellationToken);
         var series = await dbContext.RecurringPaymentSeries.AsNoTracking().Include(x => x.Aliases)
             .Where(x => x.TenantId == tenantId && (accountId == null || x.AccountId == accountId)).OrderBy(x => x.Name).ThenBy(x => x.Id).ToListAsync(cancellationToken);
+        var importedThrough = await ImportedThrough(tenantId, accountId, cancellationToken);
         var items = new List<RecurringSeriesResponse>();
         foreach (var item in series)
         {
-            items.Add(await Summary(item, calendar, from, to, cancellationToken));
+            items.Add(await Summary(item, calendar, from, to, cancellationToken, importedThrough));
         }
         var costs = series.Where(x => x.State == "active").GroupBy(x => x.Currency)
             .Select(x => new RecurringCostSummary(x.Key, decimal.Round(x.Sum(y => AnnualCost(y)) / 12, 2),
@@ -417,19 +418,23 @@ public sealed class RecurringPaymentService(FinyteDbContext dbContext, TimeProvi
         }
     }
 
-    private async Task<RecurringSeriesResponse> Summary(RecurringPaymentSeries series, FinancialCalendar calendar, DateOnly from, DateOnly to, CancellationToken cancellationToken)
+    private async Task<Dictionary<Guid, DateTimeOffset?>> ImportedThrough(Guid tenantId, Guid? accountId, CancellationToken cancellationToken) =>
+        await dbContext.Transactions.AsNoTracking()
+            .Where(x => x.TenantId == tenantId && x.PostedAt != null && (accountId == null || x.AccountId == accountId))
+            .GroupBy(x => x.AccountId)
+            .Select(x => new { AccountId = x.Key, Through = x.Max(y => y.PostedAt) })
+            .ToDictionaryAsync(x => x.AccountId, x => x.Through, cancellationToken);
+
+    private async Task<RecurringSeriesResponse> Summary(RecurringPaymentSeries series, FinancialCalendar calendar, DateOnly from, DateOnly to, CancellationToken cancellationToken,
+        IReadOnlyDictionary<Guid, DateTimeOffset?>? importedThrough = null)
     {
         var accountName = await dbContext.Accounts.AsNoTracking().Where(x => x.TenantId == series.TenantId && x.Id == series.AccountId)
             .Select(x => x.CustomName ?? x.Name).SingleOrDefaultAsync(cancellationToken) ?? "Account unavailable";
         var occurrences = await OccurrenceRows(series, calendar, from, to, cancellationToken);
         var next = occurrences.FirstOrDefault(x => x.Status is "needs-review" or "no-payment-found" or "due" or "upcoming");
         var lastPaid = occurrences.Where(x => x.Status == "paid" && x.PaidAmount is not null).MaxBy(x => x.Date);
-        // A payment is only missed once the account's imported history reaches past its window; older exports simply
-        // have not seen it yet.
-        var importedThrough = await dbContext.Transactions.AsNoTracking()
-            .Where(x => x.TenantId == series.TenantId && x.AccountId == series.AccountId && x.PostedAt != null)
-            .MaxAsync(x => x.PostedAt, cancellationToken);
-        var missed = series.State == "active" && importedThrough is { } through
+        importedThrough ??= await ImportedThrough(series.TenantId, series.AccountId, cancellationToken);
+        var missed = series.State == "active" && importedThrough.GetValueOrDefault(series.AccountId) is { } through
             ? occurrences.Where(x => x.Status == "no-payment-found" && x.Date >= calendar.Today.AddDays(-45)
                 && x.WindowTo < calendar.ToDate(through)).MaxBy(x => x.Date)?.Date
             : null;
