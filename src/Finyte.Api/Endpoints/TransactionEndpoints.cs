@@ -23,6 +23,7 @@ public static partial class TransactionEndpoints
         transactions.MapGet("/", GetTransactions).WithName("GetTransactions");
         transactions.MapPut("/{transactionId:guid}/tags", SetTransactionTags).WithName("SetTransactionTags");
         transactions.MapPost("/{transactionId:guid}/tags/restore-automatic", RestoreAutomaticTags).WithName("RestoreAutomaticTransactionTags");
+        transactions.MapPut("/{transactionId:guid}/tags/merchant", SetMerchantTags).WithName("SetMerchantTransactionTags");
 
         var tags = app.MapGroup("/api/tags").RequireAuthorization();
         tags.MapGet("/", GetTags).WithName("GetTransactionTags");
@@ -329,8 +330,57 @@ public static partial class TransactionEndpoints
             return TypedResults.NotFound();
         }
         tagService.ClearExclusions(transaction);
-        tagService.Reconcile(transaction, await tagService.GetRules(currentTenant.TenantId, cancellationToken));
+        tagService.Reconcile(transaction, await tagService.GetRules(currentTenant.TenantId, cancellationToken),
+            await tagService.GetCategoryTags(currentTenant.TenantId, cancellationToken));
         await projectionInvalidator.TransactionChanged(currentTenant.TenantId, transaction.AccountId, transaction.PostedAt, cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        if (databaseTransaction is not null)
+        {
+            await databaseTransaction.CommitAsync(cancellationToken);
+        }
+        return TypedResults.Ok(await ReadTransactionTags(currentTenant.TenantId, transactionId, dbContext, cancellationToken));
+    }
+
+    private static async Task<Results<Ok<IReadOnlyList<TransactionTagResponse>>, BadRequest<string>, NotFound>> SetMerchantTags(
+        Guid transactionId,
+        SetTransactionTagsRequest request,
+        TenantResolver tenantResolver,
+        HttpContext httpContext,
+        FinyteDbContext dbContext,
+        IProjectionInvalidator projectionInvalidator,
+        TransactionTagService tagService,
+        CancellationToken cancellationToken)
+    {
+        var currentTenant = await tenantResolver.Resolve(httpContext.User, cancellationToken);
+        await using var databaseTransaction = await tagService.BeginMutation(currentTenant.TenantId, cancellationToken);
+        var transaction = await dbContext.Transactions
+            .Where(x => x.TenantId == currentTenant.TenantId && x.Id == transactionId)
+            .Include(x => x.TagAssignments).Include(x => x.TagExclusions)
+            .SingleOrDefaultAsync(cancellationToken);
+        if (transaction is null)
+        {
+            return TypedResults.NotFound();
+        }
+        var tagIds = (request.TagIds ?? []).Distinct().ToList();
+        if (tagIds.Count == 0)
+        {
+            return TypedResults.BadRequest("Choose at least one tag.");
+        }
+        var tags = await dbContext.TransactionTags.Where(x => x.TenantId == currentTenant.TenantId && tagIds.Contains(x.Id)).ToListAsync(cancellationToken);
+        if (tags.Count != tagIds.Count)
+        {
+            return TypedResults.BadRequest("One or more tags do not exist.");
+        }
+        var merchantName = StatementNameCleaner.Clean(transaction.MerchantName ?? transaction.Description).Trim();
+        if (MerchantTagMatcher.Normalize(merchantName).Length == 0 || merchantName.Length > 256)
+        {
+            return TypedResults.BadRequest("This payment has no merchant name to save a rule for.");
+        }
+
+        tagService.PrepareForMerchantRule(transaction, tagIds.ToHashSet());
+        await tagService.ReplaceMerchantRules(currentTenant.TenantId, merchantName, tags, cancellationToken);
+        await tagService.ReconcileTenant(currentTenant.TenantId, cancellationToken);
+        await projectionInvalidator.TenantProjectionDataChanged(currentTenant.TenantId, "merchant tags replaced", cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
         if (databaseTransaction is not null)
         {
