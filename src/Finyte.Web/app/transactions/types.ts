@@ -2,7 +2,7 @@ export type TransactionTag = {
   id: string
   name: string
   color: string
-  source?: 'manual' | 'merchant-rule' | 'system' | 'legacy' | 'bank-category' | null
+  source?: 'manual' | 'merchant-rule' | 'system' | 'legacy' | null
   merchantRuleId?: string | null
   merchantRuleName?: string | null
 }

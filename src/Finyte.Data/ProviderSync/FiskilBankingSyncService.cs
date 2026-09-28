@@ -143,12 +143,11 @@ public sealed class FiskilBankingSyncService(FinyteDbContext dbContext, IFiskilB
         // Fetch remotely before taking the tag lock; reconcile current rules and manual choices atomically.
         await using var databaseTransaction = await tagService.BeginMutation(syncRun.TenantId, cancellationToken);
         var rules = await tagService.GetRules(syncRun.TenantId, cancellationToken);
-        var categoryTags = await tagService.GetCategoryTags(syncRun.TenantId, cancellationToken);
         var tenantAccounts = await dbContext.Accounts.AsNoTracking().Where(x => x.TenantId == syncRun.TenantId).ToListAsync(cancellationToken);
         foreach (var fetchedTransaction in fetchedTransactions)
         {
             var transaction = fetchedTransaction.Transaction;
-            var (changed, previousDate) = await UpsertTransaction(syncRun.TenantId, fetchedTransaction.AccountId, transaction, rules, categoryTags, tenantAccounts, cancellationToken);
+            var (changed, previousDate) = await UpsertTransaction(syncRun.TenantId, fetchedTransaction.AccountId, transaction, rules, tenantAccounts, cancellationToken);
             if (!changed)
             {
                 continue;
@@ -168,7 +167,7 @@ public sealed class FiskilBankingSyncService(FinyteDbContext dbContext, IFiskilB
         return CreateSummary(changedAccountIds, minChangedAt, maxChangedAt);
     }
 
-    private async Task<(bool Changed, DateTimeOffset? PreviousDate)> UpsertTransaction(Guid tenantId, Guid accountId, FiskilTransactionData transaction, IReadOnlyList<MerchantTagRule> rules, CategoryTagSet categoryTags, IReadOnlyList<Account> tenantAccounts, CancellationToken cancellationToken)
+    private async Task<(bool Changed, DateTimeOffset? PreviousDate)> UpsertTransaction(Guid tenantId, Guid accountId, FiskilTransactionData transaction, IReadOnlyList<MerchantTagRule> rules, IReadOnlyList<Account> tenantAccounts, CancellationToken cancellationToken)
     {
         var localTransaction = dbContext.Transactions.Local.FirstOrDefault(x => x.TenantId == tenantId && x.FiskilTransactionId == transaction.Id)
             ?? await dbContext.Transactions
@@ -201,7 +200,7 @@ public sealed class FiskilBankingSyncService(FinyteDbContext dbContext, IFiskilB
                 RawJson = transaction.RawJson,
                 CreatedAt = DateTimeOffset.UtcNow
             };
-            tagService.Reconcile(localTransaction, rules, categoryTags);
+            tagService.Reconcile(localTransaction, rules);
             InternalTransferDetector.Apply(localTransaction, tenantAccounts);
             dbContext.Transactions.Add(localTransaction);
             return (true, null);
@@ -224,7 +223,7 @@ public sealed class FiskilBankingSyncService(FinyteDbContext dbContext, IFiskilB
         changed |= SetIfChanged(localTransaction.MerchantName, transaction.MerchantName, x => localTransaction.MerchantName = x);
         changed |= SetIfChanged(localTransaction.Reference, transaction.Reference, x => localTransaction.Reference = x);
         changed |= SetIfChanged(localTransaction.RawJson, transaction.RawJson, x => localTransaction.RawJson = x);
-        changed |= tagService.Reconcile(localTransaction, rules, categoryTags);
+        changed |= tagService.Reconcile(localTransaction, rules);
         changed |= InternalTransferDetector.Apply(localTransaction, tenantAccounts);
         return (changed, previousDate);
     }

@@ -330,8 +330,7 @@ public static partial class TransactionEndpoints
             return TypedResults.NotFound();
         }
         tagService.ClearExclusions(transaction);
-        tagService.Reconcile(transaction, await tagService.GetRules(currentTenant.TenantId, cancellationToken),
-            await tagService.GetCategoryTags(currentTenant.TenantId, cancellationToken));
+        tagService.Reconcile(transaction, await tagService.GetRules(currentTenant.TenantId, cancellationToken));
         await projectionInvalidator.TransactionChanged(currentTenant.TenantId, transaction.AccountId, transaction.PostedAt, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
         if (databaseTransaction is not null)

@@ -46,43 +46,17 @@ public sealed class TransactionTagService(FinyteDbContext dbContext)
         return rules.OrderByDescending(x => x.MerchantKey.Length).ThenBy(x => x.Id).ToList();
     }
 
-    public async Task<CategoryTagSet> GetCategoryTags(Guid tenantId, CancellationToken cancellationToken)
-    {
-        await dbContext.TransactionTags.Where(x => x.TenantId == tenantId).LoadAsync(cancellationToken);
-        return new CategoryTagSet(dbContext, tenantId, dbContext.TransactionTags.Local.Where(x => x.TenantId == tenantId).ToList());
-    }
-
-    public bool Reconcile(Transaction transaction, IReadOnlyList<MerchantTagRule> rules, CategoryTagSet? categoryTags = null)
+    public bool Reconcile(Transaction transaction, IReadOnlyList<MerchantTagRule> rules)
     {
         var excludedIds = transaction.TagExclusions.Select(x => x.TagId).ToHashSet();
         var matchingRules = rules
             .Where(x => x.TenantId == transaction.TenantId && !excludedIds.Contains(x.TagId)
                 && MerchantTagMatcher.Matches(transaction.MerchantName, transaction.Description, x.MerchantKey))
             .GroupBy(x => x.TagId).ToDictionary(x => x.Key, x => x.First());
-        var userTagged = matchingRules.Count > 0 || transaction.TagAssignments.Any(x =>
-            x.Source is not (TransactionTagSource.MerchantRule or TransactionTagSource.BankCategory));
         var changed = false;
 
         foreach (var assignment in transaction.TagAssignments.ToList())
         {
-            if (assignment.Source == TransactionTagSource.BankCategory)
-            {
-                if (matchingRules.Remove(assignment.TagId, out var matchingRule))
-                {
-                    assignment.Source = TransactionTagSource.MerchantRule;
-                    assignment.MerchantRuleId = matchingRule.Id;
-                    assignment.MerchantRule = matchingRule;
-                    changed = true;
-                }
-                else if (userTagged)
-                {
-                    transaction.TagAssignments.Remove(assignment);
-                    dbContext.TransactionTagAssignments.Remove(assignment);
-                    changed = true;
-                }
-                continue;
-            }
-
             if (assignment.Source != TransactionTagSource.MerchantRule)
             {
                 // Legacy assignments have unknown provenance. Never guess that they can be deleted.
@@ -114,26 +88,6 @@ public sealed class TransactionTagService(FinyteDbContext dbContext)
             changed = true;
         }
 
-        if (!userTagged && categoryTags is not null)
-        {
-            var categoryTag = categoryTags.Resolve(transaction, excludedIds);
-            foreach (var assignment in transaction.TagAssignments.Where(x => x.Source == TransactionTagSource.BankCategory && x.TagId != categoryTag?.Id).ToList())
-            {
-                transaction.TagAssignments.Remove(assignment);
-                dbContext.TransactionTagAssignments.Remove(assignment);
-                changed = true;
-            }
-            if (categoryTag is not null && transaction.TagAssignments.All(x => x.TagId != categoryTag.Id))
-            {
-                transaction.TagAssignments.Add(new TransactionTagAssignment
-                {
-                    TransactionId = transaction.Id, TagId = categoryTag.Id, Tag = categoryTag, Source = TransactionTagSource.BankCategory,
-                    CreatedAt = DateTimeOffset.UtcNow
-                });
-                changed = true;
-            }
-        }
-
         return changed;
     }
 
@@ -162,7 +116,6 @@ public sealed class TransactionTagService(FinyteDbContext dbContext)
     public async Task<bool> ReconcileTenant(Guid tenantId, CancellationToken cancellationToken)
     {
         var rules = await GetRules(tenantId, cancellationToken);
-        var categoryTags = await GetCategoryTags(tenantId, cancellationToken);
         var changed = false;
         // Bounded reads avoid loading the entire ledger and both collections in one query.
         var skip = 0;
@@ -174,7 +127,7 @@ public sealed class TransactionTagService(FinyteDbContext dbContext)
                 .ToListAsync(cancellationToken);
             foreach (var transaction in transactions)
             {
-                changed |= Reconcile(transaction, rules, categoryTags);
+                changed |= Reconcile(transaction, rules);
             }
             await dbContext.SaveChangesAsync(cancellationToken);
             foreach (var transaction in transactions)
@@ -214,7 +167,7 @@ public sealed class TransactionTagService(FinyteDbContext dbContext)
                 transaction.TagAssignments.Remove(assignment);
                 dbContext.TransactionTagAssignments.Remove(assignment);
             }
-            else if (manualIds.Contains(assignment.TagId) || assignment.Source == TransactionTagSource.BankCategory)
+            else if (manualIds.Contains(assignment.TagId))
             {
                 assignment.Source = TransactionTagSource.Manual;
                 assignment.MerchantRuleId = null;

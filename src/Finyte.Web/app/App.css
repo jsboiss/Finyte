@@ -2450,3 +2450,6 @@ td {
 .transaction-account-filters small { color: #9aa0a6; font-weight: 400; }
 .tag-scope { display: grid; gap: 6px; padding: 8px 0; border-top: 1px solid #333d39; font-size: 13px; overflow-wrap: anywhere; }
 .tag-scope button { min-height: 34px; }
+.generate-tags { display: grid; gap: 10px; }
+.generate-tags p { margin: 0; }
+.generate-tags-actions { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }

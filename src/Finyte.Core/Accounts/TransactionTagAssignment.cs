@@ -18,5 +18,4 @@ public static class TransactionTagSource
     public const string Manual = "manual";
     public const string MerchantRule = "merchant-rule";
     public const string System = "system";
-    public const string BankCategory = "bank-category";
 }

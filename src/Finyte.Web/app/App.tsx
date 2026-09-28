@@ -21,6 +21,7 @@ import { TransactionOptions, TransferBadge } from './transfers/TransferControl'
 import { TransferCorrections } from './transfers/TransferCorrections'
 import { PayCyclesPage } from './pay-cycles/PayCyclesPage'
 import { RecurringPage } from './recurring/RecurringPage'
+import { GenerateTagsPrompt } from './tags/GenerateTagsPrompt'
 import { TagSuggestionsPage } from './tags/TagSuggestionsPage'
 import { TransactionAccountChip, TransactionAmount } from './transactions/TransactionCard'
 import { TransactionCardList } from './transactions/TransactionCardList'
@@ -670,6 +671,7 @@ function TransactionsPage() {
         /></Drawer>
       )}
       <TransactionQuickFilters key={JSON.stringify(filters)} filters={filters} onApply={nextFilters => setTransactionSearch({ page: 1, filters: nextFilters })} />
+      <GenerateTagsPrompt />
       <TransactionFilterChips filters={filters} accounts={accountsQuery.data ?? []} tags={tagsQuery.data ?? []} onApply={nextFilters => setTransactionSearch({ page: 1, filters: nextFilters })} />
       {transactionsQuery.isError && (
         <p role="alert">Transactions could not be loaded. Check your filters and <button className="secondary-button" type="button" onClick={() => transactionsQuery.refetch()}>Try again</button>.</p>
@@ -860,7 +862,6 @@ function TagEditor({ allTags, selectedTags, excludedTagIds = [], onChange, onRes
                 <TagPill tag={selectedTags.find(y => y.id === x.id) ?? x} />
               </label>
               {excludedTagIds.includes(x.id) && <small>Removed from rules</small>}
-              {!draftChanged && selectedTags.some(y => y.id === x.id && y.source === 'bank-category') && <small>From bank category</small>}
               {!draftChanged && selectedIds.has(x.id) && selectedTags.some(y => y.id === x.id && (y.source === 'merchant-rule' || y.source === 'legacy')) && (
                 <button disabled={disabled} onClick={() => onChange([...selectedIds], [x.id])} type="button">Keep manual</button>
               )}
