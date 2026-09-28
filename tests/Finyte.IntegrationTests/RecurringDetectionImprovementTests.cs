@@ -164,6 +164,14 @@ public sealed class RecurringDetectionImprovementTests
     }
 
     [Fact]
+    public void AMonthlyAndAQuarterlyPlanFromOneMerchantAreBothKept()
+    {
+        var rows = Enumerable.Range(0, 7).Select(x => Card(new DateOnly(2026, 1, 4).AddMonths(x), -9.99m, "STORAGECO BARANGAROO AU"))
+            .Concat(Enumerable.Range(0, 3).Select(x => Card(new DateOnly(2026, 1, 24).AddMonths(x * 3), -29.99m, "STORAGECO BARANGAROO AU"))).ToList();
+        Assert.Equal(new[] { "monthly", "quarterly" }, RecurringPatternDetector.Detect(rows).Select(x => x.Cadence).Order());
+    }
+
+    [Fact]
     public void TwoSamePricePlansOnDifferentDaysAreBothKept()
     {
         var rows = Enumerable.Range(0, 6).SelectMany(x => new[]
