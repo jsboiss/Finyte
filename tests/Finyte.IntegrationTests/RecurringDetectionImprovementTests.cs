@@ -172,6 +172,31 @@ public sealed class RecurringDetectionImprovementTests
         Assert.Contains("A separate charge of 50 AUD on 2026-07-06 is not part of this pattern.", candidate.Evidence);
     }
 
+    [Theory]
+    [InlineData(18)]
+    [InlineData(19)]
+    public void TwoMonthlyPlansAboutTwoWeeksApartAreNotReadAsFortnightly(int secondDay)
+    {
+        var rows = Enumerable.Range(0, 6).SelectMany(x => new[]
+        {
+            Card(new DateOnly(2026, 1, 4).AddMonths(x), -4.49m, "STORAGECO BARANGAROO AU"),
+            Card(new DateOnly(2026, 1, secondDay).AddMonths(x), -4.49m, "STORAGECO BARANGAROO AU")
+        }).ToList();
+        var candidates = RecurringPatternDetector.Detect(rows);
+        Assert.All(candidates, x => Assert.Equal("monthly", x.Cadence));
+        Assert.Equal(new[] { 4, secondDay }, candidates.Select(x => x.AnchorDate.Day).Order());
+        Assert.All(candidates, x => Assert.Equal(6, x.TransactionIds.Count));
+    }
+
+    [Fact]
+    public void ARealFortnightlyChargeStaysFortnightly()
+    {
+        var rows = Enumerable.Range(0, 12).Select(x => Card(new DateOnly(2026, 1, 5).AddDays(x * 14 + (x % 3 == 0 ? 1 : 0)), -15m, "GYMCO SPRINGFIELD")).ToList();
+        var candidate = Assert.Single(RecurringPatternDetector.Detect(rows));
+        Assert.Equal("fortnightly", candidate.Cadence);
+        Assert.Equal(12, candidate.TransactionIds.Count);
+    }
+
     [Fact]
     public void PatternsWithNoRecentPaymentAreMarkedEnded()
     {
