@@ -161,6 +161,7 @@ public static class RecurringPatternDetector
         var variableBill = IsBillAlias(key.Alias);
         possible.RemoveAll(x => (x.Cadence is "weekly" or "fortnightly" || !variableBill)
             && !StablePrice(x.Rows.Select(y => y.Row.Transaction).Where(y => part.PlanChange is not { } changed || y.PostedDate >= changed)));
+        possible.RemoveAll(x => !ExplainsMostOfItsSpan(x, group));
 
         var ordered = possible.OrderByDescending(x => x.Rows.Count).ThenBy(x => x.TotalResidual)
             .ThenBy(x => x.Rows[0].Occurrence.Date).ThenBy(x => x.Cadence, StringComparer.Ordinal)
@@ -306,6 +307,13 @@ public static class RecurringPatternDetector
                 return candidate.Value;
             }
         }
+    }
+
+    private static bool ExplainsMostOfItsSpan(PatternFit fit, List<PatternRow> rows)
+    {
+        var first = fit.Rows[0].Row.Transaction.PostedDate;
+        var last = fit.Rows[^1].Row.Transaction.PostedDate;
+        return fit.Rows.Count * 2 >= rows.Count(x => x.Transaction.PostedDate >= first && x.Transaction.PostedDate <= last);
     }
 
     private static bool BetterExplainedBySeparatePatterns(PatternFit fit, List<PatternFit> alternatives)
