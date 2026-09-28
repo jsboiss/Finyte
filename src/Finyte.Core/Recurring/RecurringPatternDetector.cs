@@ -162,7 +162,9 @@ public static class RecurringPatternDetector
         possible.RemoveAll(x => (x.Cadence is "weekly" or "fortnightly" || !variableBill)
             && !StablePrice(x.Rows.Select(y => y.Row.Transaction).Where(y => part.PlanChange is not { } changed || y.PostedDate >= changed)));
 
-        var ordered = possible.OrderByDescending(x => x.Rows.Count).ThenBy(x => x.TotalResidual)
+        var newPlanDate = part.PlanChange is { } planChange ? group.Where(x => x.Transaction.PostedDate >= planChange).Min(x => x.Transaction.PostedDate) : (DateOnly?)null;
+        var ordered = possible.OrderByDescending(x => x.Rows.Count)
+            .ThenBy(x => newPlanDate is { } date && Phase(x.Cadence, x.Anchor) != Phase(x.Cadence, date) ? 1 : 0).ThenBy(x => x.TotalResidual)
             .ThenBy(x => x.Rows[0].Occurrence.Date).ThenBy(x => x.Cadence, StringComparer.Ordinal)
             .DistinctBy(x => $"{x.Cadence}|{string.Join(',', x.Rows.Select(y => y.Row.Transaction.Id))}").ToList();
         var decomposed = ordered.Where(x => !SpansPlanChange(x, part.PlanChange) && BetterExplainedBySeparatePatterns(x, ordered))

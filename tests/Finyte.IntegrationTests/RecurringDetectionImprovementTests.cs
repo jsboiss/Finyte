@@ -83,6 +83,17 @@ public sealed class RecurringDetectionImprovementTests
     }
 
     [Fact]
+    public void ALongOldPlanHistoryStillUsesTheNewBillingDay()
+    {
+        var rows = Enumerable.Range(0, 6).Select(x => Card(new DateOnly(2026, 1, 4).AddMonths(x), -9.99m, "STREAMCO SYDNEY AUS"))
+            .Concat(Enumerable.Range(0, 4).Select(x => Card(new DateOnly(2026, 6, 7).AddMonths(x), -19.99m, "STREAMCO SYDNEY AUS"))).ToList();
+        var candidate = Assert.Single(RecurringPatternDetector.Detect(rows));
+        Assert.Equal("monthly", candidate.Cadence);
+        Assert.Equal(9, candidate.TransactionIds.Count);
+        Assert.Equal(7, candidate.AnchorDate.Day);
+    }
+
+    [Fact]
     public void TwoMonthlyPaymentsProduceAnEarlyCandidateOnlyWhenRequested()
     {
         var rows = new[] { Card(new DateOnly(2026, 7, 7), -9.99m, "RINGCO OULU FIN"), Card(new DateOnly(2026, 8, 7), -9.99m, "RINGCO OULU FIN") };
