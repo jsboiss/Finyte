@@ -90,6 +90,7 @@ public sealed class FiskilBankingSyncService(FinyteDbContext dbContext, IFiskilB
             }
         }
 
+        var fetchedAt = DateTimeOffset.UtcNow;
         var changedAccountIds = new List<Guid>();
         foreach (var balance in balances)
         {
@@ -101,7 +102,7 @@ public sealed class FiskilBankingSyncService(FinyteDbContext dbContext, IFiskilB
                 continue;
             }
 
-            if (ApplyBalance(account, balance))
+            if (ApplyBalance(account, balance, fetchedAt))
             {
                 changedAccountIds.Add(account.Id);
             }
@@ -274,14 +275,22 @@ public sealed class FiskilBankingSyncService(FinyteDbContext dbContext, IFiskilB
         return changed;
     }
 
-    private static bool ApplyBalance(Account account, FiskilBalanceData balance)
+    private static bool ApplyBalance(Account account, FiskilBalanceData balance, DateTimeOffset fetchedAt)
     {
         var changed = false;
         changed |= SetIfChanged(account.CurrentBalance, balance.CurrentBalance, x => account.CurrentBalance = x);
         changed |= SetIfChanged(account.AvailableBalance, balance.AvailableBalance, x => account.AvailableBalance = x);
         changed |= SetIfChanged(account.CreditLimit, balance.CreditLimit, x => account.CreditLimit = x);
         changed |= SetIfChanged(account.Currency, balance.Currency ?? "AUD", x => account.Currency = x);
-        changed |= SetIfChanged(account.BalanceAsOf, balance.AsOf, x => account.BalanceAsOf = x);
+        if (balance.AsOf is { } asOf)
+        {
+            changed |= SetIfChanged(account.BalanceAsOf, asOf, x => account.BalanceAsOf = x);
+        }
+        else
+        {
+            changed |= account.BalanceAsOf is null;
+            account.BalanceAsOf = fetchedAt;
+        }
         return changed;
     }
 
