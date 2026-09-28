@@ -165,7 +165,7 @@ public static class RecurringPatternDetector
         var ordered = possible.OrderByDescending(x => x.Rows.Count).ThenBy(x => x.TotalResidual)
             .ThenBy(x => x.Rows[0].Occurrence.Date).ThenBy(x => x.Cadence, StringComparer.Ordinal)
             .DistinctBy(x => $"{x.Cadence}|{string.Join(',', x.Rows.Select(y => y.Row.Transaction.Id))}").ToList();
-        var decomposed = ordered.Where(x => BetterExplainedBySeparatePatterns(x, ordered))
+        var decomposed = ordered.Where(x => !SpansPlanChange(x, part.PlanChange) && BetterExplainedBySeparatePatterns(x, ordered))
             .Select(x => new { x.Cadence, Ids = x.Rows.Select(y => y.Row.Transaction.Id).ToHashSet() }).ToList();
         var used = new HashSet<Guid>();
         foreach (var fit in ordered)
@@ -307,6 +307,9 @@ public static class RecurringPatternDetector
             }
         }
     }
+
+    private static bool SpansPlanChange(PatternFit fit, DateOnly? changed) =>
+        changed is { } date && fit.Rows[0].Row.Transaction.PostedDate < date && fit.Rows[^1].Row.Transaction.PostedDate >= date;
 
     private static bool BetterExplainedBySeparatePatterns(PatternFit fit, List<PatternFit> alternatives)
     {
