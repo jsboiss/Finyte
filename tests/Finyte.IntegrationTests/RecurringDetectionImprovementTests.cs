@@ -67,6 +67,32 @@ public sealed class RecurringDetectionImprovementTests
         Assert.Contains(candidate.Evidence, x => x.Contains("Plan or price changed on 2026-03-05"));
     }
 
+    [Theory]
+    [InlineData(1)]
+    [InlineData(3)]
+    public void AnUpgradeBilledOnADifferentDayStaysOneMonthlySeries(int shift)
+    {
+        var rows = Enumerable.Range(0, 5).Select(x => Card(new DateOnly(2026, 1, 4).AddMonths(x), -9.99m, "STREAMCO SYDNEY AUS"))
+            .Concat(Enumerable.Range(0, 5).Select(x => Card(new DateOnly(2026, 5, 4 + shift).AddMonths(x), -19.99m, "STREAMCO SYDNEY AUS"))).ToList();
+        var candidate = Assert.Single(RecurringPatternDetector.Detect(rows));
+        Assert.Equal("monthly", candidate.Cadence);
+        Assert.Equal(19.99m, candidate.ExpectedAmount);
+        Assert.Equal(9, candidate.TransactionIds.Count);
+        Assert.Equal(4 + shift, candidate.AnchorDate.Day);
+        Assert.Contains(candidate.Evidence, x => x.Contains("Plan or price changed"));
+    }
+
+    [Fact]
+    public void ALongOldPlanHistoryStillUsesTheNewBillingDay()
+    {
+        var rows = Enumerable.Range(0, 6).Select(x => Card(new DateOnly(2026, 1, 4).AddMonths(x), -9.99m, "STREAMCO SYDNEY AUS"))
+            .Concat(Enumerable.Range(0, 4).Select(x => Card(new DateOnly(2026, 6, 7).AddMonths(x), -19.99m, "STREAMCO SYDNEY AUS"))).ToList();
+        var candidate = Assert.Single(RecurringPatternDetector.Detect(rows));
+        Assert.Equal("monthly", candidate.Cadence);
+        Assert.Equal(9, candidate.TransactionIds.Count);
+        Assert.Equal(7, candidate.AnchorDate.Day);
+    }
+
     [Fact]
     public void TwoMonthlyPaymentsProduceAnEarlyCandidateOnlyWhenRequested()
     {
