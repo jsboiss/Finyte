@@ -181,6 +181,34 @@ public sealed class RecurringDetectionImprovementTests
     }
 
     [Fact]
+    public void WeeklyTakeawayWithVaryingAmountsIsNotSplitIntoMonthlySubscriptions()
+    {
+        var amounts = new[] { 32m, 38m, 31m, 32m, 39m, 36m, 34m, 32m, 35m, 33m, 32m, 35m, 36m, 37m, 34m, 34m, 34m, 38m, 31m, 36m, 36m, 33m, 37m, 37m, 37m, 37m,
+            38m, 37m, 30m, 35m, 32m, 30m, 37m, 30m, 32m, 31m, 38m, 32m, 34m, 30m, 35m, 33m, 33m, 38m, 35m, 39m, 39m, 36m, 35m, 38m, 33m, 30m };
+        var rows = Enumerable.Range(0, 52).Select(x => Card(new DateOnly(2025, 9, 29).AddDays(x * 7), -amounts[x], "FOODCO SPRINGFIELD")).ToList();
+        Assert.Empty(RecurringPatternDetector.Detect(rows, new RecurringDetectionOptions(IncludeEarly: true)));
+    }
+
+    [Fact]
+    public void AMonthlyAndAQuarterlyPlanFromOneMerchantAreBothKept()
+    {
+        var rows = Enumerable.Range(0, 7).Select(x => Card(new DateOnly(2026, 1, 4).AddMonths(x), -9.99m, "STORAGECO BARANGAROO AU"))
+            .Concat(Enumerable.Range(0, 3).Select(x => Card(new DateOnly(2026, 1, 24).AddMonths(x * 3), -29.99m, "STORAGECO BARANGAROO AU"))).ToList();
+        Assert.Equal(new[] { "monthly", "quarterly" }, RecurringPatternDetector.Detect(rows).Select(x => x.Cadence).Order());
+    }
+
+    [Fact]
+    public void TwoSamePricePlansOnDifferentDaysAreBothKept()
+    {
+        var rows = Enumerable.Range(0, 6).SelectMany(x => new[]
+        {
+            Card(new DateOnly(2026, 1, 4).AddMonths(x), -4.49m, "STORAGECO BARANGAROO AU"),
+            Card(new DateOnly(2026, 1, 24).AddMonths(x), -4.49m, "STORAGECO BARANGAROO AU")
+        }).ToList();
+        Assert.Equal(new[] { 4, 24 }, RecurringPatternDetector.Detect(rows).Select(x => x.AnchorDate.Day).Order());
+    }
+
+    [Fact]
     public void AModestPriceRiseOnACardSubscriptionIsStillOneSeries()
     {
         var rows = new[] { -9.99m, -9.99m, -11.99m }.Select((amount, index) => Card(new DateOnly(2026, 1, 7).AddMonths(index), amount, "STREAMCO SYDNEY AUS")).ToList();

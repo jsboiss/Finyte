@@ -159,8 +159,10 @@ public static class RecurringPatternDetector
             }
         }
         var variableBill = IsBillAlias(key.Alias);
-        possible.RemoveAll(x => (x.Cadence is "weekly" or "fortnightly" || !variableBill)
-            && !StablePrice(x.Rows.Select(y => y.Row.Transaction).Where(y => part.PlanChange is not { } changed || y.PostedDate >= changed)));
+        var unstable = possible.Where(x => (x.Cadence is "weekly" or "fortnightly" || !variableBill)
+            && !StablePrice(x.Rows.Select(y => y.Row.Transaction).Where(y => part.PlanChange is not { } changed || y.PostedDate >= changed))).ToList();
+        possible.RemoveAll(unstable.Contains);
+        possible.RemoveAll(x => unstable.Any(y => IsSliceOf(x, y)));
 
         var newPlanDate = part.PlanChange is { } planChange ? group.Where(x => x.Transaction.PostedDate >= planChange).Min(x => x.Transaction.PostedDate) : (DateOnly?)null;
         var ordered = possible.OrderByDescending(x => x.Rows.Count)
@@ -308,6 +310,22 @@ public static class RecurringPatternDetector
                 return candidate.Value;
             }
         }
+    }
+
+    private static bool IsSliceOf(PatternFit fit, PatternFit denser)
+    {
+        if (PeriodDays(denser.Cadence) >= PeriodDays(fit.Cadence) || denser.Rows.Count < fit.Rows.Count * 2)
+        {
+            return false;
+        }
+        var ids = fit.Rows.Select(x => x.Row.Transaction.Id).ToHashSet();
+        if (!ids.IsSubsetOf(denser.Rows.Select(x => x.Row.Transaction.Id)))
+        {
+            return false;
+        }
+        var lowest = fit.Rows.Min(x => -x.Row.Transaction.Amount);
+        var highest = fit.Rows.Max(x => -x.Row.Transaction.Amount);
+        return denser.Rows.Any(x => !ids.Contains(x.Row.Transaction.Id) && -x.Row.Transaction.Amount >= lowest && -x.Row.Transaction.Amount <= highest);
     }
 
     private static bool SpansPlanChange(PatternFit fit, DateOnly? changed) =>
