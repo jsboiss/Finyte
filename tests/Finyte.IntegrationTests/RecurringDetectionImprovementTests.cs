@@ -67,6 +67,32 @@ public sealed class RecurringDetectionImprovementTests
         Assert.Contains(candidate.Evidence, x => x.Contains("Plan or price changed on 2026-03-05"));
     }
 
+    [Theory]
+    [InlineData(1)]
+    [InlineData(3)]
+    public void AnUpgradeBilledOnADifferentDayStaysOneMonthlySeries(int shift)
+    {
+        var rows = Enumerable.Range(0, 5).Select(x => Card(new DateOnly(2026, 1, 4).AddMonths(x), -9.99m, "STREAMCO SYDNEY AUS"))
+            .Concat(Enumerable.Range(0, 5).Select(x => Card(new DateOnly(2026, 5, 4 + shift).AddMonths(x), -19.99m, "STREAMCO SYDNEY AUS"))).ToList();
+        var candidate = Assert.Single(RecurringPatternDetector.Detect(rows));
+        Assert.Equal("monthly", candidate.Cadence);
+        Assert.Equal(19.99m, candidate.ExpectedAmount);
+        Assert.Equal(9, candidate.TransactionIds.Count);
+        Assert.Equal(4 + shift, candidate.AnchorDate.Day);
+        Assert.Contains(candidate.Evidence, x => x.Contains("Plan or price changed"));
+    }
+
+    [Fact]
+    public void ALongOldPlanHistoryStillUsesTheNewBillingDay()
+    {
+        var rows = Enumerable.Range(0, 6).Select(x => Card(new DateOnly(2026, 1, 4).AddMonths(x), -9.99m, "STREAMCO SYDNEY AUS"))
+            .Concat(Enumerable.Range(0, 4).Select(x => Card(new DateOnly(2026, 6, 7).AddMonths(x), -19.99m, "STREAMCO SYDNEY AUS"))).ToList();
+        var candidate = Assert.Single(RecurringPatternDetector.Detect(rows));
+        Assert.Equal("monthly", candidate.Cadence);
+        Assert.Equal(9, candidate.TransactionIds.Count);
+        Assert.Equal(7, candidate.AnchorDate.Day);
+    }
+
     [Fact]
     public void TwoMonthlyPaymentsProduceAnEarlyCandidateOnlyWhenRequested()
     {
@@ -198,6 +224,31 @@ public sealed class RecurringDetectionImprovementTests
         Assert.Equal(9, candidate.TransactionIds.Count);
         Assert.DoesNotContain(candidate.Evidence, x => x.Contains("Plan or price changed"));
         Assert.Contains("A separate charge of 50 AUD on 2026-07-06 is not part of this pattern.", candidate.Evidence);
+    }
+
+    [Theory]
+    [InlineData(18)]
+    [InlineData(19)]
+    public void TwoMonthlyPlansAboutTwoWeeksApartAreNotReadAsFortnightly(int secondDay)
+    {
+        var rows = Enumerable.Range(0, 6).SelectMany(x => new[]
+        {
+            Card(new DateOnly(2026, 1, 4).AddMonths(x), -4.49m, "STORAGECO BARANGAROO AU"),
+            Card(new DateOnly(2026, 1, secondDay).AddMonths(x), -4.49m, "STORAGECO BARANGAROO AU")
+        }).ToList();
+        var candidates = RecurringPatternDetector.Detect(rows);
+        Assert.All(candidates, x => Assert.Equal("monthly", x.Cadence));
+        Assert.Equal(new[] { 4, secondDay }, candidates.Select(x => x.AnchorDate.Day).Order());
+        Assert.All(candidates, x => Assert.Equal(6, x.TransactionIds.Count));
+    }
+
+    [Fact]
+    public void ARealFortnightlyChargeStaysFortnightly()
+    {
+        var rows = Enumerable.Range(0, 12).Select(x => Card(new DateOnly(2026, 1, 5).AddDays(x * 14 + (x % 3 == 0 ? 1 : 0)), -15m, "GYMCO SPRINGFIELD")).ToList();
+        var candidate = Assert.Single(RecurringPatternDetector.Detect(rows));
+        Assert.Equal("fortnightly", candidate.Cadence);
+        Assert.Equal(12, candidate.TransactionIds.Count);
     }
 
     [Fact]

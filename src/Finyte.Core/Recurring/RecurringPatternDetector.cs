@@ -164,10 +164,12 @@ public static class RecurringPatternDetector
         possible.RemoveAll(unstable.Contains);
         possible.RemoveAll(x => unstable.Any(y => IsSliceOf(x, y)));
 
-        var ordered = possible.OrderByDescending(x => x.Rows.Count).ThenBy(x => x.TotalResidual)
+        var newPlanDate = part.PlanChange is { } planChange ? group.Where(x => x.Transaction.PostedDate >= planChange).Min(x => x.Transaction.PostedDate) : (DateOnly?)null;
+        var ordered = possible.OrderByDescending(x => x.Rows.Count)
+            .ThenBy(x => newPlanDate is { } date && Phase(x.Cadence, x.Anchor) != Phase(x.Cadence, date) ? 1 : 0).ThenBy(x => x.TotalResidual)
             .ThenBy(x => x.Rows[0].Occurrence.Date).ThenBy(x => x.Cadence, StringComparer.Ordinal)
             .DistinctBy(x => $"{x.Cadence}|{string.Join(',', x.Rows.Select(y => y.Row.Transaction.Id))}").ToList();
-        var decomposed = ordered.Where(x => BetterExplainedBySeparatePatterns(x, ordered))
+        var decomposed = ordered.Where(x => !SpansPlanChange(x, part.PlanChange) && BetterExplainedBySeparatePatterns(x, ordered))
             .Select(x => new { x.Cadence, Ids = x.Rows.Select(y => y.Row.Transaction.Id).ToHashSet() }).ToList();
         var used = new HashSet<Guid>();
         foreach (var fit in ordered)
@@ -326,6 +328,9 @@ public static class RecurringPatternDetector
         return denser.Rows.Any(x => !ids.Contains(x.Row.Transaction.Id) && -x.Row.Transaction.Amount >= lowest && -x.Row.Transaction.Amount <= highest);
     }
 
+    private static bool SpansPlanChange(PatternFit fit, DateOnly? changed) =>
+        changed is { } date && fit.Rows[0].Row.Transaction.PostedDate < date && fit.Rows[^1].Row.Transaction.PostedDate >= date;
+
     private static bool BetterExplainedBySeparatePatterns(PatternFit fit, List<PatternFit> alternatives)
     {
         if (fit.Rows.Count < 6 || fit.TotalResidual == 0)
@@ -336,16 +341,17 @@ public static class RecurringPatternDetector
         var covered = new HashSet<Guid>();
         var residual = 0;
         var parts = alternatives.Where(x => x.Cadence != fit.Cadence && x.Rows.Count < fit.Rows.Count
-                && x.Rows.All(y => ids.Contains(y.Row.Transaction.Id)))
-            .OrderBy(x => (decimal)x.TotalResidual / x.Rows.Count).ThenByDescending(x => x.Rows.Count);
+                && x.Rows.Count(y => ids.Contains(y.Row.Transaction.Id)) >= 2)
+            .Select(x => x.Rows.Where(y => ids.Contains(y.Row.Transaction.Id)).ToList())
+            .OrderBy(x => (decimal)x.Sum(Residual) / x.Count).ThenByDescending(x => x.Count);
         foreach (var part in parts)
         {
-            if (part.Rows.Any(x => covered.Contains(x.Row.Transaction.Id)))
+            if (part.Any(x => covered.Contains(x.Row.Transaction.Id)))
             {
                 continue;
             }
-            covered.UnionWith(part.Rows.Select(x => x.Row.Transaction.Id));
-            residual += part.TotalResidual;
+            covered.UnionWith(part.Select(x => x.Row.Transaction.Id));
+            residual += part.Sum(Residual);
         }
         // For example, bills on the 5th and 20th can resemble a drifting fortnightly charge. Keep the two exact monthly tracks.
         return covered.Count == ids.Count && residual < fit.TotalResidual;
@@ -355,9 +361,11 @@ public static class RecurringPatternDetector
     {
         if (rows.Count >= 3)
         {
-            fits.Add(new PatternFit(cadence, anchor, rows, rows.Sum(x => Math.Abs(x.Row.Transaction.PostedDate.DayNumber - x.Occurrence.Date.DayNumber))));
+            fits.Add(new PatternFit(cadence, anchor, rows, rows.Sum(Residual)));
         }
     }
+
+    private static int Residual(SlotRow row) => Math.Abs(row.Row.Transaction.PostedDate.DayNumber - row.Occurrence.Date.DayNumber);
 
     private static string Phase(string cadence, DateOnly date)
     {

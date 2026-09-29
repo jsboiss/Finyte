@@ -134,6 +134,34 @@ public sealed class FiskilBankingSyncServiceTests
         Assert.Equal([account.Id], summary.AccountIds);
     }
 
+    [Fact]
+    public async Task BalancesWithoutAProviderTimestampAreReportedAsOfTheSync()
+    {
+        await using var dbContext = CreateDbContext();
+        var tenantId = Guid.NewGuid();
+        var account = new Account { TenantId = tenantId, FiskilAccountId = "account-1", Name = "Everyday", CreatedAt = DateTimeOffset.UtcNow.AddDays(-1) };
+        var syncRun = CreateSyncRun(tenantId, ProviderSyncDataset.Balances);
+        dbContext.Accounts.Add(account);
+        dbContext.ProviderSyncRuns.Add(syncRun);
+        await dbContext.SaveChangesAsync();
+        var client = new StubFiskilBankingClient { Balances = [new FiskilBalanceData("account-1", 5760.71m, 5815.17m, null, "AUD", null, "{}")] };
+        var service = new FiskilBankingSyncService(dbContext, client, new TransactionTagService(dbContext), new InternalTransferService(dbContext, new ProjectionInvalidator(dbContext, TestCalendar.Tenants(dbContext)), TestCalendar.Tenants(dbContext)));
+
+        var before = DateTimeOffset.UtcNow;
+        Assert.True((await service.SyncBalances(syncRun, CancellationToken.None)).HasChanges);
+        Assert.True(AccountPreferences.HasReportedBalance(account));
+        Assert.True(account.BalanceAsOf >= before);
+
+        var firstAsOf = account.BalanceAsOf;
+        Assert.False((await service.SyncBalances(syncRun, CancellationToken.None)).HasChanges);
+        Assert.Equal(firstAsOf, account.BalanceAsOf);
+
+        client.Balances = [new FiskilBalanceData("account-1", 5700.00m, 5750.00m, null, "AUD", null, "{}")];
+        await Task.Delay(5);
+        Assert.True((await service.SyncBalances(syncRun, CancellationToken.None)).HasChanges);
+        Assert.True(account.BalanceAsOf > firstAsOf);
+    }
+
     private static FinyteDbContext CreateDbContext()
     {
         var options = new DbContextOptionsBuilder<FinyteDbContext>()
@@ -159,7 +187,7 @@ public sealed class FiskilBankingSyncServiceTests
     private sealed class StubFiskilBankingClient : IFiskilBankingClient
     {
         public IReadOnlyCollection<FiskilAccountData> Accounts { get; init; } = [];
-        public IReadOnlyCollection<FiskilBalanceData> Balances { get; init; } = [];
+        public IReadOnlyCollection<FiskilBalanceData> Balances { get; set; } = [];
         public IReadOnlyCollection<FiskilTransactionData> Transactions { get; set; } = [];
 
         public Task<IReadOnlyCollection<FiskilAccountData>> GetAccounts(string endUserId, CancellationToken cancellationToken)

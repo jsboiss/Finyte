@@ -22,6 +22,7 @@ import { CashFlowRaceModule } from './modules/CashFlowRaceModule'
 import { SpendByTagChart } from './modules/SpendByTagChart'
 import { transactionLink } from './transactionLinks'
 import type { DashboardMetric, OverviewAccountOption, OverviewResponse } from './types'
+import { GenerateTagsPrompt } from '../tags/GenerateTagsPrompt'
 
 const chooseSeveralValue = 'choose-several'
 
@@ -122,6 +123,7 @@ export function DashboardPage() {
           </button>
         </div>
       </div>
+      <GenerateTagsPrompt />
 
       {choosing && <Drawer title="Choose accounts" onClose={() => setChoosing(null)}>
         <div className="account-scope-picker">

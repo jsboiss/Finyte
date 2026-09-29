@@ -91,6 +91,28 @@ public sealed class TransactionTagService(FinyteDbContext dbContext)
         return changed;
     }
 
+    public async Task<bool> ReplaceMerchantRules(Guid tenantId, string merchantName, IReadOnlyCollection<TransactionTag> tags, CancellationToken cancellationToken)
+    {
+        var merchantKey = MerchantTagMatcher.Normalize(merchantName);
+        var rules = await GetRules(tenantId, cancellationToken);
+        var tagIds = tags.Select(x => x.Id).ToHashSet();
+        var changed = false;
+        foreach (var rule in rules.Where(x => x.MerchantKey == merchantKey && !tagIds.Contains(x.TagId)))
+        {
+            dbContext.MerchantTagRules.Remove(rule);
+            changed = true;
+        }
+        foreach (var tag in tags.Where(x => !rules.Any(y => y.MerchantKey == merchantKey && y.TagId == x.Id)))
+        {
+            dbContext.MerchantTagRules.Add(new MerchantTagRule
+            {
+                TenantId = tenantId, MerchantName = merchantName, MerchantKey = merchantKey, TagId = tag.Id, Tag = tag, CreatedAt = DateTimeOffset.UtcNow
+            });
+            changed = true;
+        }
+        return changed;
+    }
+
     public async Task<bool> ReconcileTenant(Guid tenantId, CancellationToken cancellationToken)
     {
         var rules = await GetRules(tenantId, cancellationToken);
@@ -167,6 +189,24 @@ public sealed class TransactionTagService(FinyteDbContext dbContext)
                 TransactionId = transaction.Id, TagId = selectedId, Source = TransactionTagSource.Manual,
                 CreatedAt = DateTimeOffset.UtcNow
             });
+        }
+    }
+
+    public void PrepareForMerchantRule(Transaction transaction, IReadOnlySet<Guid> selectedIds)
+    {
+        foreach (var assignment in transaction.TagAssignments.Where(x => !selectedIds.Contains(x.TagId)).ToList())
+        {
+            if (transaction.TagExclusions.All(x => x.TagId != assignment.TagId))
+            {
+                transaction.TagExclusions.Add(new TransactionTagExclusion { TransactionId = transaction.Id, TagId = assignment.TagId, CreatedAt = DateTimeOffset.UtcNow });
+            }
+            transaction.TagAssignments.Remove(assignment);
+            dbContext.TransactionTagAssignments.Remove(assignment);
+        }
+        foreach (var exclusion in transaction.TagExclusions.Where(x => selectedIds.Contains(x.TagId)).ToList())
+        {
+            transaction.TagExclusions.Remove(exclusion);
+            dbContext.TransactionTagExclusions.Remove(exclusion);
         }
     }
 
