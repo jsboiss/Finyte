@@ -318,16 +318,17 @@ public static class RecurringPatternDetector
         var covered = new HashSet<Guid>();
         var residual = 0;
         var parts = alternatives.Where(x => x.Cadence != fit.Cadence && x.Rows.Count < fit.Rows.Count
-                && x.Rows.All(y => ids.Contains(y.Row.Transaction.Id)))
-            .OrderBy(x => (decimal)x.TotalResidual / x.Rows.Count).ThenByDescending(x => x.Rows.Count);
+                && x.Rows.Count(y => ids.Contains(y.Row.Transaction.Id)) >= 2)
+            .Select(x => x.Rows.Where(y => ids.Contains(y.Row.Transaction.Id)).ToList())
+            .OrderBy(x => (decimal)x.Sum(Residual) / x.Count).ThenByDescending(x => x.Count);
         foreach (var part in parts)
         {
-            if (part.Rows.Any(x => covered.Contains(x.Row.Transaction.Id)))
+            if (part.Any(x => covered.Contains(x.Row.Transaction.Id)))
             {
                 continue;
             }
-            covered.UnionWith(part.Rows.Select(x => x.Row.Transaction.Id));
-            residual += part.TotalResidual;
+            covered.UnionWith(part.Select(x => x.Row.Transaction.Id));
+            residual += part.Sum(Residual);
         }
         // For example, bills on the 5th and 20th can resemble a drifting fortnightly charge. Keep the two exact monthly tracks.
         return covered.Count == ids.Count && residual < fit.TotalResidual;
@@ -337,9 +338,11 @@ public static class RecurringPatternDetector
     {
         if (rows.Count >= 3)
         {
-            fits.Add(new PatternFit(cadence, anchor, rows, rows.Sum(x => Math.Abs(x.Row.Transaction.PostedDate.DayNumber - x.Occurrence.Date.DayNumber))));
+            fits.Add(new PatternFit(cadence, anchor, rows, rows.Sum(Residual)));
         }
     }
+
+    private static int Residual(SlotRow row) => Math.Abs(row.Row.Transaction.PostedDate.DayNumber - row.Occurrence.Date.DayNumber);
 
     private static string Phase(string cadence, DateOnly date)
     {
