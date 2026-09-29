@@ -286,10 +286,10 @@ public sealed class FiskilBankingSyncService(FinyteDbContext dbContext, IFiskilB
         {
             changed |= SetIfChanged(account.BalanceAsOf, asOf, x => account.BalanceAsOf = x);
         }
-        else
+        else if (changed || account.BalanceAsOf is null)
         {
-            changed |= account.BalanceAsOf is null;
             account.BalanceAsOf = fetchedAt;
+            changed = true;
         }
         return changed;
     }

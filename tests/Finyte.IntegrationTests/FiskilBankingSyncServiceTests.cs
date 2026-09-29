@@ -154,7 +154,12 @@ public sealed class FiskilBankingSyncServiceTests
 
         var firstAsOf = account.BalanceAsOf;
         Assert.False((await service.SyncBalances(syncRun, CancellationToken.None)).HasChanges);
-        Assert.True(account.BalanceAsOf >= firstAsOf);
+        Assert.Equal(firstAsOf, account.BalanceAsOf);
+
+        client.Balances = [new FiskilBalanceData("account-1", 5700.00m, 5750.00m, null, "AUD", null, "{}")];
+        await Task.Delay(5);
+        Assert.True((await service.SyncBalances(syncRun, CancellationToken.None)).HasChanges);
+        Assert.True(account.BalanceAsOf > firstAsOf);
     }
 
     private static FinyteDbContext CreateDbContext()
@@ -182,7 +187,7 @@ public sealed class FiskilBankingSyncServiceTests
     private sealed class StubFiskilBankingClient : IFiskilBankingClient
     {
         public IReadOnlyCollection<FiskilAccountData> Accounts { get; init; } = [];
-        public IReadOnlyCollection<FiskilBalanceData> Balances { get; init; } = [];
+        public IReadOnlyCollection<FiskilBalanceData> Balances { get; set; } = [];
         public IReadOnlyCollection<FiskilTransactionData> Transactions { get; set; } = [];
 
         public Task<IReadOnlyCollection<FiskilAccountData>> GetAccounts(string endUserId, CancellationToken cancellationToken)
