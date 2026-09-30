@@ -10,6 +10,7 @@ import { initialRoles, type AccountRole } from './accountRoles'
 import { dateLabel, todayDate } from '../shared/calendar'
 import { getBreakdown, getPayCycles, kinds, money, type PayCycleProfile } from './payCyclesApi'
 import './payCycles.css'
+import { categoryLabel } from '../shared/categoryLabel'
 
 const periodStatusLabel: Record<string, string> = { current: 'Current cycle', completed: 'Completed cycle', future: 'Future cycle' }
 
@@ -150,13 +151,13 @@ function Breakdown({ profile }: { profile: PayCycleProfile }) {
       </div>
       {profile.expectedIncome !== null && <section className="panel pay-cycle-intro"><h2>Expected income comparison</h2><p>Expected: {amount(profile.expectedIncome)}. External credits: {amount(data.totals.externalCredits)}. Difference: {amount(data.totals.expectedIncomeDifference ?? 0)}.</p><p>This compares the full cycle target with activity recorded so far. External credits may include refunds or other income; they are not verified salary.</p></section>}
       <section className="panel pay-cycle-intro"><h2>Transfers between your accounts</h2><p>Other transfers out: {amount(data.totals.otherTransfersOut)}. Other transfers in: {amount(data.totals.transfersIn)}. Net movement between tracked accounts: {amount(data.totals.withinScopeTransfers)}.</p><p>Each leg counts on its own posted date, including transfers that cross cycle boundaries. Suggested or outdated matches remain ordinary credits or spending until reviewed. <Link to="/transfers">Review transfers</Link>.</p></section>
-      <section className="panel pay-cycle-intro"><h2>Spending by category</h2>{data.spendingCategories.length === 0 ? <p>No spending recorded in this cycle.</p> : <ul className="pay-cycle-categories">{data.spendingCategories.map(x => <li key={x.name}><span>{x.name} · {x.transactionCount} transactions</span><strong>{amount(x.amount)}</strong></li>)}</ul>}</section>
+      <section className="panel pay-cycle-intro"><h2>Spending by category</h2>{data.spendingCategories.length === 0 ? <p>No spending recorded in this cycle.</p> : <ul className="pay-cycle-categories">{data.spendingCategories.map(x => <li key={x.name}><span>{categoryLabel(x.name)} · {x.transactionCount} {x.transactionCount === 1 ? 'transaction' : 'transactions'}</span><strong>{amount(x.amount)}</strong></li>)}</ul>}</section>
       <details className="panel pay-cycle-intro"><summary>What is excluded</summary><p>{data.unpostedTransactionCount} pending or other unposted transactions and {data.otherCurrencyTransactionCount} posted transactions in another currency within the observed dates. {data.undatedTransactionCount} transactions across these accounts, across all dates, have no posted date and cannot be assigned to any cycle.</p><Help><p>Balances and expected income are never added to actual totals. No currency conversion is performed. Editing this schedule recomputes historical breakdowns.</p></Help></details>
       <section className="panel pay-cycle-intro">
         <div className="pay-cycle-toolbar"><h2>Transactions behind the numbers</h2><label>Show transaction type<select value={kind} onChange={event => { setKind(event.target.value); setPage(1) }}><option value="">All counted transactions</option>{kinds.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label></div>
         <p>{data.transactions.totalCount} matching transactions. Summary figures above always cover all counted transactions in the cycle.</p>
         <ol className="pay-cycle-transactions">{data.transactions.items.map(x => <li key={x.id}>
-          <div><strong>{x.description || x.merchantName || 'Transaction'}</strong><span>{dateLabel(x.postedDate)} · {x.accountName}</span><span>{kinds.find(y => y[0] === x.kind)?.[1]} · {x.category}</span></div><strong>{amount(x.amount)}</strong>
+          <div><strong>{x.description || x.merchantName || 'Transaction'}</strong><span>{dateLabel(x.postedDate)} · {x.accountName}</span><span>{kinds.find(y => y[0] === x.kind)?.[1]} · {categoryLabel(x.category)}</span></div><strong>{amount(x.amount)}</strong>
         </li>)}</ol>
         {data.transactions.totalCount === 0 && <p>No transactions match this selection.</p>}
         <div className="pay-cycle-toolbar"><button type="button" disabled={page <= 1 || query.isFetching} onClick={() => setPage(page - 1)}>Previous page</button><span>Page {page} of {Math.max(1, Math.ceil(data.transactions.totalCount / data.transactions.pageSize))}</span><button type="button" disabled={page * data.transactions.pageSize >= data.transactions.totalCount || query.isFetching} onClick={() => setPage(page + 1)}>Next page</button></div>

@@ -21,6 +21,7 @@ import { TransactionOptions, TransferBadge } from './transfers/TransferControl'
 import { TransferCorrections } from './transfers/TransferCorrections'
 import { PayCyclesPage } from './pay-cycles/PayCyclesPage'
 import { RecurringPage } from './recurring/RecurringPage'
+import { categoryLabel } from './shared/categoryLabel'
 import { GenerateTagsPrompt } from './tags/GenerateTagsPrompt'
 import { TagSuggestionsPage } from './tags/TagSuggestionsPage'
 import { TransactionAccountChip, TransactionAmount } from './transactions/TransactionCard'
@@ -511,6 +512,7 @@ function TransactionsPage() {
     }),
     transactionColumnHelper.accessor('category', {
       header: 'Category',
+      cell: x => categoryLabel(x.getValue()),
     }),
     transactionColumnHelper.accessor('tags', {
       header: 'Tags',
