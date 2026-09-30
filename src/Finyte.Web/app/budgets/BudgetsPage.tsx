@@ -9,6 +9,7 @@ import { dateLabel, todayDate } from '../shared/calendar'
 import { exactAmount } from '../shared/formatters'
 import type { TransactionTag } from '../transactions/types'
 import './budgets.css'
+import { categoryFullLabel, isIncomeCategory } from '../shared/categoryLabel'
 
 type Budget = {
   id: string; name: string; limit: number; currency: string; frequency: string; anchorDate: string
@@ -109,8 +110,8 @@ export function BudgetEditor({ budget, onSaved, onCancel, onReload }: { budget?:
         <p>Choose categories such as groceries, or optional tags such as holidays. A transaction counts if it matches <strong>any</strong> selection, and counts only once.</p>
         <fieldset className="budget-choices"><legend>Categories</legend>
           <label>Search categories<input type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Find a category" /></label>
-          <div className="budget-picked" aria-label="Selected categories">{categories.map(category => <button type="button" key={category} onClick={() => setCategories(x => x.filter(y => y !== category))}>{category}{missingCategories.includes(category) ? ' · unavailable' : ''} ×<span className="sr-only"> Remove category</span></button>)}</div>
-          <div className="budget-options">{availableCategories.data?.filter(x => x.toLowerCase().includes(search.toLowerCase())).map(category => <label key={category}><input type="checkbox" checked={categories.some(x => x.toLowerCase() === category.toLowerCase())} onChange={event => setCategories(x => event.target.checked ? [...x, category] : x.filter(y => y.toLowerCase() !== category.toLowerCase()))} />{category}</label>)}</div>
+          <div className="budget-picked" aria-label="Selected categories">{categories.map(category => <button type="button" key={category} onClick={() => setCategories(x => x.filter(y => y !== category))}>{categoryFullLabel(category)}{missingCategories.includes(category) ? ' · unavailable' : ''} ×<span className="sr-only"> Remove category</span></button>)}</div>
+          <div className="budget-options">{availableCategories.data?.filter(x => !isIncomeCategory(x) && categoryFullLabel(x).toLowerCase().includes(search.toLowerCase())).map(category => <label key={category}><input type="checkbox" checked={categories.some(x => x.toLowerCase() === category.toLowerCase())} onChange={event => setCategories(x => event.target.checked ? [...x, category] : x.filter(y => y.toLowerCase() !== category.toLowerCase()))} />{categoryFullLabel(category)}</label>)}</div>
           {availableCategories.isPending && <p>Loading categories…</p>}
           {availableCategories.error && <p role="alert">Unable to load categories. <button type="button" onClick={() => void availableCategories.refetch()}>Retry categories</button></p>}
           {availableCategories.data?.length === 0 && <p>No categories are available in your transactions yet. Use a tag, or import categorised transactions.</p>}
