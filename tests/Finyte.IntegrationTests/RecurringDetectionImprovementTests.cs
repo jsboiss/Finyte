@@ -252,6 +252,16 @@ public sealed class RecurringDetectionImprovementTests
     }
 
     [Fact]
+    public void AMonthlyBillThatLandsADayLateSometimesStaysMonthly()
+    {
+        var late = new[] { 0, 2, 4, 5, 9, 12, 17, 18, 19, 20 };
+        var rows = Enumerable.Range(0, 21).Select(x => Row(new DateOnly(2025, 1, 26).AddMonths(x).AddDays(late.Contains(x) ? 1 : 0), -150m - x % 9, "POWERCO RETAIL")).ToList();
+        var candidate = Assert.Single(RecurringPatternDetector.Detect(rows));
+        Assert.Equal("monthly", candidate.Cadence);
+        Assert.Equal(21, candidate.TransactionIds.Count);
+    }
+
+    [Fact]
     public void PatternsWithNoRecentPaymentAreMarkedEnded()
     {
         var rows = Enumerable.Range(1, 3).Select(x => Card(new DateOnly(2026, x, 5), -12m, "STREAMCO SYDNEY AUS")).ToList();
