@@ -262,6 +262,16 @@ public sealed class RecurringDetectionImprovementTests
     }
 
     [Fact]
+    public void TwoFortnightlyPlansEightDaysApartStayTwoPlans()
+    {
+        var rows = Enumerable.Range(0, 6).Select(x => Card(new DateOnly(2026, 1, 5).AddDays(x * 14), -20m, "STORAGECO BARANGAROO AU"))
+            .Concat(Enumerable.Range(0, 6).Select(x => Card(new DateOnly(2026, 1, 13).AddDays(x * 14), -24m, "STORAGECO BARANGAROO AU"))).ToList();
+        var candidates = RecurringPatternDetector.Detect(rows);
+        Assert.All(candidates, x => Assert.Equal("fortnightly", x.Cadence));
+        Assert.Equal(new[] { 20m, 24m }, candidates.Select(x => x.ExpectedAmount).Order());
+    }
+
+    [Fact]
     public void PatternsWithNoRecentPaymentAreMarkedEnded()
     {
         var rows = Enumerable.Range(1, 3).Select(x => Card(new DateOnly(2026, x, 5), -12m, "STREAMCO SYDNEY AUS")).ToList();
