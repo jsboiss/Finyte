@@ -271,6 +271,40 @@ public sealed class RecurringDetectionImprovementTests
         Assert.Equal(new[] { 20m, 24m }, candidates.Select(x => x.ExpectedAmount).Order());
     }
 
+    [Theory]
+    [InlineData(9.99, 14.99)]
+    [InlineData(9.99, 9.99)]
+    public void TwoMonthlyPlansOnTheFirstAndFifteenthStayMonthly(double first, double second)
+    {
+        var rows = Enumerable.Range(0, 8).SelectMany(x => new[]
+        {
+            Card(new DateOnly(2026, 1, 1).AddMonths(x), -(decimal)first, "STORAGECO BARANGAROO AU"),
+            Card(new DateOnly(2026, 1, 15).AddMonths(x), -(decimal)second, "STORAGECO BARANGAROO AU")
+        }).ToList();
+        var candidates = RecurringPatternDetector.Detect(rows);
+        Assert.Equal(2, candidates.Count);
+        Assert.All(candidates, x => Assert.Equal("monthly", x.Cadence));
+        Assert.Equal(new[] { 1, 15 }, candidates.Select(x => x.AnchorDate.Day).Order());
+    }
+
+    [Fact]
+    public void AFortnightlyChargeCrossingMonthEndsStaysFortnightly()
+    {
+        var rows = Enumerable.Range(0, 17).Select(x => Card(new DateOnly(2026, 1, 3).AddDays(x * 14), -15m, "GYMCO SPRINGFIELD")).ToList();
+        var candidate = Assert.Single(RecurringPatternDetector.Detect(rows));
+        Assert.Equal("fortnightly", candidate.Cadence);
+        Assert.Equal(17, candidate.TransactionIds.Count);
+    }
+
+    [Fact]
+    public void AWeeklyChargeStaysWeekly()
+    {
+        var rows = Enumerable.Range(0, 18).Select(x => Card(new DateOnly(2026, 1, 6).AddDays(x * 7), -6m, "COFFEECLUB SPRINGFIELD")).ToList();
+        var candidate = Assert.Single(RecurringPatternDetector.Detect(rows));
+        Assert.Equal("weekly", candidate.Cadence);
+        Assert.Equal(18, candidate.TransactionIds.Count);
+    }
+
     [Fact]
     public void PatternsWithNoRecentPaymentAreMarkedEnded()
     {
