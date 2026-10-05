@@ -10,22 +10,26 @@ function words(code: string) {
 }
 
 function primaryOf(code: string) {
-  return primaryCategories.find(x => code === x || code.startsWith(`${x}_`))
-}
-
-export function categoryLabel(code: string) {
-  if (!/^[A-Z0-9_]+$/.test(code)) {
-    return code
-  }
-  const primary = primaryOf(code)
-  return words(primary && primary !== code ? code.slice(primary.length + 1) : code)
+  return /^[A-Z0-9_]+$/.test(code) ? primaryCategories.find(x => code === x || code.startsWith(`${x}_`)) : undefined
 }
 
 export function categoryFullLabel(code: string) {
-  const primary = /^[A-Z0-9_]+$/.test(code) ? primaryOf(code) : undefined
-  return primary && primary !== code ? `${words(primary)}: ${categoryLabel(code)}` : categoryLabel(code)
+  const primary = primaryOf(code)
+  if (!primary) {
+    return /^[A-Z0-9_]+$/.test(code) ? words(code) : code
+  }
+  return primary === code ? words(code) : `${words(primary)}: ${words(code.slice(primary.length + 1))}`
+}
+
+export function categoryLabel(code: string) {
+  const primary = primaryOf(code)
+  if (!primary || primary === code || code === `${primary}_OTHER`) {
+    return categoryFullLabel(code)
+  }
+  return words(code.slice(primary.length + 1))
 }
 
 export function isIncomeCategory(code: string) {
-  return primaryOf(code) === 'INCOME' || primaryOf(code) === 'TRANSFER_IN'
+  const primary = primaryOf(code)
+  return primary === 'INCOME' || primary === 'TRANSFER_IN'
 }

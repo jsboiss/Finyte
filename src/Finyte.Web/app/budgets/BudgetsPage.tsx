@@ -77,6 +77,8 @@ export function BudgetEditor({ budget, onSaved, onCancel, onReload }: { budget?:
     categories: mode === 'selected' ? categories : [], tagIds: mode === 'selected' ? tagIds : [],
     accountScope: scope, accountIds: scope === 'selected' ? accountIds : [], expectedVersion: budget?.version }
   const missingCategories = categories.filter(x => availableCategories.data && !availableCategories.data.some(y => y.toLowerCase() === x.toLowerCase()))
+  const spendingCategories = (availableCategories.data ?? []).filter(x => !isIncomeCategory(x))
+  const shownCategories = spendingCategories.filter(x => categoryFullLabel(x).toLowerCase().includes(search.toLowerCase()))
   const missingTags = tagIds.filter(x => tags.data && !tags.data.some(y => y.id === x))
   const selectionError = mode === 'selected' && (!categories.length && !tagIds.length
     ? 'Choose at least one category or tag. Nothing is selected.'
@@ -111,11 +113,11 @@ export function BudgetEditor({ budget, onSaved, onCancel, onReload }: { budget?:
         <fieldset className="budget-choices"><legend>Categories</legend>
           <label>Search categories<input type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Find a category" /></label>
           <div className="budget-picked" aria-label="Selected categories">{categories.map(category => <button type="button" key={category} onClick={() => setCategories(x => x.filter(y => y !== category))}>{categoryFullLabel(category)}{missingCategories.includes(category) ? ' · unavailable' : ''} ×<span className="sr-only"> Remove category</span></button>)}</div>
-          <div className="budget-options">{availableCategories.data?.filter(x => !isIncomeCategory(x) && categoryFullLabel(x).toLowerCase().includes(search.toLowerCase())).map(category => <label key={category}><input type="checkbox" checked={categories.some(x => x.toLowerCase() === category.toLowerCase())} onChange={event => setCategories(x => event.target.checked ? [...x, category] : x.filter(y => y.toLowerCase() !== category.toLowerCase()))} />{categoryFullLabel(category)}</label>)}</div>
+          <div className="budget-options">{shownCategories.map(category => <label key={category}><input type="checkbox" checked={categories.some(x => x.toLowerCase() === category.toLowerCase())} onChange={event => setCategories(x => event.target.checked ? [...x, category] : x.filter(y => y.toLowerCase() !== category.toLowerCase()))} />{categoryFullLabel(category)}</label>)}</div>
           {availableCategories.isPending && <p>Loading categories…</p>}
           {availableCategories.error && <p role="alert">Unable to load categories. <button type="button" onClick={() => void availableCategories.refetch()}>Retry categories</button></p>}
-          {availableCategories.data?.length === 0 && <p>No categories are available in your transactions yet. Use a tag, or import categorised transactions.</p>}
-          {!!availableCategories.data?.length && !availableCategories.data.some(x => x.toLowerCase().includes(search.toLowerCase())) && <p>No categories match your search.</p>}
+          {availableCategories.isSuccess && spendingCategories.length === 0 && <p>No categories are available in your transactions yet. Use a tag, or import categorised transactions.</p>}
+          {spendingCategories.length > 0 && shownCategories.length === 0 && <p>No categories match your search.</p>}
         </fieldset>
         <fieldset className="budget-choices"><legend>Tags (optional)</legend>
           <label>Search tags<input type="search" value={tagSearch} onChange={event => setTagSearch(event.target.value)} placeholder="Find a tag" /></label>
