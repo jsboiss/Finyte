@@ -333,7 +333,7 @@ public static class RecurringPatternDetector
 
     private static bool BetterExplainedBySeparatePatterns(PatternFit fit, List<PatternFit> alternatives)
     {
-        if (fit.Rows.Count < 6 || fit.TotalResidual == 0)
+        if (fit.Rows.Count < 6 || fit.TotalResidual == 0 || (PeriodDays(fit.Cadence) >= 28 && fit.Rows.Max(Residual) <= 1))
         {
             return false;
         }
