@@ -137,6 +137,32 @@ public sealed class TagSuggestionApiTests
     }
 
     [Fact]
+    public async Task PendingPaymentsAreSuggestedButNotCountedInCoverage()
+    {
+        await using var baseFactory = new FinyteApiFactory();
+        await using var factory = WithClock(baseFactory);
+        using var client = factory.CreateClient();
+        await Seed(factory, client, billing: true);
+        var before = (await client.GetFromJsonAsync<TagSuggestionsResponse>(Url))!;
+        using (var scope = factory.Services.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<FinyteDbContext>();
+            var account = await dbContext.Accounts.SingleAsync(x => x.Name == "Everyday");
+            var pending = Row(account, 9, 7, -49m, "GROCERCO RICHMOND AUS");
+            pending.Status = "pending";
+            pending.PostedAt = null;
+            pending.CreatedAt = new DateTimeOffset(2026, 9, 7, 2, 0, 0, TimeSpan.Zero);
+            pending.PrimaryCategory = "FOOD_AND_DRINK";
+            pending.SecondaryCategory = "FOOD_AND_DRINK_GROCERIES";
+            dbContext.Transactions.Add(pending);
+            await dbContext.SaveChangesAsync();
+        }
+        var after = (await client.GetFromJsonAsync<TagSuggestionsResponse>(Url))!;
+        Assert.Contains(Assert.Single(after.Groups, x => x.TagName == "Groceries").Merchants, x => x.RuleMerchantName == "GROCERCO RICHMOND AUS");
+        Assert.Equal(before.Coverage, after.Coverage);
+    }
+
+    [Fact]
     public async Task ApplyingOnceTagsExistingPaymentsWithoutARule()
     {
         await using var baseFactory = new FinyteApiFactory();
