@@ -23,16 +23,19 @@ public sealed class TagSuggestionService(FinyteDbContext dbContext, TenantCalend
         }
         var accounts = await dbContext.Accounts.AsNoTracking().Where(x => x.TenantId == tenantId).ToListAsync(cancellationToken);
         var accountIds = accounts.Where(AccountPreferences.IncludeInAnalytics).Select(x => x.Id).ToArray();
+        var rangeStart = calendar.StartOf(start);
+        var rangeEnd = calendar.EndExclusive(end);
         var rows = await dbContext.Transactions.AsNoTracking()
             .Where(x => x.TenantId == tenantId && x.Amount < 0 && accountIds.Contains(x.AccountId)
-                && x.PostedAt >= calendar.StartOf(start) && x.PostedAt < calendar.EndExclusive(end))
+                && ((x.PostedAt >= rangeStart && x.PostedAt < rangeEnd)
+                    || (x.PostedAt == null && (x.ExecutedAt ?? x.CreatedAt) >= rangeStart && (x.ExecutedAt ?? x.CreatedAt) < rangeEnd)))
             .ExcludeInternalTransfers()
             .Select(x => new SpendRow(x.Amount, x.Currency, x.MerchantName, x.Description, x.PrimaryCategory, x.SecondaryCategory,
-                x.TagAssignments.Any(y => y.Tag != null && y.Tag.TenantId == tenantId)))
+                x.TagAssignments.Any(y => y.Tag != null && y.Tag.TenantId == tenantId), x.PostedAt != null))
             .ToListAsync(cancellationToken);
         var tags = await dbContext.TransactionTags.AsNoTracking().Where(x => x.TenantId == tenantId).ToListAsync(cancellationToken);
 
-        var coverage = rows.GroupBy(x => x.Currency.ToUpperInvariant()).OrderBy(x => x.Key)
+        var coverage = rows.Where(x => x.Posted).GroupBy(x => x.Currency.ToUpperInvariant()).OrderBy(x => x.Key)
             .Select(x => new TagCoverage(x.Key, x.Where(y => y.Tagged).Sum(y => MinorUnits(y.Amount)), x.Sum(y => MinorUnits(y.Amount))))
             .ToList();
 
@@ -182,7 +185,7 @@ public sealed class TagSuggestionService(FinyteDbContext dbContext, TenantCalend
     private static long MinorUnits(decimal amount) => (long)decimal.Round(Math.Abs(amount) * 100, MidpointRounding.AwayFromZero);
 
     private sealed record SpendRow(decimal Amount, string Currency, string? MerchantName, string? Description,
-        string? PrimaryCategory, string? SecondaryCategory, bool Tagged);
+        string? PrimaryCategory, string? SecondaryCategory, bool Tagged, bool Posted);
 
     private sealed class MerchantBuilder(string ruleName)
     {

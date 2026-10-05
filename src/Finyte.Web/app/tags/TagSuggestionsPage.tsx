@@ -6,6 +6,7 @@ import { exactCurrency } from '../shared/formatters'
 import { Help } from '../shared/Help'
 import type { TransactionTag } from '../transactions/types'
 import { acceptTagSuggestions, getTagSuggestions, starterTagNames, type AcceptItem, type MerchantSuggestion, type TagSuggestionGroup } from './tagSuggestionsApi'
+import { categoryFullLabel } from '../shared/categoryLabel'
 import './TagSuggestions.css'
 
 export function TagSuggestionsPage() {
@@ -39,7 +40,7 @@ export function TagSuggestionsPage() {
         <label><input type="radio" name="tag-mode" checked={mode === 'once'} onChange={() => setMode('once')} />Only tag existing payments</label>
       </fieldset>
       {data.coverage.map(x => <Coverage key={x.currency} tagged={x.taggedMinorUnits} total={x.totalMinorUnits} currency={x.currency} />)}
-      {data.groups.length === 0 && data.needsTag.length === 0 && <section className="panel"><h2>Everything is tagged</h2><p>New merchants will appear here after your next import.</p></section>}
+      {data.groups.length === 0 && data.needsTag.length === 0 && <section className="panel"><h2>Everything is tagged</h2><p>New merchants will appear here after your next sync or import.</p></section>}
       {data.groups.map(group => <SuggestionGroup key={group.tagName} group={group} tagNames={tagNames} busy={accept.isPending} onAccept={items => accept.mutate(items)} />)}
       {data.needsTag.length > 0 && <section className="panel tag-suggestion-group">
         <div className="tag-suggestion-heading"><div><h2>Needs a tag</h2><p className="tag-suggestion-muted">{data.needsTag.length} merchants without a suggestion</p></div></div>
@@ -75,7 +76,7 @@ function MerchantRow({ merchant, suggested, tagNames, busy, onAccept }: { mercha
   const [tagName, setTagName] = useState(suggested ?? '')
   return <li className="tag-suggestion-merchant">
     <div className="tag-suggestion-merchant-name"><strong>{merchant.ruleMerchantName}</strong>
-      <span className="tag-suggestion-muted">{merchant.transactionCount} {merchant.transactionCount === 1 ? 'payment' : 'payments'} · {exactCurrency(merchant.spendMinorUnits, merchant.currency)}{merchant.reason ? ` · ${merchant.reason}` : ''}</span>
+      <span className="tag-suggestion-muted">{merchant.transactionCount} {merchant.transactionCount === 1 ? 'payment' : 'payments'} · {exactCurrency(merchant.spendMinorUnits, merchant.currency)}{merchant.reason ? ` · ${merchant.reason.replace(/^Bank category: (\S+)$/, (_, code: string) => `Bank category: ${categoryFullLabel(code)}`)}` : ''}</span>
       {merchant.examples.length > 1 && <span className="tag-suggestion-muted">Includes {merchant.examples.join(', ')}</span>}</div>
     <label className="tag-suggestion-select"><select aria-label={`Tag for ${merchant.ruleMerchantName}`} value={tagName} onChange={event => setTagName(event.target.value)}><option value="">Choose a tag</option>{tagNames.map(x => <option key={x} value={x}>{x}</option>)}</select></label>
     <button type="button" disabled={busy || !tagName} onClick={() => onAccept([{ merchantName: merchant.ruleMerchantName, tagName }])}>Accept</button>
