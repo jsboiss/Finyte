@@ -65,7 +65,7 @@ export function DashboardPage() {
   })
   const accountOptions: OverviewAccountOption[] = [
     { id: allAccountsScope, label: 'All accounts' },
-    ...(groupsQuery.data ?? []).map(x => ({ id: `group:${x.id}`, label: `Group: ${x.name}` })),
+    ...(groupsQuery.data ?? []).filter(x => x.accountIds.length > 0).map(x => ({ id: `group:${x.id}`, label: `Group: ${x.name}` })),
     ...(accountsQuery.data ?? []).map(x => ({ id: x.id, label: x.name })),
     ...(selectedScope.startsWith('set:') ? [{ id: selectedScope, label: `${selectedIds?.length ?? 0} accounts` }] : []),
     { id: chooseSeveralValue, label: 'Choose several…' },

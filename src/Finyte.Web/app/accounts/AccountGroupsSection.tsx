@@ -26,9 +26,9 @@ export function AccountGroupsSection({ accounts }: { accounts: Account[] }) {
     {remove.isError && <p role="alert">That group could not be deleted.</p>}
     {groups.data?.length === 0 && <p className="empty-inline">No groups yet.</p>}
     <ul className="account-group-list">{groups.data?.map(group => <li key={group.id}>
-      <div><strong>{group.name}</strong><small>{group.accountIds.length} {group.accountIds.length === 1 ? 'account' : 'accounts'} · {names(group)}</small></div>
+      <div><strong>{group.name}</strong><small>{group.accountIds.length === 0 ? 'No accounts left. Edit to add some, or delete it.' : `${group.accountIds.length} ${group.accountIds.length === 1 ? 'account' : 'accounts'} · ${names(group)}`}</small></div>
       <div className="account-group-actions">
-        <Link to="/" search={{ scope: `group:${group.id}` }}>View</Link>
+        {group.accountIds.length > 0 && <Link to="/" search={{ scope: `group:${group.id}` }}>View</Link>}
         <button type="button" className="secondary" onClick={() => { save.reset(); setDraft({ id: group.id, name: group.name, accountIds: group.accountIds }) }}>Edit</button>
         <button type="button" className="secondary" disabled={remove.isPending} onClick={() => remove.mutate(group.id)}>Delete</button>
       </div>
