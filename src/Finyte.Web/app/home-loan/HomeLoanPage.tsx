@@ -1,13 +1,13 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { httpClient } from '../api/httpClient'
 import { Drawer } from '../shared/Drawer'
 import { exactAmount } from '../shared/formatters'
 import { Help } from '../shared/Help'
 import { starterTagNames } from '../tags/tagSuggestionsApi'
 import type { TransactionTag } from '../transactions/types'
-import { downloadCsv, getHomeLoan, lenderCategories, monthLabel, saveCategory, saveIncomeSource, type HomeLoanPayment, type HomeLoanReport } from './homeLoanApi'
+import { dayLabel, downloadCsv, getHomeLoan, monthLabel, saveCategory, saveIncomeSource, type HomeLoanPayment, type HomeLoanReport, type LenderCategory } from './homeLoanApi'
 import { HomeLoanSetup } from './HomeLoanSetup'
 import { MerchantRow, type TagDone } from './MerchantRow'
 import { MoneyFlowChart } from './MoneyFlowChart'
@@ -99,14 +99,18 @@ export function HomeLoanPage() {
 function Summary({ data }: { data: HomeLoanReport }) {
   const money = (value: number) => exactAmount(value, data.currency)
   const average = data.average
-  return <section className="home-loan-metrics" aria-label="Monthly averages">
+  const beyondLeftOver = average.saved - Math.max(average.surplus, 0)
+  return <>
+    <section className="home-loan-metrics" aria-label="Monthly averages">
     <article className="panel"><span>Income: {data.setup.firstApplicant}</span><strong>{money(average.firstApplicantIncome)}</strong><small>a month</small></article>
     {data.setup.secondApplicant && <article className="panel"><span>Income: {data.setup.secondApplicant}</span><strong>{money(average.secondApplicantIncome)}</strong><small>a month</small></article>}
     <article className="panel"><span>Living expenses</span><strong>{money(average.livingExpenses)}</strong><small>a month</small></article>
     <article className="panel"><span>Commitments</span><strong>{money(average.commitments)}</strong><small>rent, loans, cards, buy now pay later</small></article>
     <article className="panel"><span>Saved</span><strong>{money(average.saved)}</strong><small>a month · {money(data.total.saved)} in total</small></article>
     <article className="panel"><span>Left over</span><strong className={average.surplus < 0 ? 'home-loan-negative' : ''}>{money(average.surplus)}</strong><small>a month, after expenses and commitments</small></article>
-  </section>
+    </section>
+    {beyondLeftOver >= 1 && <p className="home-loan-callout">You saved {money(beyondLeftOver)} a month more than was left over, so it came from money you already had{average.unlabelledCredits > 0 ? ' or from money in that isn’t labelled yet' : ''}. A broker may ask where it came from.</p>}
+  </>
 }
 
 function ToDo({ data }: { data: HomeLoanReport }) {
@@ -154,16 +158,22 @@ function IncomeSection({ data, onChanged }: { data: HomeLoanReport; onChanged: (
   return <section className="panel home-loan-section" id="home-loan-income"><h2>Money in</h2>
     <p>Label each payer once and every payment from them follows. Lenders check that salary arrives regularly and matches your payslips.</p>
     {data.payers.length === 0 && <p>No money came in during this period.</p>}
-    <ul className="home-loan-list">{data.payers.map(payer => <PayerRow key={payer.key} payer={payer} options={options} currency={data.currency} onChanged={onChanged} />)}</ul>
+    <ul className="home-loan-list">{data.payers.map(payer => <PayerRow key={payer.key} payer={payer} options={options} people={people.length} currency={data.currency} onChanged={onChanged} />)}</ul>
   </section>
 }
 
-function PayerRow({ payer, options, currency, onChanged }: { payer: HomeLoanReport['payers'][number]; options: [string, string][]; currency: string; onChanged: () => Promise<unknown> }) {
+function PayerRow({ payer, options, people, currency, onChanged }: {
+  payer: HomeLoanReport['payers'][number]; options: [string, string][]; people: number; currency: string; onChanged: () => Promise<unknown>
+}) {
   const saved = payer.kind ? `${payer.kind}:${payer.applicant ?? ''}` : ''
   const known = options.some(([value]) => value === saved)
-  const [choice, setChoice] = useState(known ? saved : '')
+  const salaryChoice = people === 1 ? 'salary:1' : ''
+  const suggestion = payer.kind || !payer.suggestedKind ? '' : payer.suggestedKind === 'salary' ? salaryChoice : `${payer.suggestedKind}:`
+  const [choice, setChoice] = useState(known ? saved : suggestion)
   const save = useMutation({ mutationFn: saveIncomeSource, onSuccess: onChanged })
+  const hintId = useId()
   const needs = !payer.kind || !known
+  const hint = payer.kind ? '' : payer.suggestedKind === 'salary' && !suggestion ? 'Looks like salary. Choose whose.' : suggestion && choice === suggestion ? 'Suggested from the name' : ''
   return <li className={needs ? 'home-loan-needs' : ''}>
     <div><strong>{payer.name}{payer.paymentType && <span className="home-loan-pill" data-type={payer.paymentType}>{payer.paymentType}</span>}</strong>
       <span>{payer.count} {payer.count === 1 ? 'payment' : 'payments'} in {payer.monthsSeen} {payer.monthsSeen === 1 ? 'month' : 'months'} · {exactAmount(payer.total, currency)}{needs ? ' · needs a label' : ''}</span>
@@ -173,10 +183,11 @@ function PayerRow({ payer, options, currency, onChanged }: { payer: HomeLoanRepo
       const [kind, applicant] = choice.split(':')
       save.mutate({ key: payer.key, name: payer.name, kind: kind || null, applicant: applicant ? Number(applicant) : null })
     }}>
-      <select aria-label={`Label for ${payer.name}`} value={choice} onChange={event => setChoice(event.target.value)}>
+      <select aria-label={`Label for ${payer.name}`} aria-describedby={hint ? hintId : undefined} value={choice} onChange={event => setChoice(event.target.value)}>
         {options.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
       </select>
       <button type="submit" className={choice === saved ? 'home-loan-secondary' : ''} disabled={save.isPending || choice === saved}>{save.isPending ? 'Saving…' : 'Save'}</button>
+      <small id={hintId} className="home-loan-hint">{hint}</small>
     </form>
     {save.isError && <p role="alert">That label could not be saved. Try again.</p>}
   </li>
@@ -223,12 +234,12 @@ function ExpenseSection({ data, onChanged, onDone }: { data: HomeLoanReport; onC
     {data.tags.length > 0 && <details className="home-loan-tag-map">
       <summary>Lender categories for your tags ({data.tags.length})</summary>
       <p>Each tag counts towards one lender category. Suggested categories are marked.</p>
-      <ul className="home-loan-list">{data.tags.map(x => <TagCategoryRow key={`${x.tagId}-${x.category}`} tag={x} currency={data.currency} onChanged={onChanged} />)}</ul>
+      <ul className="home-loan-list">{data.tags.map(x => <TagCategoryRow key={`${x.tagId}-${x.category}`} tag={x} categories={data.lenderCategories} currency={data.currency} onChanged={onChanged} />)}</ul>
     </details>}
   </section>
 }
 
-function TagCategoryRow({ tag, currency, onChanged }: { tag: HomeLoanReport['tags'][number]; currency: string; onChanged: () => Promise<unknown> }) {
+function TagCategoryRow({ tag, categories, currency, onChanged }: { tag: HomeLoanReport['tags'][number]; categories: LenderCategory[]; currency: string; onChanged: () => Promise<unknown> }) {
   const [choice, setChoice] = useState(tag.category)
   const save = useMutation({ mutationFn: saveCategory, onSuccess: onChanged })
   return <li>
@@ -236,7 +247,7 @@ function TagCategoryRow({ tag, currency, onChanged }: { tag: HomeLoanReport['tag
     <form className="home-loan-apply" onSubmit={event => { event.preventDefault(); save.mutate({ tagId: tag.tagId, category: choice }) }}>
       <select aria-label={`Lender category for ${tag.name}`} value={choice} onChange={event => setChoice(event.target.value)}>
         {(['living', 'commitment', 'savings', 'excluded'] as const).map(group => <optgroup key={group} label={groupLabels[group]}>
-          {lenderCategories.filter(y => y.group === group).map(y => <option key={y.key} value={y.key}>{y.label}</option>)}
+          {categories.filter(y => y.group === group).map(y => <option key={y.key} value={y.key}>{y.label}</option>)}
         </optgroup>)}
       </select>
       <button type="submit" className={choice === tag.category ? 'home-loan-secondary' : ''} disabled={save.isPending || choice === tag.category}>Save</button>
@@ -264,6 +275,6 @@ function FlagSection({ data }: { data: HomeLoanReport }) {
 function Payments({ payments, currency, label }: { payments: HomeLoanPayment[]; currency: string; label: string }) {
   return <details className="home-loan-payments">
     <summary>Show payments<span className="visually-hidden"> from {label}</span></summary>
-    <ul>{payments.map(x => <li key={x.transactionId}><span>{x.date} · {x.account}</span><span>{x.description}</span><strong>{exactAmount(x.amount, currency)}</strong></li>)}</ul>
+    <ul>{payments.map(x => <li key={x.transactionId}><span>{dayLabel(x.date)} · {x.account}</span><span>{x.description}</span><strong>{exactAmount(x.amount, currency)}</strong></li>)}</ul>
   </details>
 }

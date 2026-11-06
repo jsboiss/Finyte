@@ -1,3 +1,5 @@
+using Finyte.Core.HomeLoans;
+
 namespace Finyte.Data.HomeLoans;
 
 public sealed record HomeLoanReport(
@@ -15,7 +17,8 @@ public sealed record HomeLoanReport(
     IReadOnlyList<HomeLoanPayer> Payers,
     IReadOnlyList<HomeLoanMerchant> NeedsLabel,
     IReadOnlyList<HomeLoanFlag> Flags,
-    IReadOnlyList<HomeLoanGap> Gaps);
+    IReadOnlyList<HomeLoanGap> Gaps,
+    IReadOnlyList<HomeLoanCategory> LenderCategories);
 
 public sealed record HomeLoanSetup(string FirstApplicant, string? SecondApplicant, IReadOnlyList<HomeLoanAccountRole> Accounts, int Version, bool Saved);
 
@@ -29,7 +32,7 @@ public sealed record HomeLoanCategoryTotal(string Key, string Label, string Grou
 public sealed record HomeLoanTagChoice(Guid TagId, string Name, string Color, string Category, bool IsDefault, decimal Total);
 
 public sealed record HomeLoanPayer(string Key, string Name, string? PaymentType, string? Kind, int? Applicant, int Count, decimal Total, int MonthsSeen,
-    DateOnly LatestDate, IReadOnlyList<HomeLoanPayment> Payments);
+    DateOnly LatestDate, IReadOnlyList<HomeLoanPayment> Payments, string? SuggestedKind);
 
 public sealed record HomeLoanMerchant(string Key, string Name, bool Confirmed, IReadOnlyList<string> PaymentTypes, string? SuggestedTag, int Count, decimal Total,
     IReadOnlyList<HomeLoanMerchantVariant> Variants, IReadOnlyList<HomeLoanPayment> Payments);

@@ -90,7 +90,9 @@ public sealed class HomeLoanApiTests
         Assert.Equal((2, 100m), (powerco.Variants.Count, powerco.Total));
         Assert.Contains("Direct debit", powerco.PaymentTypes);
         Assert.Equal(2, powerco.Payments.Count);
-        Assert.Equal(3, Assert.Single(report.Payers, x => x.Name.Contains("ACME")).Payments.Count);
+        Assert.Equal(3, Assert.Single(report.Payers, x => x.Name == "Acme").Payments.Count);
+        Assert.Equal(("salary", "other-income"), (Assert.Single(before.Payers, x => x.Name == "Betaco").SuggestedKind, Assert.Single(before.Payers, x => x.Name == "Interest").SuggestedKind));
+        Assert.Null(Assert.Single(report.Payers, x => x.Name == "Acme").SuggestedKind);
         var savingsTransfer = Assert.Single(before.NeedsLabel, x => x.Name == "Car savings");
         Assert.Equal(("Savings", "Transfer"), (savingsTransfer.SuggestedTag, Assert.Single(savingsTransfer.PaymentTypes)));
         Assert.Equal(6000m, Assert.Single(report.Categories, x => x.Key == "rent").Total);
@@ -143,7 +145,11 @@ public sealed class HomeLoanApiTests
                 Row(everyday, 8, 15, -75m, "Transfer to xx4321 CommBank app"),
                 Row(everyday, 8, 16, -95m, "CPA AUSTRALIA"),
                 Row(everyday, 8, 12, -99m, "Direct Debit 123456 TEACHERS 998877"),
-                Row(everyday, 8, 13, -99m, "TEACHERS HEALTH SPRINGFIELD VI AUS"));
+                Row(everyday, 8, 13, -99m, "TEACHERS HEALTH SPRINGFIELD VI AUS"),
+                Row(everyday, 8, 1, 900m, "Salary GlenTech 12345 31/07/2026"),
+                Row(everyday, 8, 2, 150m, "Direct Credit 111222 GLENTECH PTY LTD PAY000123"),
+                Row(everyday, 8, 3, 80m, "Direct Credit 333444 MCARE BENEFITS 555666777 ABCD"),
+                Row(everyday, 8, 4, 40m, "Fast Transfer From Robin Lee Smith Reimb dinner"));
             await dbContext.SaveChangesAsync();
         }
         var report = await Get(client);
@@ -161,6 +167,10 @@ public sealed class HomeLoanApiTests
         var clinic = Assert.Single(report.NeedsLabel, x => x.Name == "Glenco Clinic");
         Assert.Equal(2, clinic.Variants.Count);
         Assert.False(clinic.Confirmed);
+        var employer = Assert.Single(report.Payers, x => x.Name == "GlenTech");
+        Assert.Equal((2, 1050m, "salary"), (employer.Count, employer.Total, employer.SuggestedKind));
+        Assert.Equal("refund", Assert.Single(report.Payers, x => x.Name == "Mcare Benefits").SuggestedKind);
+        Assert.Equal("refund", Assert.Single(report.Payers, x => x.Name == "Robin Lee Smith").SuggestedKind);
 
         (await client.PutAsJsonAsync("/api/merchant-vendors", new { assignments = new[]
         {

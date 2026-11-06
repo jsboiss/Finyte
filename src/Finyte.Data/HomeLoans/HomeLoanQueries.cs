@@ -130,14 +130,19 @@ public sealed class HomeLoanQueries(FinyteDbContext dbContext, TenantCalendars c
             }
             else if (transaction.Amount > 0)
             {
-                var key = HomeLoanCatalog.PayerKey(transaction.MerchantName, transaction.Description);
-                var source = sources.GetValueOrDefault(key);
-                if (!payers.TryGetValue(key, out var payer))
+                var payerName = HomeLoanCatalog.DescribePayer(transaction.MerchantName, transaction.Description);
+                var source = sources.GetValueOrDefault(payerName.Key);
+                if (!payers.TryGetValue(payerName.Key, out var payer))
                 {
-                    payer = new PayerTotals(StatementNameCleaner.Clean(string.IsNullOrWhiteSpace(transaction.MerchantName) ? transaction.Description : transaction.MerchantName),
-                        HomeLoanCatalog.Describe(transaction.MerchantName, transaction.Description).PaymentType);
-                    payers[key] = payer;
+                    payer = new PayerTotals(payerName.Name, HomeLoanCatalog.Describe(transaction.MerchantName, transaction.Description).PaymentType);
+                    payers[payerName.Key] = payer;
                 }
+                if (payerName.Typed && !payer.Typed)
+                {
+                    payer.Name = payerName.Name;
+                    payer.Typed = true;
+                }
+                payer.SuggestedKind ??= payerName.SuggestedKind;
                 payer.Count++;
                 payer.Total += transaction.Amount;
                 payer.Months.Add(index);
@@ -169,7 +174,7 @@ public sealed class HomeLoanQueries(FinyteDbContext dbContext, TenantCalendars c
                         type = "Credit not yet labelled";
                         break;
                 }
-                if (amount >= HomeLoanCatalog.LargeDepositThreshold && source?.Kind is null or "gift" or "other-income")
+                if (amount >= HomeLoanCatalog.LargeDeposits.Threshold && source?.Kind is null or "gift" or "other-income")
                 {
                     flag = "Large one-off deposit";
                     Flag(flags, "large-deposit", new HomeLoanFlagItem(date, account, description, amount));
@@ -261,14 +266,13 @@ public sealed class HomeLoanQueries(FinyteDbContext dbContext, TenantCalendars c
         var payerList = payers.Select(x =>
         {
             var source = sources.GetValueOrDefault(x.Key);
-            return new HomeLoanPayer(x.Key, source?.Name ?? x.Value.Name, x.Value.PaymentType, source?.Kind, source?.Applicant, x.Value.Count, x.Value.Total, x.Value.Months.Count, x.Value.Latest,
-                x.Value.Payments.OrderByDescending(y => y.Date).Take(24).ToList());
+            return new HomeLoanPayer(x.Key, x.Value.Name, x.Value.PaymentType, source?.Kind, source?.Applicant, x.Value.Count, x.Value.Total, x.Value.Months.Count, x.Value.Latest,
+                x.Value.Payments.OrderByDescending(y => y.Date).Take(24).ToList(), source is null ? x.Value.SuggestedKind : null);
         }).OrderBy(x => x.Kind is null ? 0 : 1).ThenByDescending(x => x.Total).Take(150).ToList();
         var flagList = flags.Select(x =>
         {
             var rule = HomeLoanCatalog.FlagRules.FirstOrDefault(y => y.Kind == x.Key);
-            return new HomeLoanFlag(x.Key, rule?.Label ?? "Large one-off deposits",
-                rule?.Advice ?? "Lenders ask where large deposits came from. Gifts and windfalls usually don't count as genuine savings.",
+            return new HomeLoanFlag(x.Key, rule?.Label ?? HomeLoanCatalog.LargeDeposits.Label, rule?.Advice ?? HomeLoanCatalog.LargeDeposits.Advice,
                 x.Value.Count, x.Value.Sum(y => y.Amount), x.Value.OrderByDescending(y => y.Date).Take(50).ToList());
         }).OrderBy(x => x.Label).ToList();
         var gaps = scope.Select(x => new HomeLoanGap(x.Id, names[x.Id],
@@ -280,7 +284,7 @@ public sealed class HomeLoanQueries(FinyteDbContext dbContext, TenantCalendars c
         var report = new HomeLoanReport(currency, months, monthKeys[0], monthKeys[^1], availableMonths, setup, monthly, average, total,
             categoryTotals, tagChoices, payerList,
             Cluster(needsLabel, vendors).OrderByDescending(x => x.Total).ThenBy(x => x.Name).ToList(),
-            flagList, gaps);
+            flagList, gaps, HomeLoanCatalog.Categories);
         return (report, rows);
     }
 
@@ -406,7 +410,7 @@ public sealed class HomeLoanQueries(FinyteDbContext dbContext, TenantCalendars c
             var types = Members.Select(x => x.Variant.Name.PaymentType).OfType<string>().Distinct().Order(StringComparer.Ordinal).ToList();
             var suggestion = ordered.Select(x => MerchantKeywordCatalog.Suggest(Tagging.MerchantTagMatcher.Normalize(x.Rule))?.TagName)
                 .FirstOrDefault(x => x is not null && x != "Transfers")
-                ?? (types.Contains("Transfer") && Name.Contains("saving", StringComparison.OrdinalIgnoreCase) ? "Savings" : null);
+                ?? (types.Contains("Transfer") ? HomeLoanRules.Current.TransferTagHints.FirstOrDefault(x => Name.Contains(x.Key, StringComparison.OrdinalIgnoreCase)).Value : null);
             return new HomeLoanMerchant(Key, Name, Confirmed, types, suggestion, Members.Sum(x => x.Variant.Count), Members.Sum(x => x.Variant.Total),
                 ordered.Select(x => new HomeLoanMerchantVariant(x.Rule, x.Variant.Name.OwnName, x.Variant.Count, x.Variant.Total)).ToList(),
                 Members.SelectMany(x => x.Variant.Payments).OrderByDescending(x => x.Date).Take(30).ToList());
@@ -430,7 +434,9 @@ public sealed class HomeLoanQueries(FinyteDbContext dbContext, TenantCalendars c
 
     private sealed class PayerTotals(string name, string? paymentType)
     {
-        public string Name { get; } = name;
+        public string Name { get; set; } = name;
+        public bool Typed { get; set; }
+        public string? SuggestedKind { get; set; }
         public string? PaymentType { get; } = paymentType;
         public List<HomeLoanPayment> Payments { get; } = [];
         public int Count { get; set; }
