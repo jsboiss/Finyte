@@ -7,7 +7,7 @@ import { link, type LinkError } from '@fiskil/link'
 import { QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createRootRoute, createRoute, createRouter, Link, Outlet, RouterProvider, redirect, useNavigate, useSearch, useRouterState } from '@tanstack/react-router'
 import { createColumnHelper, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table'
-import { CalendarDays, Upload, Activity, Banknote, CreditCard, Home, Mail, Menu, Plus, ReceiptText, Settings, Shield, SlidersHorizontal, Tags, Trash2, UserPlus, Users, X } from './shared/Icons'
+import { CalendarDays, Upload, Activity, Banknote, CreditCard, Home, Mail, Menu, Plus, ReceiptText, Settings, Shield, SlidersHorizontal, Tags, Trash2, UserPlus, Users, WalletCards, X } from './shared/Icons'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { getAccounts, getAppStatus } from './api/generated/finyteApi'
 import { AccountsPage } from './accounts/AccountsPage'
@@ -19,6 +19,7 @@ import { DashboardPage } from './dashboard/DashboardPage'
 import { ImportsPage } from './imports/ImportsPage'
 import { TransactionOptions, TransferBadge } from './transfers/TransferControl'
 import { TransferCorrections } from './transfers/TransferCorrections'
+import { HomeLoanPage } from './home-loan/HomeLoanPage'
 import { PayCyclesPage } from './pay-cycles/PayCyclesPage'
 import { RecurringPage } from './recurring/RecurringPage'
 import { categoryLabel } from './shared/categoryLabel'
@@ -234,6 +235,7 @@ function AppNavLinks({ onNavigate }: { onNavigate?: () => void }) {
     <span className="nav-group-label">Planning</span>
     <Link to="/budgets" activeProps={{ className: 'active' }} onClick={onNavigate}><Banknote />Budgets</Link>
     <Link to="/pay-cycles" activeProps={{ className: 'active' }} onClick={onNavigate}><Banknote />Pay cycles</Link>
+    <Link to="/home-loan" activeProps={{ className: 'active' }} onClick={onNavigate}><WalletCards />Home loan</Link>
     <Link to="/recurring" activeProps={{ className: 'active' }} onClick={onNavigate}><CalendarDays />Recurring payments</Link>
     <span className="nav-group-label">Management</span>
     <Link to="/imports" activeProps={{ className: 'active' }} onClick={onNavigate}><Upload />Imports</Link>
@@ -242,6 +244,9 @@ function AppNavLinks({ onNavigate }: { onNavigate?: () => void }) {
 }
 
 function getPageTitle(pathname: string) {
+  if (pathname.startsWith('/home-loan')) {
+    return 'Home loan'
+  }
   if (pathname.startsWith('/pay-cycles')) {
     return 'Pay cycles'
   }
@@ -1288,6 +1293,7 @@ const settingsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/set
 const importsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/imports', component: ImportsPage })
 const accountsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/accounts', component: AccountsPage })
 const payCyclesRoute = createRoute({ getParentRoute: () => rootRoute, path: '/pay-cycles', component: PayCyclesPage })
+const homeLoanRoute = createRoute({ getParentRoute: () => rootRoute, path: '/home-loan', component: HomeLoanPage })
 const budgetsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/budgets', component: BudgetsPage })
 const recurringRoute = createRoute({ getParentRoute: () => rootRoute, path: '/recurring', component: RecurringPage })
 const tagSuggestionsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/tag-suggestions', component: TagSuggestionsPage })
@@ -1298,7 +1304,7 @@ const transfersRoute = createRoute({
     view: typeof search.view === 'string' && ['transfers', 'excluded'].includes(search.view) ? search.view : undefined,
   }),
 })
-const routeTree = rootRoute.addChildren([indexRoute, connectionsRoute, transactionsRoute, billingRoute, settingsRoute, importsRoute, transfersRoute, accountsRoute, budgetsRoute, payCyclesRoute, recurringRoute, tagSuggestionsRoute])
+const routeTree = rootRoute.addChildren([indexRoute, connectionsRoute, transactionsRoute, billingRoute, settingsRoute, importsRoute, transfersRoute, accountsRoute, budgetsRoute, payCyclesRoute, homeLoanRoute, recurringRoute, tagSuggestionsRoute])
 const router = createRouter({ routeTree })
 
 declare module '@tanstack/react-router' {
