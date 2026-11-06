@@ -6,8 +6,4 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
-  <ItemGroup>
-    <EmbeddedResource Include="HomeLoans\home-loan-rules.json" LogicalName="Finyte.Core.HomeLoans.home-loan-rules.json" />
-  </ItemGroup>
-
 </Project>

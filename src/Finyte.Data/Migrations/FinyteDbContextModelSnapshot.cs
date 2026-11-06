@@ -217,28 +217,6 @@ namespace Finyte.Data.Migrations
                     b.ToTable("merchant_tag_rules", (string)null);
                 });
 
-            modelBuilder.Entity("Finyte.Core.Accounts.MerchantVendor", b =>
-                {
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("MatchKey")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.Property<DateTimeOffset>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Vendor")
-                        .IsRequired()
-                        .HasMaxLength(120)
-                        .HasColumnType("character varying(120)");
-
-                    b.HasKey("TenantId", "MatchKey");
-
-                    b.ToTable("merchant_vendors", (string)null);
-                });
-
             modelBuilder.Entity("Finyte.Core.Accounts.Transaction", b =>
                 {
                     b.Property<Guid>("Id")
@@ -849,6 +827,29 @@ namespace Finyte.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("home_loan_income_sources", (string)null);
+                });
+
+            modelBuilder.Entity("Finyte.Core.HomeLoans.HomeLoanPaymentCategory", b =>
+                {
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TransactionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("TenantId", "TransactionId");
+
+                    b.HasIndex("TransactionId");
+
+                    b.ToTable("home_loan_payment_categories", (string)null);
                 });
 
             modelBuilder.Entity("Finyte.Core.HomeLoans.HomeLoanProfile", b =>
@@ -1758,6 +1759,15 @@ namespace Finyte.Data.Migrations
                     b.HasOne("Finyte.Core.Accounts.TransactionTag", null)
                         .WithMany()
                         .HasForeignKey("TagId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Finyte.Core.HomeLoans.HomeLoanPaymentCategory", b =>
+                {
+                    b.HasOne("Finyte.Core.Accounts.Transaction", null)
+                        .WithMany()
+                        .HasForeignKey("TransactionId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

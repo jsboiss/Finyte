@@ -62,6 +62,8 @@ public sealed class HomeLoanApiTests
         Assert.Equal(7005m, before.MonthlyTotals[0].UnlabelledCredits);
         Assert.Equal("excluded", Assert.Single(before.Setup.Accounts, x => x.Name == "Home loan").Role);
         Assert.Equal("savings", Assert.Single(before.Setup.Accounts, x => x.Name == "Savings").Role);
+        Assert.All(before.Tags, x => Assert.Null(x.Category));
+        Assert.Equal(3, before.Payers.Count(x => x.Name.StartsWith("SALARY ACME", StringComparison.Ordinal)));
 
         var setup = await client.PutAsJsonAsync("/api/home-loan/setup", new
         {
@@ -70,13 +72,13 @@ public sealed class HomeLoanApiTests
         });
         setup.EnsureSuccessStatusCode();
         Assert.Equal(HttpStatusCode.Conflict, (await client.PutAsJsonAsync("/api/home-loan/setup", new { firstApplicant = "Alex", expectedVersion = 0, accounts = Array.Empty<object>() })).StatusCode);
-        await Label(client, before, "ACME", "salary", 1);
-        await Label(client, before, "BETACO", "salary", 2);
-        await Label(client, before, "MUM", "gift", null);
-        await Label(client, before, "INTEREST", "other-income", null);
-        var rent = Assert.Single(before.Tags, x => x.Name == "Rent");
-        Assert.Equal(("rent", true), (rent.Category, rent.IsDefault));
-        (await client.PutAsJsonAsync("/api/home-loan/categories", new { tagId = rent.TagId, category = "rent" })).EnsureSuccessStatusCode();
+        await Label(client, "Salary ACME pty ltd", "salary", 1);
+        await Label(client, "PAY BETACO PAYROLL", "salary", 2);
+        await Label(client, "TRANSFER FROM MUM", "gift", null);
+        await Label(client, "INTEREST", "other-income", null);
+        await Map(client, before, "Rent", "rent");
+        await Map(client, before, "Groceries", "food-groceries");
+        await Map(client, before, "Savings", "savings-elsewhere");
 
         var report = await Get(client);
         var june = report.MonthlyTotals[0];
@@ -86,22 +88,16 @@ public sealed class HomeLoanApiTests
         Assert.Equal((750m, 5000m, 4255m), (august.LivingExpenses, august.Gifts, august.Surplus));
         Assert.Equal(1505m, report.Average.Saved);
         Assert.Equal(1500m, Assert.Single(report.Categories, x => x.Key == "savings-elsewhere").Total);
-        var powerco = Assert.Single(report.NeedsLabel, x => x.Name == "Powerco");
-        Assert.Equal((2, 100m), (powerco.Variants.Count, powerco.Total));
-        Assert.Contains("Direct debit", powerco.PaymentTypes);
-        Assert.Equal(2, powerco.Payments.Count);
-        Assert.Equal(3, Assert.Single(report.Payers, x => x.Name == "Acme").Payments.Count);
-        Assert.Equal(("salary", "other-income"), (Assert.Single(before.Payers, x => x.Name == "Betaco").SuggestedKind, Assert.Single(before.Payers, x => x.Name == "Interest").SuggestedKind));
-        Assert.Null(Assert.Single(report.Payers, x => x.Name == "Acme").SuggestedKind);
-        var savingsTransfer = Assert.Single(before.NeedsLabel, x => x.Name == "Car savings");
-        Assert.Equal(("Savings", "Transfer"), (savingsTransfer.SuggestedTag, Assert.Single(savingsTransfer.PaymentTypes)));
         Assert.Equal(6000m, Assert.Single(report.Categories, x => x.Key == "rent").Total);
-        Assert.False(Assert.Single(report.Tags, x => x.Name == "Rent").IsDefault);
         Assert.Equal(1500m, Assert.Single(report.Categories, x => x.Key == "food-groceries").Total);
-        Assert.Equal(700m, Assert.Single(report.Categories, x => x.Key == "unlabelled").Total);
-        Assert.Equal(3, Assert.Single(report.NeedsLabel, x => x.Name == "Mystery Shop").Count);
-        Assert.Equal(1, Assert.Single(report.Flags, x => x.Kind == "gambling").Count);
+        Assert.Equal(700m, Assert.Single(report.Categories, x => x.Key == "untagged").Total);
+        Assert.Equal((7, 700m), (report.Untagged.Count, report.Untagged.Total));
+        var acme = report.Payers.Where(x => x.Name.StartsWith("SALARY ACME", StringComparison.Ordinal)).ToList();
+        Assert.All(acme, x => Assert.Equal(("salary", "salary acme pty ltd"), (x.Kind, x.MatchedBy)));
+        Assert.Equal("rent", Assert.Single(report.Tags, x => x.Name == "Rent").Category);
+        Assert.Equal(3, Assert.Single(report.Tags, x => x.Name == "Rent").Payments.Count);
         Assert.Equal(5000m, Assert.Single(report.Flags, x => x.Kind == "large-deposit").Total);
+        Assert.DoesNotContain(report.LenderCategories, x => x.Key == "not-expense");
         Assert.Equal("Sam", report.Setup.SecondApplicant);
 
         var summary = await client.GetStringAsync("/api/home-loan/export/summary?months=3&end=2026-08");
@@ -111,100 +107,69 @@ public sealed class HomeLoanApiTests
         Assert.DoesNotContain("\n", summary.Replace("\r\n", ""));
         var transactions = await client.GetStringAsync("/api/home-loan/export/transactions?months=3&end=2026-08");
         Assert.Contains(transactions.Split("\r\n"), x => x.Contains("Salary,Alex"));
-        Assert.Contains(transactions.Split("\r\n"), x => x.Contains("SPORTSBET") && x.EndsWith(",Gambling"));
+        Assert.Contains(transactions.Split("\r\n"), x => x.Contains("SPORTSBET") && x.Contains("Not tagged yet"));
         Assert.DoesNotContain("HOME LOAN REPAYMENT", transactions);
     }
 
     [Fact]
-    public async Task MerchantNamesGroupSensiblyAndCanBeConfirmedSplitAndTagged()
+    public async Task LenderCategoriesComeOnlyFromExplicitChoicesAndConflictsNeedReview()
     {
         await using var baseFactory = new FinyteApiFactory();
         await using var factory = WithClock(baseFactory);
         using var client = factory.CreateClient();
         await Seed(factory, client);
-        Guid pets;
+        Guid conflict;
         using (var scope = factory.Services.CreateScope())
         {
             var dbContext = scope.ServiceProvider.GetRequiredService<FinyteDbContext>();
             var everyday = await dbContext.Accounts.SingleAsync(x => x.Name == "Everyday");
+            var tags = await dbContext.TransactionTags.ToDictionaryAsync(x => x.Name);
             var tenantId = everyday.TenantId;
-            var tag = new TransactionTag { TenantId = tenantId, Name = "Pets", Color = "#dddddd", CreatedAt = DateTimeOffset.UtcNow };
-            dbContext.TransactionTags.Add(tag);
-            pets = tag.Id;
+            TransactionTag Add(string name)
+            {
+                var tag = new TransactionTag { TenantId = tenantId, Name = name, Color = "#dddddd", CreatedAt = DateTimeOffset.UtcNow };
+                dbContext.TransactionTags.Add(tag);
+                return tag;
+            }
+            var shared = Add("Shared");
+            var transfers = Add("Transfers");
+            var home = Add("Home");
+            var hardware = Tagged(Tagged(Row(everyday, 8, 21, -300m, "HARDWARE CO SPRINGFIELD"), home), tags["Groceries"]);
+            conflict = hardware.Id;
             dbContext.Transactions.AddRange(
-                Row(everyday, 8, 3, -20m, "KMART 2001 SPRINGFIELD QL AUS Card xx1234 Value Date: 01/08/2026"),
-                Row(everyday, 8, 4, -30m, "KMART 3002 SHELBYVILLE QL AUS"),
-                Row(everyday, 8, 5, -10m, "7-ELEVEN 1234 SPRINGFIELD AU"),
-                Row(everyday, 8, 6, -11m, "7-Eleven Stores Shelbyville AU AUS"),
-                Row(everyday, 8, 7, -12m, "SP GRAINCO FOODS SPRINGFIELD VI AUS"),
-                Row(everyday, 8, 8, -500m, "OCEANCO CRUISES SPRINGFIELD AU AUS"),
-                Row(everyday, 8, 9, -100m, "THE GLENCO CLINIC PT GLENCO AU"),
-                Row(everyday, 8, 10, -101m, "THE GLENCO CLINIC SHELBYVILLE QL AUS"),
-                Row(everyday, 8, 11, -50m, "GLENCO CHEMPRO CHEMIS GLENCO AUS"),
-                Row(everyday, 8, 14, -18.5m, "MAIN STREET CHEMIST GLENCO QL AUS Card xx1234 Value Date: 12/08/2026"),
-                Row(everyday, 8, 15, -75m, "Transfer to xx4321 CommBank app"),
-                Row(everyday, 8, 16, -95m, "CPA AUSTRALIA"),
-                Row(everyday, 8, 12, -99m, "Direct Debit 123456 TEACHERS 998877"),
-                Row(everyday, 8, 13, -99m, "TEACHERS HEALTH SPRINGFIELD VI AUS"),
-                Row(everyday, 8, 1, 900m, "Salary GlenTech 12345 31/07/2026"),
-                Row(everyday, 8, 2, 150m, "Direct Credit 111222 GLENTECH PTY LTD PAY000123"),
-                Row(everyday, 8, 3, 80m, "Direct Credit 333444 MCARE BENEFITS 555666777 ABCD"),
-                Row(everyday, 8, 4, 40m, "Fast Transfer From Robin Lee Smith Reimb dinner"));
+                Tagged(Tagged(Row(everyday, 8, 19, -2000m, "LANDLORD CO"), tags["Rent"]), shared),
+                Tagged(Row(everyday, 8, 20, -1000m, "PROPERTY MANAGER CO"), transfers),
+                hardware,
+                Row(everyday, 8, 23, 100m, "Transfer from xx1234 CommBank app"),
+                Row(everyday, 8, 24, 200m, "Transfer from xx5678 CommBank app"));
             await dbContext.SaveChangesAsync();
         }
+        var before = await Get(client);
+        await Map(client, before, "Rent", "rent");
+        await Map(client, before, "Home", "residence");
+        await Map(client, before, "Groceries", "food-groceries");
+
         var report = await Get(client);
-        var names = report.NeedsLabel.Select(x => x.Name).ToList();
-        Assert.Contains("Grainco Foods", names);
-        Assert.Contains("Oceanco Cruises", names);
-        Assert.Contains("Glenco Chempro", names);
-        Assert.Contains("Transfer to account ending 4321", names);
-        Assert.Contains("CPA", names);
-        Assert.Equal("Health", Assert.Single(report.NeedsLabel, x => x.Name == "Main Street Chemist").SuggestedTag);
-        Assert.Equal(2, Assert.Single(report.NeedsLabel, x => x.Name == "Kmart").Variants.Count);
-        Assert.Equal(2, Assert.Single(report.NeedsLabel, x => x.Name == "7-Eleven").Variants.Count);
-        var insurer = Assert.Single(report.NeedsLabel, x => x.Name.StartsWith("Teachers"));
-        Assert.Equal((2, "Health"), (insurer.Variants.Count, insurer.SuggestedTag));
-        var clinic = Assert.Single(report.NeedsLabel, x => x.Name == "Glenco Clinic");
-        Assert.Equal(2, clinic.Variants.Count);
-        Assert.False(clinic.Confirmed);
-        var employer = Assert.Single(report.Payers, x => x.Name == "GlenTech");
-        Assert.Equal((2, 1050m, "salary"), (employer.Count, employer.Total, employer.SuggestedKind));
-        Assert.Equal("refund", Assert.Single(report.Payers, x => x.Name == "Mcare Benefits").SuggestedKind);
-        Assert.Equal("refund", Assert.Single(report.Payers, x => x.Name == "Robin Lee Smith").SuggestedKind);
+        Assert.Equal(8000m, Assert.Single(report.Categories, x => x.Key == "rent").Total);
+        Assert.Equal(1000m + 1500m, Assert.Single(report.Categories, x => x.Key == "unmapped").Total);
+        Assert.Equal(300m, Assert.Single(report.Categories, x => x.Key == "review").Total);
+        Assert.Equal(conflict, Assert.Single(report.Review).TransactionId);
+        Assert.Equal(1000m + 1500m + 300m + 1500m + 700m, report.Total.LivingExpenses);
+        Assert.Equal(2, report.Payers.Count(x => x.Name.StartsWith("Transfer from xx", StringComparison.Ordinal)));
 
-        (await client.PutAsJsonAsync("/api/merchant-vendors", new { assignments = new[]
-        {
-            new { statementName = clinic.Variants[0].RuleMerchantName, vendor = (string?)"Glenco Medical" },
-            new { statementName = clinic.Variants[1].RuleMerchantName, vendor = (string?)clinic.Variants[1].OwnName }
-        } })).EnsureSuccessStatusCode();
+        (await client.PutAsJsonAsync("/api/home-loan/payment-category", new { transactionId = conflict, category = "residence" })).EnsureSuccessStatusCode();
+        await Label(client, "Transfer from xx1234", "other-income", 1);
         report = await Get(client);
-        Assert.True(Assert.Single(report.NeedsLabel, x => x.Name == "Glenco Medical").Confirmed);
-        Assert.DoesNotContain(report.NeedsLabel, x => x.Name == "Glenco Clinic" && x.Variants.Count == 2);
+        Assert.Equal(300m, Assert.Single(report.Categories, x => x.Key == "residence").Total);
+        Assert.DoesNotContain(report.Categories, x => x.Key == "review");
+        Assert.Equal("residence", Assert.Single(report.Review).OwnCategory);
+        Assert.Equal("other-income", Assert.Single(report.Payers, x => x.Name.Contains("xx1234")).Kind);
+        Assert.Null(Assert.Single(report.Payers, x => x.Name.Contains("xx5678")).Kind);
 
-        var kmart = Assert.Single(report.NeedsLabel, x => x.Name == "Kmart");
-        var oddOne = kmart.Payments.Single(x => x.Amount == -30m);
-        (await client.PutAsJsonAsync("/api/home-loan/payment-tag", new { transactionId = oddOne.TransactionId, tagId = pets })).EnsureSuccessStatusCode();
-        (await client.PutAsJsonAsync("/api/home-loan/merchant-tags", new { statementNames = kmart.Variants.Select(x => x.RuleMerchantName), tagName = "Home" })).EnsureSuccessStatusCode();
-        using (var scope = factory.Services.CreateScope())
-        {
-            var dbContext = scope.ServiceProvider.GetRequiredService<FinyteDbContext>();
-            var tagged = await dbContext.Transactions.Include(x => x.TagAssignments).ThenInclude(x => x.Tag)
-                .Where(x => x.Description!.StartsWith("KMART")).ToListAsync();
-            Assert.Equal(["Pets"], tagged.Single(x => x.Amount == -30m).TagAssignments.Select(x => x.Tag!.Name));
-            Assert.Equal(["Home"], tagged.Single(x => x.Amount == -20m).TagAssignments.Select(x => x.Tag!.Name));
-        }
-        Assert.DoesNotContain((await Get(client)).NeedsLabel, x => x.Name == "Kmart");
-        Guid home;
-        using (var scope = factory.Services.CreateScope())
-        {
-            home = (await scope.ServiceProvider.GetRequiredService<FinyteDbContext>().TransactionTags.SingleAsync(x => x.Name == "Home")).Id;
-        }
-        (await client.PutAsJsonAsync("/api/home-loan/merchant-tags/undo", new { statementNames = kmart.Variants.Select(x => x.RuleMerchantName), tagId = home })).EnsureSuccessStatusCode();
-        (await client.PutAsJsonAsync("/api/home-loan/payment-tag/undo", new { transactionId = oddOne.TransactionId, tagId = pets })).EnsureSuccessStatusCode();
-        var undone = Assert.Single((await Get(client)).NeedsLabel, x => x.Name == "Kmart");
-        Assert.Equal(2, undone.Count);
-        Assert.Equal(HttpStatusCode.BadRequest, (await client.PutAsJsonAsync("/api/merchant-vendors", new { assignments = Array.Empty<object>() })).StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, (await client.PutAsJsonAsync("/api/home-loan/payment-tag", new { transactionId = Guid.NewGuid(), tagName = "Home" })).StatusCode);
+        (await client.PutAsJsonAsync("/api/home-loan/payment-category", new { transactionId = conflict, category = (string?)null })).EnsureSuccessStatusCode();
+        Assert.Equal(conflict, Assert.Single((await Get(client)).Review).TransactionId);
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PutAsJsonAsync("/api/home-loan/payment-category", new { transactionId = conflict, category = "not-expense" })).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.PutAsJsonAsync("/api/home-loan/payment-category", new { transactionId = Guid.NewGuid(), category = "rent" })).StatusCode);
     }
 
     [Fact]
@@ -222,11 +187,11 @@ public sealed class HomeLoanApiTests
         Assert.Equal(HttpStatusCode.NotFound, (await client.PutAsJsonAsync("/api/home-loan/categories", new { tagId = Guid.NewGuid(), category = "rent" })).StatusCode);
     }
 
-    private static async Task Label(HttpClient client, HomeLoanReport report, string name, string kind, int? applicant)
-    {
-        var payer = Assert.Single(report.Payers, x => x.Name.Contains(name, StringComparison.OrdinalIgnoreCase));
-        (await client.PutAsJsonAsync("/api/home-loan/income-sources", new { payer.Key, payer.Name, kind, applicant })).EnsureSuccessStatusCode();
-    }
+    private static async Task Label(HttpClient client, string key, string kind, int? applicant) =>
+        (await client.PutAsJsonAsync("/api/home-loan/income-sources", new { key, name = key, kind, applicant })).EnsureSuccessStatusCode();
+
+    private static async Task Map(HttpClient client, HomeLoanReport report, string tag, string category) =>
+        (await client.PutAsJsonAsync("/api/home-loan/categories", new { Assert.Single(report.Tags, x => x.Name == tag).TagId, category })).EnsureSuccessStatusCode();
 
     private static async Task<HomeLoanReport> Get(HttpClient client) =>
         (await client.GetFromJsonAsync<HomeLoanReport>(Report, new JsonSerializerOptions(JsonSerializerDefaults.Web)))!;

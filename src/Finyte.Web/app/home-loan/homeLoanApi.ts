@@ -4,25 +4,31 @@ export type HomeLoanMonth = {
   month: string; firstApplicantIncome: number; secondApplicantIncome: number; otherIncome: number; unlabelledCredits: number
   refunds: number; gifts: number; livingExpenses: number; commitments: number; saved: number; surplus: number
 }
-export type HomeLoanPayment = { transactionId: string; date: string; account: string; description: string; amount: number }
-export type HomeLoanMerchant = {
-  key: string; name: string; confirmed: boolean; paymentTypes: string[]; suggestedTag: string | null; count: number; total: number
-  variants: { ruleMerchantName: string; ownName: string; count: number; total: number }[]; payments: HomeLoanPayment[]
-}
-export type LenderCategory = { key: string; label: string; group: 'living' | 'commitment' | 'savings' | 'excluded' }
+export type LenderGroup = 'living' | 'commitment' | 'savings'
+export type HomeLoanPayment = { transactionId: string; date: string; account: string; description: string; amount: number; ownCategory: string | null }
+export type LenderCategory = { key: string; label: string; group: LenderGroup }
 export type HomeLoanAccountRole = { accountId: string; name: string; type: string; role: 'spending' | 'savings' | 'excluded' }
+export type HomeLoanPayer = {
+  key: string; name: string; matchedBy: string | null; kind: string | null; applicant: number | null
+  count: number; total: number; monthsSeen: number; latestDate: string; payments: HomeLoanPayment[]
+}
+export type HomeLoanTag = { tagId: string; name: string; color: string; category: string | null; total: number; payments: HomeLoanPayment[] }
+export type HomeLoanReviewPayment = { transactionId: string; date: string; account: string; description: string; amount: number; tags: string[]; ownCategory: string | null }
 export type HomeLoanReport = {
   currency: string; months: number; fromMonth: string; toMonth: string; availableMonths: string[]
   setup: { firstApplicant: string; secondApplicant: string | null; accounts: HomeLoanAccountRole[]; version: number; saved: boolean }
   monthlyTotals: HomeLoanMonth[]; average: HomeLoanMonth; total: HomeLoanMonth
-  categories: { key: string; label: string; group: 'living' | 'commitment' | 'savings' | 'excluded'; total: number; monthlyAverage: number; byMonth: number[] }[]
-  tags: { tagId: string; name: string; color: string; category: string; isDefault: boolean; total: number }[]
-  payers: { key: string; name: string; paymentType: string | null; kind: string | null; applicant: number | null; count: number; total: number; monthsSeen: number; latestDate: string; payments: HomeLoanPayment[]; suggestedKind: string | null }[]
-  needsLabel: HomeLoanMerchant[]
+  categories: { key: string; label: string; group: LenderGroup; total: number; monthlyAverage: number; byMonth: number[] }[]
+  tags: HomeLoanTag[]
+  payers: HomeLoanPayer[]
+  untagged: { count: number; total: number }
+  review: HomeLoanReviewPayment[]
   flags: { kind: string; label: string; advice: string; count: number; total: number; items: { date: string; account: string; description: string; amount: number }[] }[]
   gaps: { accountId: string; accountName: string; missingMonths: string[] }[]
   lenderCategories: LenderCategory[]
 }
+
+export const pendingCategories = ['untagged', 'unmapped', 'review']
 
 export const getHomeLoan = (months: number, end: string) =>
   httpClient<HomeLoanReport>({ method: 'GET', url: '/api/home-loan', params: { months, end: end || undefined } })
@@ -30,34 +36,14 @@ export const getHomeLoan = (months: number, end: string) =>
 export const saveSetup = (body: { firstApplicant: string; secondApplicant: string | null; accounts: { accountId: string; role: string }[]; expectedVersion: number }) =>
   httpClient<{ version: number }>({ method: 'PUT', url: '/api/home-loan/setup', data: body })
 
-export const saveIncomeSource = (body: { key: string; name: string; kind: string | null; applicant: number | null }) =>
+export const saveIncomeSource = (body: { key: string; previousKey: string | null; name: string; kind: string | null; applicant: number | null }) =>
   httpClient<void>({ method: 'PUT', url: '/api/home-loan/income-sources', data: body })
 
 export const saveCategory = (body: { tagId: string; category: string | null }) =>
   httpClient<void>({ method: 'PUT', url: '/api/home-loan/categories', data: body })
 
-export type TagChoice = { tagId: string } | { tagName: string }
-
-export function toTagChoice(value: string): TagChoice {
-  return value.startsWith('new:') ? { tagName: value.slice(4) } : { tagId: value }
-}
-
-export type AppliedTag = { id: string; name: string }
-
-export const tagMerchant = (statementNames: string[], tag: TagChoice) =>
-  httpClient<AppliedTag>({ method: 'PUT', url: '/api/home-loan/merchant-tags', data: { statementNames, ...tag } })
-
-export const undoMerchantTag = (statementNames: string[], tagId: string) =>
-  httpClient<void>({ method: 'PUT', url: '/api/home-loan/merchant-tags/undo', data: { statementNames, tagId } })
-
-export const tagPayment = (transactionId: string, tag: TagChoice) =>
-  httpClient<AppliedTag>({ method: 'PUT', url: '/api/home-loan/payment-tag', data: { transactionId, ...tag } })
-
-export const undoPaymentTag = (transactionId: string, tagId: string) =>
-  httpClient<void>({ method: 'PUT', url: '/api/home-loan/payment-tag/undo', data: { transactionId, tagId } })
-
-export const saveVendors = (assignments: { statementName: string; vendor: string | null }[]) =>
-  httpClient<void>({ method: 'PUT', url: '/api/merchant-vendors', data: { assignments } })
+export const savePaymentCategory = (body: { transactionId: string; category: string | null }) =>
+  httpClient<void>({ method: 'PUT', url: '/api/home-loan/payment-category', data: body })
 
 export async function downloadCsv(file: 'summary' | 'transactions', report: HomeLoanReport) {
   const blob = await httpClient<Blob>({ method: 'GET', url: `/api/home-loan/export/${file}`, params: { months: report.months, end: report.toMonth }, responseType: 'blob' })
@@ -69,6 +55,10 @@ export async function downloadCsv(file: 'summary' | 'transactions', report: Home
   link.click()
   link.remove()
   URL.revokeObjectURL(url)
+}
+
+export function matchKey(text: string) {
+  return text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim()
 }
 
 export function dayLabel(date: string) {

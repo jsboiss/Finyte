@@ -31,3 +31,11 @@ public sealed class HomeLoanCategoryChoice
     public required string Category { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 }
+
+public sealed class HomeLoanPaymentCategory
+{
+    public Guid TenantId { get; set; }
+    public Guid TransactionId { get; set; }
+    public required string Category { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+}

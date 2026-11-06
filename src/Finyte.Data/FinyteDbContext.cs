@@ -15,7 +15,7 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
     public DbSet<Finyte.Core.HomeLoans.HomeLoanProfile> HomeLoanProfiles => Set<Finyte.Core.HomeLoans.HomeLoanProfile>();
     public DbSet<Finyte.Core.HomeLoans.HomeLoanIncomeSource> HomeLoanIncomeSources => Set<Finyte.Core.HomeLoans.HomeLoanIncomeSource>();
     public DbSet<Finyte.Core.HomeLoans.HomeLoanCategoryChoice> HomeLoanCategoryChoices => Set<Finyte.Core.HomeLoans.HomeLoanCategoryChoice>();
-    public DbSet<MerchantVendor> MerchantVendors => Set<MerchantVendor>();
+    public DbSet<Finyte.Core.HomeLoans.HomeLoanPaymentCategory> HomeLoanPaymentCategories => Set<Finyte.Core.HomeLoans.HomeLoanPaymentCategory>();
     public DbSet<Budget> Budgets => Set<Budget>();
     public DbSet<AccountGroup> AccountGroups => Set<AccountGroup>();
     public DbSet<AccountGroupMember> AccountGroupMembers => Set<AccountGroupMember>();

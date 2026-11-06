@@ -3,6 +3,7 @@ using Finyte.Core.Accounts;
 using Finyte.Core.HomeLoans;
 using Finyte.Core.Recurring;
 using Finyte.Core.Scheduling;
+using Finyte.Data.Tagging;
 using Finyte.Data.Tenancy;
 using Microsoft.EntityFrameworkCore;
 
@@ -25,6 +26,12 @@ public sealed class HomeLoanQueries(FinyteDbContext dbContext, TenantCalendars c
         "home-loan" or "loan" or "investment" => "excluded",
         _ => "spending"
     };
+
+    public static string PayerKey(string? statementName)
+    {
+        var key = MerchantTagMatcher.Normalize(statementName);
+        return key.Length > 200 ? key[..200].TrimEnd() : key;
+    }
 
     public async Task<HomeLoanReport> GetReport(Guid tenantId, int months, DateOnly? endMonth, CancellationToken cancellationToken) =>
         (await Build(tenantId, months, endMonth, cancellationToken)).Report;
@@ -87,17 +94,22 @@ public sealed class HomeLoanQueries(FinyteDbContext dbContext, TenantCalendars c
                     .Select(y => new TagRef(y.TagId, y.Tag!.Name)).ToList()
             })
             .ToListAsync(cancellationToken);
-        var sources = await dbContext.HomeLoanIncomeSources.AsNoTracking().Where(x => x.TenantId == tenantId).ToDictionaryAsync(x => x.MatchKey, cancellationToken);
-        var choices = await dbContext.HomeLoanCategoryChoices.AsNoTracking().Where(x => x.TenantId == tenantId).ToDictionaryAsync(x => x.TagId, x => x.Category, cancellationToken);
+        var sources = await dbContext.HomeLoanIncomeSources.AsNoTracking().Where(x => x.TenantId == tenantId).ToListAsync(cancellationToken);
+        var choices = (await dbContext.HomeLoanCategoryChoices.AsNoTracking().Where(x => x.TenantId == tenantId).ToListAsync(cancellationToken))
+            .Where(x => HomeLoanCatalog.Category(x.Category) is not null).ToDictionary(x => x.TagId, x => x.Category);
+        var own = (await dbContext.HomeLoanPaymentCategories.AsNoTracking().Where(x => x.TenantId == tenantId).ToListAsync(cancellationToken))
+            .Where(x => HomeLoanCatalog.Category(x.Category) is not null).ToDictionary(x => x.TransactionId, x => x.Category);
         var tags = await dbContext.TransactionTags.AsNoTracking().Where(x => x.TenantId == tenantId).ToDictionaryAsync(x => x.Id, cancellationToken);
-        var vendors = await dbContext.MerchantVendors.AsNoTracking().Where(x => x.TenantId == tenantId).ToDictionaryAsync(x => x.MatchKey, x => x.Vendor, cancellationToken);
 
         var totals = monthKeys.Select(_ => new MonthTotals()).ToArray();
         var categories = new Dictionary<string, decimal[]>();
-        var tagTotals = new Dictionary<Guid, decimal>();
+        var tagPayments = new Dictionary<Guid, List<HomeLoanPayment>>();
         var payers = new Dictionary<string, PayerTotals>();
-        var needsLabel = new Dictionary<string, MerchantVariant>();
-        var flags = new Dictionary<string, List<HomeLoanFlagItem>>();
+        var matches = new Dictionary<string, HomeLoanIncomeSource?>();
+        var review = new List<HomeLoanReviewPayment>();
+        var untaggedCount = 0;
+        var untaggedTotal = 0m;
+        var deposits = new List<HomeLoanFlagItem>();
         var coverage = scope.ToDictionary(x => x.Id, _ => new HashSet<int>());
         var rows = new List<HomeLoanRow>();
 
@@ -130,24 +142,24 @@ public sealed class HomeLoanQueries(FinyteDbContext dbContext, TenantCalendars c
             }
             else if (transaction.Amount > 0)
             {
-                var payerName = HomeLoanCatalog.DescribePayer(transaction.MerchantName, transaction.Description);
-                var source = sources.GetValueOrDefault(payerName.Key);
-                if (!payers.TryGetValue(payerName.Key, out var payer))
+                var statement = StatementNameCleaner.Clean(string.IsNullOrWhiteSpace(transaction.MerchantName) ? transaction.Description : transaction.MerchantName);
+                var key = PayerKey(statement);
+                if (!matches.TryGetValue(key, out var source))
                 {
-                    payer = new PayerTotals(payerName.Name, HomeLoanCatalog.Describe(transaction.MerchantName, transaction.Description).PaymentType);
-                    payers[payerName.Key] = payer;
+                    source = sources.Where(x => key == x.MatchKey || key.StartsWith($"{x.MatchKey} ", StringComparison.Ordinal))
+                        .OrderByDescending(x => x.MatchKey.Length).FirstOrDefault();
+                    matches[key] = source;
                 }
-                if (payerName.Typed && !payer.Typed)
+                if (!payers.TryGetValue(key, out var payer))
                 {
-                    payer.Name = payerName.Name;
-                    payer.Typed = true;
+                    payer = new PayerTotals(statement);
+                    payers[key] = payer;
                 }
-                payer.SuggestedKind ??= payerName.SuggestedKind;
                 payer.Count++;
                 payer.Total += transaction.Amount;
                 payer.Months.Add(index);
                 payer.Latest = date;
-                payer.Payments.Add(new HomeLoanPayment(transaction.Id, date, account, description, transaction.Amount));
+                payer.Payments.Add(new HomeLoanPayment(transaction.Id, date, account, description, transaction.Amount, null));
                 var amount = transaction.Amount;
                 var person = source?.Applicant == 2 && second is not null ? 2 : source?.Applicant == 1 || source?.Kind == "salary" ? 1 : 0;
                 switch (source?.Kind)
@@ -174,72 +186,59 @@ public sealed class HomeLoanQueries(FinyteDbContext dbContext, TenantCalendars c
                         type = "Credit not yet labelled";
                         break;
                 }
-                if (amount >= HomeLoanCatalog.LargeDeposits.Threshold && source?.Kind is null or "gift" or "other-income")
+                if (amount >= HomeLoanCatalog.LargeDepositThreshold && source?.Kind is null or "gift" or "other-income")
                 {
                     flag = "Large one-off deposit";
-                    Flag(flags, "large-deposit", new HomeLoanFlagItem(date, account, description, amount));
+                    deposits.Add(new HomeLoanFlagItem(date, account, description, amount));
                 }
             }
             else if (transaction.Amount < 0)
             {
                 var spend = -transaction.Amount;
-                type = "Spending";
-                var allocations = new List<(string Key, decimal Amount)>();
-                if (transaction.Tags.Count == 0)
+                var ownCategory = own.GetValueOrDefault(transaction.Id);
+                var mapped = transaction.Tags.Select(x => choices.GetValueOrDefault(x.Id)).OfType<string>().Distinct().ToList();
+                var key = ownCategory ?? (transaction.Tags.Count == 0 ? HomeLoanCatalog.Untagged
+                    : mapped.Count == 1 ? mapped[0] : mapped.Count == 0 ? HomeLoanCatalog.Unmapped : HomeLoanCatalog.Review);
+                foreach (var tag in transaction.Tags)
                 {
-                    allocations.Add((HomeLoanCatalog.Unlabelled, spend));
-                    var ruleName = StatementNameCleaner.Clean(string.IsNullOrWhiteSpace(transaction.MerchantName) ? transaction.Description : transaction.MerchantName);
-                    var name = HomeLoanCatalog.Describe(transaction.MerchantName, transaction.Description);
-                    if (!needsLabel.TryGetValue(ruleName, out var merchant))
+                    if (!tagPayments.TryGetValue(tag.Id, out var list))
                     {
-                        merchant = new MerchantVariant(name);
-                        needsLabel[ruleName] = merchant;
+                        list = [];
+                        tagPayments[tag.Id] = list;
                     }
-                    merchant.Add(spend, new HomeLoanPayment(transaction.Id, date, account, description, transaction.Amount));
+                    list.Add(new HomeLoanPayment(transaction.Id, date, account, description, transaction.Amount, ownCategory));
+                }
+                if (key == HomeLoanCatalog.Untagged)
+                {
+                    untaggedCount++;
+                    untaggedTotal += spend;
+                }
+                if (ownCategory is not null || key == HomeLoanCatalog.Review)
+                {
+                    review.Add(new HomeLoanReviewPayment(transaction.Id, date, account, description, transaction.Amount,
+                        transaction.Tags.Select(x => x.Name).ToList(), ownCategory));
+                }
+                if (!categories.TryGetValue(key, out var byMonth))
+                {
+                    byMonth = new decimal[months];
+                    categories[key] = byMonth;
+                }
+                byMonth[index] += spend;
+                var group = HomeLoanCatalog.Group(key);
+                if (group == HomeLoanCatalog.Commitment)
+                {
+                    month.Commitments += spend;
+                }
+                else if (group == HomeLoanCatalog.Savings)
+                {
+                    month.Saved += spend;
                 }
                 else
                 {
-                    var share = decimal.Round(spend / transaction.Tags.Count, 2);
-                    for (var i = 0; i < transaction.Tags.Count; i++)
-                    {
-                        var tag = transaction.Tags[i];
-                        var part = i == 0 ? spend - share * (transaction.Tags.Count - 1) : share;
-                        tagTotals[tag.Id] = tagTotals.GetValueOrDefault(tag.Id) + part;
-                        allocations.Add((choices.GetValueOrDefault(tag.Id) ?? HomeLoanCatalog.DefaultCategory(tag.Name), part));
-                    }
+                    month.Living += spend;
                 }
-                foreach (var (key, part) in allocations)
-                {
-                    if (!categories.TryGetValue(key, out var byMonth))
-                    {
-                        byMonth = new decimal[months];
-                        categories[key] = byMonth;
-                    }
-                    byMonth[index] += part;
-                    var group = key == HomeLoanCatalog.Unlabelled ? HomeLoanCatalog.Living : HomeLoanCatalog.Category(key)?.Group ?? HomeLoanCatalog.Living;
-                    if (group == HomeLoanCatalog.Living)
-                    {
-                        month.Living += part;
-                    }
-                    else if (group == HomeLoanCatalog.Commitment)
-                    {
-                        month.Commitments += part;
-                    }
-                    else if (group == HomeLoanCatalog.Savings)
-                    {
-                        month.Saved += part;
-                    }
-                }
-                category = string.Join(", ", allocations.Select(x => CategoryLabel(x.Key)).Distinct());
-                if (allocations.All(x => HomeLoanCatalog.Category(x.Key)?.Group == HomeLoanCatalog.Savings))
-                {
-                    type = "Moved to savings";
-                }
-                if (HomeLoanCatalog.DebitFlag(transaction.MerchantName, transaction.Description) is { } rule)
-                {
-                    flag = rule.Label;
-                    Flag(flags, rule.Kind, new HomeLoanFlagItem(date, account, description, transaction.Amount));
-                }
+                type = group == HomeLoanCatalog.Savings ? "Moved to savings" : "Spending";
+                category = HomeLoanCatalog.Label(key);
             }
             else
             {
@@ -253,54 +252,40 @@ public sealed class HomeLoanQueries(FinyteDbContext dbContext, TenantCalendars c
         var total = Sum("Total", monthly, 1);
         var average = Sum("Monthly average", monthly, months);
         var categoryTotals = categories
-            .Select(x => new HomeLoanCategoryTotal(x.Key, CategoryLabel(x.Key), x.Key == HomeLoanCatalog.Unlabelled ? HomeLoanCatalog.Living : HomeLoanCatalog.Category(x.Key)?.Group ?? HomeLoanCatalog.Living,
-                x.Value.Sum(), decimal.Round(x.Value.Sum() / months, 2), x.Value))
-            .OrderBy(x => x.Group == HomeLoanCatalog.Living ? 0 : x.Group == HomeLoanCatalog.Commitment ? 1 : x.Group == HomeLoanCatalog.Savings ? 2 : 3)
-            .ThenBy(x => x.Key == HomeLoanCatalog.Unlabelled ? 1 : 0).ThenByDescending(x => x.Total).ToList();
-        var tagChoices = tagTotals.Where(x => tags.ContainsKey(x.Key)).Select(x =>
+            .Select(x => new HomeLoanCategoryTotal(x.Key, HomeLoanCatalog.Label(x.Key), HomeLoanCatalog.Group(x.Key), x.Value.Sum(),
+                decimal.Round(x.Value.Sum() / months, 2), x.Value))
+            .OrderBy(x => x.Group == HomeLoanCatalog.Living ? 0 : x.Group == HomeLoanCatalog.Commitment ? 1 : 2)
+            .ThenBy(x => HomeLoanCatalog.Category(x.Key) is null ? 1 : 0).ThenByDescending(x => x.Total).ToList();
+        var tagChoices = tagPayments.Where(x => tags.ContainsKey(x.Key)).Select(x =>
         {
             var tag = tags[x.Key];
-            var chosen = choices.GetValueOrDefault(x.Key);
-            return new HomeLoanTagChoice(tag.Id, tag.Name, tag.Color, chosen ?? HomeLoanCatalog.DefaultCategory(tag.Name), chosen is null, x.Value);
-        }).OrderByDescending(x => x.Total).ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase).ToList();
+            return new HomeLoanTagChoice(tag.Id, tag.Name, tag.Color, choices.GetValueOrDefault(x.Key), -x.Value.Sum(y => y.Amount),
+                x.Value.OrderByDescending(y => y.Date).ToList());
+        }).OrderBy(x => x.Category is null ? 0 : 1).ThenByDescending(x => x.Total).ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase).ToList();
         var payerList = payers.Select(x =>
         {
-            var source = sources.GetValueOrDefault(x.Key);
-            return new HomeLoanPayer(x.Key, x.Value.Name, x.Value.PaymentType, source?.Kind, source?.Applicant, x.Value.Count, x.Value.Total, x.Value.Months.Count, x.Value.Latest,
-                x.Value.Payments.OrderByDescending(y => y.Date).Take(24).ToList(), source is null ? x.Value.SuggestedKind : null);
+            var source = matches.GetValueOrDefault(x.Key);
+            return new HomeLoanPayer(x.Key, x.Value.Name, source?.MatchKey, source?.Kind, source?.Applicant, x.Value.Count, x.Value.Total, x.Value.Months.Count,
+                x.Value.Latest, x.Value.Payments.OrderByDescending(y => y.Date).Take(24).ToList());
         }).OrderBy(x => x.Kind is null ? 0 : 1).ThenByDescending(x => x.Total).Take(150).ToList();
-        var flagList = flags.Select(x =>
-        {
-            var rule = HomeLoanCatalog.FlagRules.FirstOrDefault(y => y.Kind == x.Key);
-            return new HomeLoanFlag(x.Key, rule?.Label ?? HomeLoanCatalog.LargeDeposits.Label, rule?.Advice ?? HomeLoanCatalog.LargeDeposits.Advice,
-                x.Value.Count, x.Value.Sum(y => y.Amount), x.Value.OrderByDescending(y => y.Date).Take(50).ToList());
-        }).OrderBy(x => x.Label).ToList();
-        var gaps = scope.Select(x => new HomeLoanGap(x.Id, names[x.Id],
-                monthKeys.Where((_, i) => !coverage[x.Id].Contains(i)).ToList()))
+        IReadOnlyList<HomeLoanFlag> flagList = deposits.Count == 0 ? [] :
+        [
+            new HomeLoanFlag("large-deposit", "Large one-off deposits",
+                "Lenders ask where large deposits came from. Gifts and windfalls usually don't count as genuine savings.",
+                deposits.Count, deposits.Sum(x => x.Amount), deposits.OrderByDescending(x => x.Date).Take(50).ToList())
+        ];
+        var gaps = scope.Select(x => new HomeLoanGap(x.Id, names[x.Id], monthKeys.Where((_, i) => !coverage[x.Id].Contains(i)).ToList()))
             .Where(x => x.MissingMonths.Count > 0).ToList();
         var setup = new HomeLoanSetup(first, second,
             accounts.Select(x => new HomeLoanAccountRole(x.Id, names[x.Id], AccountPreferences.EffectiveType(x), roles[x.Id])).ToList(),
             profile?.Version ?? 0, profile is not null);
         var report = new HomeLoanReport(currency, months, monthKeys[0], monthKeys[^1], availableMonths, setup, monthly, average, total,
-            categoryTotals, tagChoices, payerList,
-            Cluster(needsLabel, vendors).OrderByDescending(x => x.Total).ThenBy(x => x.Name).ToList(),
-            flagList, gaps, HomeLoanCatalog.Categories);
+            categoryTotals, tagChoices, payerList, new HomeLoanUntagged(untaggedCount, untaggedTotal),
+            review.OrderBy(x => x.OwnCategory is null ? 0 : 1).ThenByDescending(x => x.Date).ToList(), flagList, gaps, HomeLoanCatalog.Categories);
         return (report, rows);
     }
 
-    public static string CategoryLabel(string key) => key == HomeLoanCatalog.Unlabelled ? "Not yet labelled" : HomeLoanCatalog.Category(key)?.Label ?? key;
-
     private static string RoleLabel(string role) => role switch { "savings" => "Savings", "spending" => "Spending", _ => "Not included" };
-
-    private static void Flag(Dictionary<string, List<HomeLoanFlagItem>> flags, string kind, HomeLoanFlagItem item)
-    {
-        if (!flags.TryGetValue(kind, out var items))
-        {
-            items = [];
-            flags[kind] = items;
-        }
-        items.Add(item);
-    }
 
     private static HomeLoanMonth Sum(string label, IReadOnlyList<HomeLoanMonth> months, int divisor)
     {
@@ -324,98 +309,6 @@ public sealed class HomeLoanQueries(FinyteDbContext dbContext, TenantCalendars c
 
     private sealed record TagRef(Guid Id, string Name);
 
-    private static IEnumerable<HomeLoanMerchant> Cluster(Dictionary<string, MerchantVariant> variants, IReadOnlyDictionary<string, string> vendors)
-    {
-        var groups = new List<MerchantCluster>();
-        foreach (var (rule, variant) in variants.OrderByDescending(x => x.Value.Name.Brand).ThenBy(x => x.Value.Name.Words.Count).ThenBy(x => x.Key, StringComparer.Ordinal))
-        {
-            var words = string.Join(' ', variant.Name.Words).Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();
-            MerchantCluster? group;
-            if (vendors.TryGetValue(Tagging.MerchantTagMatcher.Normalize(rule), out var vendor))
-            {
-                var key = $"vendor:{vendor.ToLowerInvariant()}";
-                group = groups.FirstOrDefault(x => x.Key == key);
-                if (group is null)
-                {
-                    group = new MerchantCluster(key, vendor, true, []);
-                    groups.Add(group);
-                }
-            }
-            else if (variant.Name.Brand || variant.Name.GroupKey.StartsWith("transfer:", StringComparison.Ordinal))
-            {
-                group = groups.FirstOrDefault(x => x.Key == variant.Name.GroupKey);
-                if (group is null)
-                {
-                    group = new MerchantCluster(variant.Name.GroupKey, variant.Name.Name, false, []);
-                    groups.Add(group);
-                }
-            }
-            else
-            {
-                group = words.Count == 1 ? groups.FirstOrDefault(x => x.Key.StartsWith($"brand:{words[0]} ", StringComparison.Ordinal)) : null;
-                group ??= groups.FirstOrDefault(x => x.Key.StartsWith("word:", StringComparison.Ordinal) && x.Prefix.Count > 0 && x.Prefix[0] == words[0]
-                    && CommonPrefix(x.Prefix, words) >= Math.Min(2, Math.Min(x.Prefix.Count, words.Count)));
-                if (group is null)
-                {
-                    group = new MerchantCluster($"word:{string.Join(' ', words)}", variant.Name.OwnName, false, words);
-                    groups.Add(group);
-                }
-                else if (group.Key.StartsWith("word:", StringComparison.Ordinal))
-                {
-                    group.Prefix = group.Prefix.Take(CommonPrefix(group.Prefix, words)).ToList();
-                    group.Name = HomeLoanCatalog.TitleCase(group.Prefix.Take(3));
-                }
-            }
-            group.Members.Add((rule, variant));
-        }
-        return groups.Select(x => x.ToMerchant());
-    }
-
-    private static int CommonPrefix(IReadOnlyList<string> first, IReadOnlyList<string> second)
-    {
-        var length = 0;
-        while (length < first.Count && length < second.Count && first[length] == second[length])
-        {
-            length++;
-        }
-        return length;
-    }
-
-    private sealed class MerchantVariant(HomeLoanMerchantName name)
-    {
-        public HomeLoanMerchantName Name { get; } = name;
-        public int Count { get; private set; }
-        public decimal Total { get; private set; }
-        public List<HomeLoanPayment> Payments { get; } = [];
-
-        public void Add(decimal amount, HomeLoanPayment payment)
-        {
-            Count++;
-            Total += amount;
-            Payments.Add(payment);
-        }
-    }
-
-    private sealed class MerchantCluster(string key, string name, bool confirmed, List<string> prefix)
-    {
-        public string Key { get; } = key;
-        public string Name { get; set; } = name;
-        public bool Confirmed { get; } = confirmed;
-        public List<string> Prefix { get; set; } = prefix;
-        public List<(string Rule, MerchantVariant Variant)> Members { get; } = [];
-
-        public HomeLoanMerchant ToMerchant()
-        {
-            var ordered = Members.OrderByDescending(x => x.Variant.Total).ThenBy(x => x.Rule, StringComparer.Ordinal).ToList();
-            var types = Members.Select(x => x.Variant.Name.PaymentType).OfType<string>().Distinct().Order(StringComparer.Ordinal).ToList();
-            var suggestion = ordered.Select(x => MerchantKeywordCatalog.Suggest(Tagging.MerchantTagMatcher.Normalize(x.Rule))?.TagName)
-                .FirstOrDefault(x => x is not null && x != "Transfers")
-                ?? (types.Contains("Transfer") ? HomeLoanRules.Current.TransferTagHints.FirstOrDefault(x => Name.Contains(x.Key, StringComparison.OrdinalIgnoreCase)).Value : null);
-            return new HomeLoanMerchant(Key, Name, Confirmed, types, suggestion, Members.Sum(x => x.Variant.Count), Members.Sum(x => x.Variant.Total),
-                ordered.Select(x => new HomeLoanMerchantVariant(x.Rule, x.Variant.Name.OwnName, x.Variant.Count, x.Variant.Total)).ToList(),
-                Members.SelectMany(x => x.Variant.Payments).OrderByDescending(x => x.Date).Take(30).ToList());
-        }
-    }
     private sealed class MonthTotals
     {
         public decimal First { get; set; }
@@ -432,12 +325,9 @@ public sealed class HomeLoanQueries(FinyteDbContext dbContext, TenantCalendars c
             First + Second + Other - Living - Commitments);
     }
 
-    private sealed class PayerTotals(string name, string? paymentType)
+    private sealed class PayerTotals(string name)
     {
-        public string Name { get; set; } = name;
-        public bool Typed { get; set; }
-        public string? SuggestedKind { get; set; }
-        public string? PaymentType { get; } = paymentType;
+        public string Name { get; } = name;
         public List<HomeLoanPayment> Payments { get; } = [];
         public int Count { get; set; }
         public decimal Total { get; set; }

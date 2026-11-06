@@ -99,7 +99,6 @@ public static class HomeLoanCsv
     private static string GroupLabel(string group) => group switch
     {
         "commitment" => "Commitment",
-        "excluded" => "Not counted",
         "savings" => "Saved",
         _ => "Living expense"
     };

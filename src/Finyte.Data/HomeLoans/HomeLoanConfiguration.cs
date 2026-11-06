@@ -28,19 +28,19 @@ public static class HomeLoanConfiguration
             x.Property(y => y.Kind).HasMaxLength(24).IsRequired();
             x.HasIndex(y => new { y.TenantId, y.MatchKey }).IsUnique();
         });
-        modelBuilder.Entity<MerchantVendor>(x =>
-        {
-            x.ToTable("merchant_vendors");
-            x.HasKey(y => new { y.TenantId, y.MatchKey });
-            x.Property(y => y.MatchKey).HasMaxLength(256);
-            x.Property(y => y.Vendor).HasMaxLength(120).IsRequired();
-        });
         modelBuilder.Entity<HomeLoanCategoryChoice>(x =>
         {
             x.ToTable("home_loan_category_choices");
             x.HasKey(y => new { y.TenantId, y.TagId });
             x.Property(y => y.Category).HasMaxLength(40).IsRequired();
             x.HasOne<TransactionTag>().WithMany().HasForeignKey(y => y.TagId).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<HomeLoanPaymentCategory>(x =>
+        {
+            x.ToTable("home_loan_payment_categories");
+            x.HasKey(y => new { y.TenantId, y.TransactionId });
+            x.Property(y => y.Category).HasMaxLength(40).IsRequired();
+            x.HasOne<Transaction>().WithMany().HasForeignKey(y => y.TransactionId).OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

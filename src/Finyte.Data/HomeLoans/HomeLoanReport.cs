@@ -15,7 +15,8 @@ public sealed record HomeLoanReport(
     IReadOnlyList<HomeLoanCategoryTotal> Categories,
     IReadOnlyList<HomeLoanTagChoice> Tags,
     IReadOnlyList<HomeLoanPayer> Payers,
-    IReadOnlyList<HomeLoanMerchant> NeedsLabel,
+    HomeLoanUntagged Untagged,
+    IReadOnlyList<HomeLoanReviewPayment> Review,
     IReadOnlyList<HomeLoanFlag> Flags,
     IReadOnlyList<HomeLoanGap> Gaps,
     IReadOnlyList<HomeLoanCategory> LenderCategories);
@@ -29,17 +30,17 @@ public sealed record HomeLoanMonth(string Month, decimal FirstApplicantIncome, d
 
 public sealed record HomeLoanCategoryTotal(string Key, string Label, string Group, decimal Total, decimal MonthlyAverage, IReadOnlyList<decimal> ByMonth);
 
-public sealed record HomeLoanTagChoice(Guid TagId, string Name, string Color, string Category, bool IsDefault, decimal Total);
+public sealed record HomeLoanTagChoice(Guid TagId, string Name, string Color, string? Category, decimal Total, IReadOnlyList<HomeLoanPayment> Payments);
 
-public sealed record HomeLoanPayer(string Key, string Name, string? PaymentType, string? Kind, int? Applicant, int Count, decimal Total, int MonthsSeen,
-    DateOnly LatestDate, IReadOnlyList<HomeLoanPayment> Payments, string? SuggestedKind);
+public sealed record HomeLoanPayer(string Key, string Name, string? MatchedBy, string? Kind, int? Applicant, int Count, decimal Total, int MonthsSeen,
+    DateOnly LatestDate, IReadOnlyList<HomeLoanPayment> Payments);
 
-public sealed record HomeLoanMerchant(string Key, string Name, bool Confirmed, IReadOnlyList<string> PaymentTypes, string? SuggestedTag, int Count, decimal Total,
-    IReadOnlyList<HomeLoanMerchantVariant> Variants, IReadOnlyList<HomeLoanPayment> Payments);
+public sealed record HomeLoanUntagged(int Count, decimal Total);
 
-public sealed record HomeLoanMerchantVariant(string RuleMerchantName, string OwnName, int Count, decimal Total);
+public sealed record HomeLoanPayment(Guid TransactionId, DateOnly Date, string Account, string Description, decimal Amount, string? OwnCategory);
 
-public sealed record HomeLoanPayment(Guid TransactionId, DateOnly Date, string Account, string Description, decimal Amount);
+public sealed record HomeLoanReviewPayment(Guid TransactionId, DateOnly Date, string Account, string Description, decimal Amount,
+    IReadOnlyList<string> Tags, string? OwnCategory);
 
 public sealed record HomeLoanFlag(string Kind, string Label, string Advice, int Count, decimal Total, IReadOnlyList<HomeLoanFlagItem> Items);
 
