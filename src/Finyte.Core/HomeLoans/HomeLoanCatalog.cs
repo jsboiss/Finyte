@@ -16,10 +16,10 @@ public static class HomeLoanCatalog
     [
         new("food-groceries", "Food & groceries", Living),
         new("residence", "Rates, utilities & home maintenance", Living),
-        new("phone-internet-media", "Phone, internet & media", Living),
+        new("phone-internet-media", "Phone, internet, pay TV & streaming subscriptions", Living),
         new("transport", "Transport", Living),
         new("clothing-personal-care", "Clothing & personal care", Living),
-        new("recreation", "Recreation & holidays", Living),
+        new("recreation", "Recreation, entertainment & holidays", Living),
         new("medical", "Medical & health", Living),
         new("general-insurance", "Insurance (home, contents, car)", Living),
         new("life-insurance", "Life, accident & illness insurance", Living),
