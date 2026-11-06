@@ -12,6 +12,10 @@ namespace Finyte.Data;
 public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbContext(options)
 {
     public DbSet<Finyte.Core.PayCycles.PayCycleProfile> PayCycleProfiles => Set<Finyte.Core.PayCycles.PayCycleProfile>();
+    public DbSet<Finyte.Core.HomeLoans.HomeLoanProfile> HomeLoanProfiles => Set<Finyte.Core.HomeLoans.HomeLoanProfile>();
+    public DbSet<Finyte.Core.HomeLoans.HomeLoanIncomeSource> HomeLoanIncomeSources => Set<Finyte.Core.HomeLoans.HomeLoanIncomeSource>();
+    public DbSet<Finyte.Core.HomeLoans.HomeLoanCategoryChoice> HomeLoanCategoryChoices => Set<Finyte.Core.HomeLoans.HomeLoanCategoryChoice>();
+    public DbSet<MerchantVendor> MerchantVendors => Set<MerchantVendor>();
     public DbSet<Budget> Budgets => Set<Budget>();
     public DbSet<AccountGroup> AccountGroups => Set<AccountGroup>();
     public DbSet<AccountGroupMember> AccountGroupMembers => Set<AccountGroupMember>();
@@ -123,6 +127,7 @@ public class FinyteDbContext(DbContextOptions<FinyteDbContext> options) : DbCont
             x.HasOne(y => y.Account).WithMany().HasForeignKey(y => y.AccountId).OnDelete(DeleteBehavior.Cascade);
         });
         Recurring.RecurringPaymentConfiguration.Configure(modelBuilder);
+        HomeLoans.HomeLoanConfiguration.Configure(modelBuilder);
         modelBuilder.Entity<TransactionFileImport>(x =>
         {
             x.ToTable("transaction_file_imports");

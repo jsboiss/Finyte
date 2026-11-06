@@ -217,6 +217,28 @@ namespace Finyte.Data.Migrations
                     b.ToTable("merchant_tag_rules", (string)null);
                 });
 
+            modelBuilder.Entity("Finyte.Core.Accounts.MerchantVendor", b =>
+                {
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("MatchKey")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Vendor")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.HasKey("TenantId", "MatchKey");
+
+                    b.ToTable("merchant_vendors", (string)null);
+                });
+
             modelBuilder.Entity("Finyte.Core.Accounts.Transaction", b =>
                 {
                     b.Property<Guid>("Id")
@@ -766,6 +788,111 @@ namespace Finyte.Data.Migrations
                     b.HasIndex("TagId");
 
                     b.ToTable("budget_tags", (string)null);
+                });
+
+            modelBuilder.Entity("Finyte.Core.HomeLoans.HomeLoanCategoryChoice", b =>
+                {
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TagId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("TenantId", "TagId");
+
+                    b.HasIndex("TagId");
+
+                    b.ToTable("home_loan_category_choices", (string)null);
+                });
+
+            modelBuilder.Entity("Finyte.Core.HomeLoans.HomeLoanIncomeSource", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("Applicant")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)");
+
+                    b.Property<string>("MatchKey")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "MatchKey")
+                        .IsUnique();
+
+                    b.ToTable("home_loan_income_sources", (string)null);
+                });
+
+            modelBuilder.Entity("Finyte.Core.HomeLoans.HomeLoanProfile", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FirstApplicant")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.PrimitiveCollection<Guid[]>("SavingsAccountIds")
+                        .IsRequired()
+                        .HasColumnType("uuid[]");
+
+                    b.Property<string>("SecondApplicant")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.PrimitiveCollection<Guid[]>("SpendingAccountIds")
+                        .IsRequired()
+                        .HasColumnType("uuid[]");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId")
+                        .IsUnique();
+
+                    b.ToTable("home_loan_profiles", (string)null);
                 });
 
             modelBuilder.Entity("Finyte.Core.PayCycles.PayCycleProfile", b =>
@@ -1624,6 +1751,15 @@ namespace Finyte.Data.Migrations
                     b.Navigation("Budget");
 
                     b.Navigation("Tag");
+                });
+
+            modelBuilder.Entity("Finyte.Core.HomeLoans.HomeLoanCategoryChoice", b =>
+                {
+                    b.HasOne("Finyte.Core.Accounts.TransactionTag", null)
+                        .WithMany()
+                        .HasForeignKey("TagId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Finyte.Core.ProviderSync.ProviderAuthSession", b =>
