@@ -30,7 +30,8 @@ public sealed record HomeLoanMonth(string Month, decimal FirstApplicantIncome, d
 
 public sealed record HomeLoanCategoryTotal(string Key, string Label, string Group, decimal Total, decimal MonthlyAverage, IReadOnlyList<decimal> ByMonth);
 
-public sealed record HomeLoanTagChoice(Guid TagId, string Name, string Color, string? Category, decimal Total, IReadOnlyList<HomeLoanPayment> Payments);
+public sealed record HomeLoanTagChoice(Guid TagId, string Name, string Color, string? Category, decimal Total, decimal MonthlyAverage, IReadOnlyList<decimal> ByMonth,
+    IReadOnlyList<HomeLoanPayment> Payments);
 
 public sealed record HomeLoanPayer(string Key, string Name, string? MatchedBy, string? Kind, int? Applicant, int Count, decimal Total, int MonthsSeen,
     DateOnly LatestDate, IReadOnlyList<HomeLoanPayment> Payments);

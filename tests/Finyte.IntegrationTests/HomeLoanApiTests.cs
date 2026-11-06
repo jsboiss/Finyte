@@ -103,6 +103,8 @@ public sealed class HomeLoanApiTests
         var summary = await client.GetStringAsync("/api/home-loan/export/summary?months=3&end=2026-08");
         Assert.Contains("Income: Alex,Income: Sam", summary);
         Assert.Contains("Food & groceries,Living expense,500.00,1500.00", summary);
+        Assert.Contains("Groceries,Food & groceries,500.00,1500.00,500.00,500.00,500.00", summary);
+        Assert.Contains("Not tagged yet,Living expense until tagged,233.33,700.00", summary);
         Assert.Contains("Lenders will still ask for your official bank statements", summary);
         Assert.DoesNotContain("\n", summary.Replace("\r\n", ""));
         var transactions = await client.GetStringAsync("/api/home-loan/export/transactions?months=3&end=2026-08");

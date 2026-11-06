@@ -96,13 +96,13 @@ function ToDo({ data }: { data: HomeLoanReport }) {
   if (unlabelledCredits.length === 0 && pending === 0) {
     return <div className="home-loan-callout home-loan-done"><h2>Everything is labelled</h2><p>Every payment in this period has a label and a lender category. Download the summary when you're ready.</p></div>
   }
-  return <section className="home-loan-callout" aria-labelledby="home-loan-todo"><h2 id="home-loan-todo">Still to label</h2>
+  return <section className="home-loan-callout" aria-labelledby="home-loan-todo"><h2 id="home-loan-todo">Still to sort</h2>
     <div className="home-loan-progress"><div role="progressbar" aria-label="Spending in a lender category" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}><span style={{ width: `${percent}%` }} /></div>
       <span>{percent}% of spending is in a lender category</span></div>
     <ul>
       {unlabelledCredits.length > 0 && <li><a href="#home-loan-income">{unlabelledCredits.length} {unlabelledCredits.length === 1 ? 'payer' : 'payers'} of money in</a> · {money(unlabelledCredits.reduce((sum, x) => sum + x.total, 0))}</li>}
       {data.untagged.count > 0 && <li><a href="#home-loan-untagged">{data.untagged.count} {data.untagged.count === 1 ? 'payment' : 'payments'} without a tag</a> · {money(data.untagged.total)}</li>}
-      {unmapped.length > 0 && <li><a href="#home-loan-tags">{unmapped.length} {unmapped.length === 1 ? 'tag' : 'tags'} without a lender category</a></li>}
+      {unmapped.length > 0 && <li><a href="#home-loan-tags">{unmapped.length} {unmapped.length === 1 ? 'tag needs' : 'tags need'} a line on the lender's form</a></li>}
       {review.length > 0 && <li><a href="#home-loan-review">{review.length} {review.length === 1 ? 'payment' : 'payments'} to check</a>, whose tags point to different categories</li>}
     </ul>
   </section>
@@ -178,33 +178,44 @@ function PayerRow({ payer, payers, options, currency, onChanged }: {
 
 function ExpenseSection({ data, onChanged }: { data: HomeLoanReport; onChanged: () => Promise<unknown> }) {
   const money = (value: number) => exactAmount(value, data.currency)
+  const untagged = data.categories.find(x => x.key === 'untagged')
+  const shared = data.tags.reduce((sum, x) => sum + x.total, 0) > data.categories.filter(x => x.key !== 'untagged').reduce((sum, x) => sum + x.total, 0) + 0.005
   return <section className="panel home-loan-section" id="home-loan-expenses"><h2>Money out</h2>
-    <p>Spending counts towards the lender category of its tags. Choose a category for each tag, and give a single payment its own category when its tags don't fit, like a home purchase under a Home tag. Only confirmed transfers between your own accounts are left out.</p>
-    <div className="home-loan-table-wrap"><table className="home-loan-table">
-      <thead><tr><th scope="col">Category</th><th scope="col">Type</th><th scope="col">Per month</th><th scope="col">Total</th></tr></thead>
-      <tbody>{data.categories.map(x => <tr key={x.key} className={pendingCategories.includes(x.key) ? 'home-loan-needs-row' : ''}>
-        <th scope="row">{x.label}</th><td>{groupLabels[x.group]}</td><td>{money(x.monthlyAverage)}</td><td>{money(x.total)}</td>
-      </tr>)}</tbody>
-    </table></div>
+    <p>Your spending by your own tags. Choose which line of the lender's living-expense form each tag counts as, and give a single payment its own line when its tag doesn't fit, like a home purchase under a broad Home tag. Only confirmed transfers between your own accounts are left out.</p>
     {data.categories.length === 0 && <p>No spending in this period.</p>}
 
-    {data.untagged.count > 0 && <div className="home-loan-callout" id="home-loan-untagged">
-      <p>{data.untagged.count} {data.untagged.count === 1 ? 'payment has' : 'payments have'} no tag yet ({money(data.untagged.total)}). They count as living expenses until tagged. Tag them as you normally would, and they'll appear here under their tag.</p>
-      <div className="home-loan-actions"><Link to="/tag-suggestions">Tag suggestions</Link><Link to="/transactions">Transactions</Link></div>
-    </div>}
+    {(data.tags.length > 0 || untagged) && <>
+      <h3 id="home-loan-tags">Your spending by tag</h3>
+      {shared && <p>A payment with more than one tag appears under each of its tags, so these add up to more than you spent.</p>}
+      <ul className="home-loan-list">
+        {data.tags.map(x => <TagCategoryRow key={`${x.tagId}-${x.category ?? ''}`} tag={x} categories={data.lenderCategories} currency={data.currency} onChanged={onChanged} />)}
+        {untagged && <li className="home-loan-needs" id="home-loan-untagged">
+          <div><strong>Not tagged yet</strong>
+            <span>{data.untagged.count} {data.untagged.count === 1 ? 'payment' : 'payments'} · {money(untagged.monthlyAverage)} a month · {money(untagged.total)}</span>
+            <span>Counted as a living expense until tagged. Tag them as you normally would and they'll appear above under their tag.</span></div>
+          <div className="home-loan-actions"><Link to="/tag-suggestions">Tag suggestions</Link><Link to="/transactions">Transactions</Link></div>
+        </li>}
+      </ul>
+    </>}
 
     {data.review.length > 0 && <>
       <h3 id="home-loan-review">Payments to check ({data.review.length})</h3>
-      <p>These payments have tags in different lender categories, or their own category. Choose where each one counts. Until then it's counted as a living expense.</p>
+      <p>These payments have tags on different lines of the lender's form, or their own line. Choose where each one counts. Until then it's counted as a living expense.</p>
       <ul className="home-loan-list">{data.review.map(x => <li key={x.transactionId}>
         <div><strong>{x.description}</strong><span>{dayLabel(x.date)} · {x.account} · {money(-x.amount)} · tagged {x.tags.join(', ')}</span></div>
         <PaymentCategory payment={x} categories={data.lenderCategories} label={`${x.description} on ${dayLabel(x.date)}`} onChanged={onChanged} />
       </li>)}</ul>
     </>}
 
-    {data.tags.length > 0 && <>
-      <h3 id="home-loan-tags">Lender categories for your tags ({data.tags.length})</h3>
-      <ul className="home-loan-list">{data.tags.map(x => <TagCategoryRow key={`${x.tagId}-${x.category ?? ''}`} tag={x} categories={data.lenderCategories} currency={data.currency} onChanged={onChanged} />)}</ul>
+    {data.categories.length > 0 && <>
+      <h3>For the lender's form</h3>
+      <p>The same spending on the lines of a lender's living-expense form, ready to copy across.</p>
+      <div className="home-loan-table-wrap"><table className="home-loan-table">
+        <thead><tr><th scope="col">Line on the form</th><th scope="col">Type</th><th scope="col">Per month</th><th scope="col">Total</th></tr></thead>
+        <tbody>{data.categories.map(x => <tr key={x.key} className={pendingCategories.includes(x.key) ? 'home-loan-needs-row' : ''}>
+          <th scope="row">{x.label}</th><td>{groupLabels[x.group]}</td><td>{money(x.monthlyAverage)}</td><td>{money(x.total)}</td>
+        </tr>)}</tbody>
+      </table></div>
     </>}
   </section>
 }
@@ -220,16 +231,16 @@ function TagCategoryRow({ tag, categories, currency, onChanged }: { tag: HomeLoa
   const save = useMutation({ mutationFn: saveCategory, onSuccess: onChanged })
   return <li className={`home-loan-tag-row${tag.category ? '' : ' home-loan-needs'}`}>
     <div><strong><span className="home-loan-swatch" style={{ backgroundColor: tag.color }} />{tag.name}</strong>
-      <span>{tag.payments.length} {tag.payments.length === 1 ? 'payment' : 'payments'} · {exactAmount(tag.total, currency)}{tag.category ? '' : ' · needs a lender category'}</span></div>
+      <span>{tag.payments.length} {tag.payments.length === 1 ? 'payment' : 'payments'} · {exactAmount(tag.monthlyAverage, currency)} a month · {exactAmount(tag.total, currency)}{tag.category ? '' : ' · choose its line on the lender’s form'}</span></div>
     <form className="home-loan-apply" onSubmit={event => { event.preventDefault(); save.mutate({ tagId: tag.tagId, category: choice || null }) }}>
-      <select aria-label={`Lender category for ${tag.name}`} value={choice} onChange={event => setChoice(event.target.value)}>
-        <option value="">Choose a lender category</option>
+      <label className="home-loan-counts-as">Counts as<span className="visually-hidden"> for {tag.name}</span><select value={choice} onChange={event => setChoice(event.target.value)}>
+        <option value="">Choose a line on the form</option>
         <CategoryOptions categories={categories} />
-      </select>
+      </select></label>
       <button type="submit" className={choice === (tag.category ?? '') ? 'home-loan-secondary' : ''} disabled={save.isPending || choice === (tag.category ?? '')}>Save</button>
     </form>
     <details className="home-loan-payments">
-      <summary>Show payments<span className="visually-hidden"> tagged {tag.name}</span> and give one its own category</summary>
+      <summary>Show payments<span className="visually-hidden"> tagged {tag.name}</span> and give one its own line</summary>
       <ul>{tag.payments.map(x => <li key={x.transactionId}><span>{dayLabel(x.date)} · {x.account}</span><span>{x.description}</span><strong>{exactAmount(x.amount, currency)}</strong>
         <PaymentCategory payment={x} categories={categories} label={`${x.description} on ${dayLabel(x.date)}`} onChanged={onChanged} compact /></li>)}</ul>
     </details>

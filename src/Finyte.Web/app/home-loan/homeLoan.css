@@ -79,6 +79,7 @@
 .home-loan-tag-row > details, .home-loan-tag-row > p { grid-column: 1 / -1; margin: 0; }
 .home-loan-payer-form { max-width: 360px; justify-content: flex-end; }
 .home-loan-payer-form .home-loan-match { flex: 1 0 100%; font-size: 13px; color: #c9d4cd; }
+.home-loan-counts-as { font-size: 13px; color: #c9d4cd; }
 .home-loan-compact button { min-height: 36px; padding: 4px 10px; font-size: 13px; }
 
 .home-loan-flow { display: grid; gap: 18px; }

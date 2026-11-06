@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using Finyte.Core.HomeLoans;
 
 namespace Finyte.Data.HomeLoans;
 
@@ -35,6 +36,21 @@ public static class HomeLoanCsv
             values.AddRange([Money(month.OtherIncome), Money(month.UnlabelledCredits), Money(month.Refunds), Money(month.Gifts),
                 Money(month.LivingExpenses), Money(month.Commitments), Money(month.Saved), Money(month.Surplus)]);
             Line(csv, [.. values]);
+        }
+        csv.Append("\r\n");
+
+        Line(csv, ["Spending by your tags", "Counts as on the lender's form", "Monthly average", "Total", .. report.MonthlyTotals.Select(x => x.Month)]);
+        foreach (var tag in report.Tags)
+        {
+            Line(csv, [tag.Name, tag.Category is null ? "No lender category yet" : HomeLoanCatalog.Label(tag.Category), Money(tag.MonthlyAverage), Money(tag.Total), .. tag.ByMonth.Select(Money)]);
+        }
+        if (report.Categories.FirstOrDefault(x => x.Key == HomeLoanCatalog.Untagged) is { } untagged)
+        {
+            Line(csv, [untagged.Label, "Living expense until tagged", Money(untagged.MonthlyAverage), Money(untagged.Total), .. untagged.ByMonth.Select(Money)]);
+        }
+        if (SharesTags(report))
+        {
+            Line(csv, "A payment with more than one tag appears under each of its tags.");
         }
         csv.Append("\r\n");
 
@@ -85,6 +101,9 @@ public static class HomeLoanCsv
         }
         return csv.ToString();
     }
+
+    public static bool SharesTags(HomeLoanReport report) =>
+        report.Tags.Sum(x => x.Total) > report.Categories.Where(x => x.Key != HomeLoanCatalog.Untagged).Sum(x => x.Total) + 0.005m;
 
     private static string KindLabel(string? kind) => kind switch
     {

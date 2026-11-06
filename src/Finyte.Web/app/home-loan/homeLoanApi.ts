@@ -12,7 +12,7 @@ export type HomeLoanPayer = {
   key: string; name: string; matchedBy: string | null; kind: string | null; applicant: number | null
   count: number; total: number; monthsSeen: number; latestDate: string; payments: HomeLoanPayment[]
 }
-export type HomeLoanTag = { tagId: string; name: string; color: string; category: string | null; total: number; payments: HomeLoanPayment[] }
+export type HomeLoanTag = { tagId: string; name: string; color: string; category: string | null; total: number; monthlyAverage: number; byMonth: number[]; payments: HomeLoanPayment[] }
 export type HomeLoanReviewPayment = { transactionId: string; date: string; account: string; description: string; amount: number; tags: string[]; ownCategory: string | null }
 export type HomeLoanReport = {
   currency: string; months: number; fromMonth: string; toMonth: string; availableMonths: string[]

@@ -104,6 +104,7 @@ public sealed class HomeLoanQueries(FinyteDbContext dbContext, TenantCalendars c
         var totals = monthKeys.Select(_ => new MonthTotals()).ToArray();
         var categories = new Dictionary<string, decimal[]>();
         var tagPayments = new Dictionary<Guid, List<HomeLoanPayment>>();
+        var tagMonths = new Dictionary<Guid, decimal[]>();
         var payers = new Dictionary<string, PayerTotals>();
         var matches = new Dictionary<string, HomeLoanIncomeSource?>();
         var review = new List<HomeLoanReviewPayment>();
@@ -205,7 +206,9 @@ public sealed class HomeLoanQueries(FinyteDbContext dbContext, TenantCalendars c
                     {
                         list = [];
                         tagPayments[tag.Id] = list;
+                        tagMonths[tag.Id] = new decimal[months];
                     }
+                    tagMonths[tag.Id][index] += spend;
                     list.Add(new HomeLoanPayment(transaction.Id, date, account, description, transaction.Amount, ownCategory));
                 }
                 if (key == HomeLoanCatalog.Untagged)
@@ -259,9 +262,10 @@ public sealed class HomeLoanQueries(FinyteDbContext dbContext, TenantCalendars c
         var tagChoices = tagPayments.Where(x => tags.ContainsKey(x.Key)).Select(x =>
         {
             var tag = tags[x.Key];
-            return new HomeLoanTagChoice(tag.Id, tag.Name, tag.Color, choices.GetValueOrDefault(x.Key), -x.Value.Sum(y => y.Amount),
+            var byMonth = tagMonths[x.Key];
+            return new HomeLoanTagChoice(tag.Id, tag.Name, tag.Color, choices.GetValueOrDefault(x.Key), byMonth.Sum(), decimal.Round(byMonth.Sum() / months, 2), byMonth,
                 x.Value.OrderByDescending(y => y.Date).ToList());
-        }).OrderBy(x => x.Category is null ? 0 : 1).ThenByDescending(x => x.Total).ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase).ToList();
+        }).OrderByDescending(x => x.Total).ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase).ToList();
         var payerList = payers.Select(x =>
         {
             var source = matches.GetValueOrDefault(x.Key);
