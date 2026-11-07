@@ -28,7 +28,7 @@ export function HomeLoanSetup({ report, onSaved, onCancel }: { report: HomeLoanR
     </fieldset>
     <fieldset>
       <legend>What each account is for</legend>
-      <p>Spending accounts count towards income and expenses. Savings accounts show how much you saved: everything that went in, less what came out. Transfers between included accounts are never counted as income or spending. Lenders usually want statements for every account, so include them all if you can.</p>
+      <p>Spending accounts count towards income and expenses. Savings accounts show how much you saved: everything that went in, less what came out. Transfers between included accounts are never counted as income or spending. A transfer to or from an account that's not included, like a loan repayment, counts like any other payment. Lenders usually want statements for every account, so include them all if you can.</p>
       <div className="home-loan-roles">
         {report.setup.accounts.map(account => <div className="home-loan-role" key={account.accountId}>
           <span><strong>{account.name}</strong><small>{accountTypeLabel(account.type)}</small></span>

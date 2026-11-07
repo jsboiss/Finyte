@@ -14,6 +14,7 @@ public sealed record HomeLoanReport(
     HomeLoanMonth Total,
     IReadOnlyList<HomeLoanCategoryTotal> Categories,
     IReadOnlyList<HomeLoanTagChoice> Tags,
+    bool SharedTags,
     IReadOnlyList<HomeLoanPayer> Payers,
     HomeLoanUntagged Untagged,
     IReadOnlyList<HomeLoanReviewPayment> Review,
@@ -23,15 +24,15 @@ public sealed record HomeLoanReport(
 
 public sealed record HomeLoanSetup(string FirstApplicant, string? SecondApplicant, IReadOnlyList<HomeLoanAccountRole> Accounts, int Version, bool Saved);
 
-public sealed record HomeLoanAccountRole(Guid AccountId, string Name, string Type, string Role);
+public sealed record HomeLoanAccountRole(Guid AccountId, string Name, string Type, string Role, bool Chosen);
 
 public sealed record HomeLoanMonth(string Month, decimal FirstApplicantIncome, decimal SecondApplicantIncome, decimal OtherIncome,
     decimal UnlabelledCredits, decimal Refunds, decimal Gifts, decimal LivingExpenses, decimal Commitments, decimal Saved, decimal Surplus);
 
 public sealed record HomeLoanCategoryTotal(string Key, string Label, string Group, decimal Total, decimal MonthlyAverage, IReadOnlyList<decimal> ByMonth);
 
-public sealed record HomeLoanTagChoice(Guid TagId, string Name, string Color, string? Category, decimal Total, decimal MonthlyAverage, IReadOnlyList<decimal> ByMonth,
-    IReadOnlyList<HomeLoanPayment> Payments);
+public sealed record HomeLoanTagChoice(Guid TagId, string Name, string Color, string? Category, bool NeedsLine, int Count, decimal Total, decimal MonthlyAverage,
+    IReadOnlyList<decimal> ByMonth, IReadOnlyList<HomeLoanPayment> Payments);
 
 public sealed record HomeLoanPayer(string Key, string Name, string? MatchedBy, string? Kind, int? Applicant, int Count, decimal Total, int MonthsSeen,
     DateOnly LatestDate, IReadOnlyList<HomeLoanPayment> Payments);

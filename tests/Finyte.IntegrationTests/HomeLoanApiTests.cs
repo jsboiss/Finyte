@@ -168,10 +168,100 @@ public sealed class HomeLoanApiTests
         Assert.Equal("other-income", Assert.Single(report.Payers, x => x.Name.Contains("xx1234")).Kind);
         Assert.Null(Assert.Single(report.Payers, x => x.Name.Contains("xx5678")).Kind);
 
+        Assert.True(report.SharedTags);
+        Assert.False(Assert.Single(report.Tags, x => x.Name == "Shared").NeedsLine);
+        Assert.True(Assert.Single(report.Tags, x => x.Name == "Transfers").NeedsLine);
+
         (await client.PutAsJsonAsync("/api/home-loan/payment-category", new { transactionId = conflict, category = (string?)null })).EnsureSuccessStatusCode();
         Assert.Equal(conflict, Assert.Single((await Get(client)).Review).TransactionId);
         Assert.Equal(HttpStatusCode.BadRequest, (await client.PutAsJsonAsync("/api/home-loan/payment-category", new { transactionId = conflict, category = "not-expense" })).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await client.PutAsJsonAsync("/api/home-loan/payment-category", new { transactionId = Guid.NewGuid(), category = "rent" })).StatusCode);
+    }
+
+    [Fact]
+    public async Task TransfersToAccountsLeftOutCountAndNewAccountsTakeTheirDefaultRole()
+    {
+        await using var baseFactory = new FinyteApiFactory();
+        await using var factory = WithClock(baseFactory);
+        using var client = factory.CreateClient();
+        await Seed(factory, client);
+        using (var scope = factory.Services.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<FinyteDbContext>();
+            var everyday = await dbContext.Accounts.SingleAsync(x => x.Name == "Everyday");
+            var loan = await dbContext.Accounts.SingleAsync(x => x.Name == "Home loan");
+            var repaymentTag = new TransactionTag { TenantId = everyday.TenantId, Name = "Loan", Color = "#eeeeee", CreatedAt = DateTimeOffset.UtcNow };
+            dbContext.TransactionTags.Add(repaymentTag);
+            var repayment = Tagged(Row(everyday, 8, 26, -800m, "Transfer to loan account"), repaymentTag);
+            var received = Row(loan, 8, 26, 800m, "Transfer from Everyday");
+            repayment.InternalTransferAccountId = loan.Id;
+            received.InternalTransferAccountId = everyday.Id;
+            dbContext.Transactions.AddRange(repayment, received);
+            await dbContext.SaveChangesAsync();
+        }
+        var before = await Get(client);
+        (await client.PutAsJsonAsync("/api/home-loan/setup", new
+        {
+            firstApplicant = "Alex", secondApplicant = "Sam", expectedVersion = 0,
+            accounts = before.Setup.Accounts.Select(x => new { x.AccountId, x.Role })
+        })).EnsureSuccessStatusCode();
+        await Map(client, before, "Loan", "loan-repayments");
+        await Map(client, before, "Rent", "rent");
+
+        var report = await Get(client);
+        Assert.Equal(800m, Assert.Single(report.Categories, x => x.Key == "loan-repayments").Total);
+        Assert.Equal(2800m, report.MonthlyTotals[2].Commitments);
+        Assert.Contains(report.Tags, x => x.Name == "Loan" && x.Category == "loan-repayments" && x.Count == 1);
+        Assert.All(report.Setup.Accounts, x => Assert.True(x.Chosen));
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<FinyteDbContext>();
+            var tenantId = (await dbContext.Accounts.FirstAsync()).TenantId;
+            var partner = new Account { TenantId = tenantId, Name = "Partner everyday", CreatedAt = DateTimeOffset.UtcNow };
+            dbContext.Accounts.Add(partner);
+            dbContext.Transactions.Add(Row(partner, 7, 14, 2500m, "SALARY GLENTECH"));
+            await dbContext.SaveChangesAsync();
+        }
+        report = await Get(client);
+        var added = Assert.Single(report.Setup.Accounts, x => x.Name == "Partner everyday");
+        Assert.Equal(("spending", false), (added.Role, added.Chosen));
+        Assert.Equal(("excluded", true), (Assert.Single(report.Setup.Accounts, x => x.Name == "Home loan").Role, Assert.Single(report.Setup.Accounts, x => x.Name == "Home loan").Chosen));
+        Assert.Contains(report.Payers, x => x.Name == "SALARY GLENTECH");
+
+        await Label(client, "PAY BETACO PAYROLL", "salary", 2);
+        (await client.PutAsJsonAsync("/api/home-loan/setup", new
+        {
+            firstApplicant = "Alex", secondApplicant = (string?)null, expectedVersion = 1,
+            accounts = report.Setup.Accounts.Select(x => new { x.AccountId, x.Role })
+        })).EnsureSuccessStatusCode();
+        report = await Get(client);
+        Assert.Equal((0m, 0m, 3000m), (report.MonthlyTotals[0].FirstApplicantIncome, report.MonthlyTotals[0].SecondApplicantIncome, report.MonthlyTotals[0].OtherIncome));
+        Assert.Equal(2, Assert.Single(report.Payers, x => x.Name == "PAY BETACO PAYROLL").Applicant);
+    }
+
+    [Fact]
+    public async Task NarrowingALabelKeepsItForOtherPayersAndReplacingItMovesThemAll()
+    {
+        await using var baseFactory = new FinyteApiFactory();
+        await using var factory = WithClock(baseFactory);
+        using var client = factory.CreateClient();
+        await Seed(factory, client);
+        await Label(client, "salary acme pty ltd", "salary", 1);
+        var report = await Get(client);
+        var acme = report.Payers.Where(x => x.MatchedBy == "salary acme pty ltd").OrderBy(x => x.Key, StringComparer.Ordinal).ToList();
+        Assert.Equal(3, acme.Count);
+
+        (await client.PutAsJsonAsync("/api/home-loan/income-sources", new { key = acme[0].Key, previousKey = (string?)null, name = acme[0].Name, kind = "other-income", applicant = 1 })).EnsureSuccessStatusCode();
+        report = await Get(client);
+        Assert.Equal(("other-income", acme[0].Key), (Assert.Single(report.Payers, x => x.Key == acme[0].Key).Kind, Assert.Single(report.Payers, x => x.Key == acme[0].Key).MatchedBy));
+        Assert.Equal(2, report.Payers.Count(x => x.MatchedBy == "salary acme pty ltd" && x.Kind == "salary"));
+
+        (await client.PutAsJsonAsync("/api/home-loan/income-sources", new { key = "SALARY ACME", previousKey = "salary acme pty ltd", name = "ACME", kind = "salary", applicant = 1 })).EnsureSuccessStatusCode();
+        report = await Get(client);
+        Assert.DoesNotContain(report.Payers, x => x.MatchedBy == "salary acme pty ltd");
+        Assert.Equal(2, report.Payers.Count(x => x.MatchedBy == "salary acme"));
+        Assert.Equal(acme[0].Key, Assert.Single(report.Payers, x => x.Key == acme[0].Key).MatchedBy);
     }
 
     [Fact]

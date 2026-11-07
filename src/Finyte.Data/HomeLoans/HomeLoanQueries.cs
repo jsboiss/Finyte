@@ -27,6 +27,8 @@ public sealed class HomeLoanQueries(FinyteDbContext dbContext, TenantCalendars c
         _ => "spending"
     };
 
+    public const int TagPaymentLimit = 100;
+
     public static string PayerKey(string? statementName)
     {
         var key = MerchantTagMatcher.Normalize(statementName);
@@ -48,8 +50,10 @@ public sealed class HomeLoanQueries(FinyteDbContext dbContext, TenantCalendars c
         var accounts = await dbContext.Accounts.AsNoTracking().Where(x => x.TenantId == tenantId)
             .OrderBy(x => x.CustomName ?? x.Name).ThenBy(x => x.Id).ToListAsync(cancellationToken);
         var profile = await dbContext.HomeLoanProfiles.AsNoTracking().SingleOrDefaultAsync(x => x.TenantId == tenantId, cancellationToken);
-        var roles = accounts.ToDictionary(x => x.Id, x => profile is null ? DefaultRole(x)
-            : profile.SpendingAccountIds.Contains(x.Id) ? "spending" : profile.SavingsAccountIds.Contains(x.Id) ? "savings" : "excluded");
+        var chosen = accounts.Where(x => profile is not null && (profile.SpendingAccountIds.Contains(x.Id)
+            || profile.SavingsAccountIds.Contains(x.Id) || profile.ExcludedAccountIds.Contains(x.Id))).Select(x => x.Id).ToHashSet();
+        var roles = accounts.ToDictionary(x => x.Id, x => !chosen.Contains(x.Id) ? DefaultRole(x)
+            : profile!.SpendingAccountIds.Contains(x.Id) ? "spending" : profile.SavingsAccountIds.Contains(x.Id) ? "savings" : "excluded");
         var names = accounts.ToDictionary(x => x.Id, AccountPreferences.DisplayName);
         var scope = accounts.Where(x => roles[x.Id] != "excluded").ToList();
         var scopeIds = scope.Select(x => x.Id).ToArray();
@@ -71,10 +75,12 @@ public sealed class HomeLoanQueries(FinyteDbContext dbContext, TenantCalendars c
         if (earliest is { } earliestAt)
         {
             var earliestDate = calendar.ToDate(earliestAt);
-            for (var month = new DateOnly(earliestDate.Year, earliestDate.Month, 1); month <= latestMonth && availableMonths.Count < 120; month = month.AddMonths(1))
+            var earliestMonth = new DateOnly(earliestDate.Year, earliestDate.Month, 1);
+            for (var month = latestMonth; month >= earliestMonth && availableMonths.Count < 120; month = month.AddMonths(-1))
             {
                 availableMonths.Add(FinancialCalendar.MonthKey(month));
             }
+            availableMonths.Reverse();
         }
         if (!availableMonths.Contains(FinancialCalendar.MonthKey(end)))
         {
@@ -108,6 +114,8 @@ public sealed class HomeLoanQueries(FinyteDbContext dbContext, TenantCalendars c
         var payers = new Dictionary<string, PayerTotals>();
         var matches = new Dictionary<string, HomeLoanIncomeSource?>();
         var review = new List<HomeLoanReviewPayment>();
+        var needsLine = new HashSet<Guid>();
+        var sharedTags = false;
         var untaggedCount = 0;
         var untaggedTotal = 0m;
         var deposits = new List<HomeLoanFlagItem>();
@@ -135,11 +143,9 @@ public sealed class HomeLoanQueries(FinyteDbContext dbContext, TenantCalendars c
             string? applicant = null;
             string? category = null;
             string? flag = null;
-            if (transaction.TransferAccountId is { } otherId)
+            if (transaction.TransferAccountId is { } otherId && roles.GetValueOrDefault(otherId, "excluded") is var otherRole && otherRole != "excluded")
             {
-                var otherRole = roles.GetValueOrDefault(otherId, "excluded");
-                type = otherRole == "excluded" ? "Transfer to or from another of your accounts"
-                    : role == "savings" || otherRole == "savings" ? "Savings transfer" : "Transfer between your accounts";
+                type = role == "savings" || otherRole == "savings" ? "Savings transfer" : "Transfer between your accounts";
             }
             else if (transaction.Amount > 0)
             {
@@ -162,7 +168,7 @@ public sealed class HomeLoanQueries(FinyteDbContext dbContext, TenantCalendars c
                 payer.Latest = date;
                 payer.Payments.Add(new HomeLoanPayment(transaction.Id, date, account, description, transaction.Amount, null));
                 var amount = transaction.Amount;
-                var person = source?.Applicant == 2 && second is not null ? 2 : source?.Applicant == 1 || source?.Kind == "salary" ? 1 : 0;
+                var person = source?.Applicant == 2 ? (second is null ? 0 : 2) : source?.Applicant == 1 || source?.Kind == "salary" ? 1 : 0;
                 switch (source?.Kind)
                 {
                     case "salary" or "other-income":
@@ -200,8 +206,13 @@ public sealed class HomeLoanQueries(FinyteDbContext dbContext, TenantCalendars c
                 var mapped = transaction.Tags.Select(x => choices.GetValueOrDefault(x.Id)).OfType<string>().Distinct().ToList();
                 var key = ownCategory ?? (transaction.Tags.Count == 0 ? HomeLoanCatalog.Untagged
                     : mapped.Count == 1 ? mapped[0] : mapped.Count == 0 ? HomeLoanCatalog.Unmapped : HomeLoanCatalog.Review);
+                sharedTags |= transaction.Tags.Count > 1;
                 foreach (var tag in transaction.Tags)
                 {
+                    if (key == HomeLoanCatalog.Unmapped)
+                    {
+                        needsLine.Add(tag.Id);
+                    }
                     if (!tagPayments.TryGetValue(tag.Id, out var list))
                     {
                         list = [];
@@ -263,15 +274,15 @@ public sealed class HomeLoanQueries(FinyteDbContext dbContext, TenantCalendars c
         {
             var tag = tags[x.Key];
             var byMonth = tagMonths[x.Key];
-            return new HomeLoanTagChoice(tag.Id, tag.Name, tag.Color, choices.GetValueOrDefault(x.Key), byMonth.Sum(), decimal.Round(byMonth.Sum() / months, 2), byMonth,
-                x.Value.OrderByDescending(y => y.Date).ToList());
+            return new HomeLoanTagChoice(tag.Id, tag.Name, tag.Color, choices.GetValueOrDefault(x.Key), needsLine.Contains(x.Key), x.Value.Count,
+                byMonth.Sum(), decimal.Round(byMonth.Sum() / months, 2), byMonth, x.Value.OrderByDescending(y => y.Date).Take(TagPaymentLimit).ToList());
         }).OrderByDescending(x => x.Total).ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase).ToList();
         var payerList = payers.Select(x =>
         {
             var source = matches.GetValueOrDefault(x.Key);
             return new HomeLoanPayer(x.Key, x.Value.Name, source?.MatchKey, source?.Kind, source?.Applicant, x.Value.Count, x.Value.Total, x.Value.Months.Count,
                 x.Value.Latest, x.Value.Payments.OrderByDescending(y => y.Date).Take(24).ToList());
-        }).OrderBy(x => x.Kind is null ? 0 : 1).ThenByDescending(x => x.Total).Take(150).ToList();
+        }).OrderBy(x => x.Kind is null ? 0 : 1).ThenByDescending(x => x.Total).ToList();
         IReadOnlyList<HomeLoanFlag> flagList = deposits.Count == 0 ? [] :
         [
             new HomeLoanFlag("large-deposit", "Large one-off deposits",
@@ -281,10 +292,10 @@ public sealed class HomeLoanQueries(FinyteDbContext dbContext, TenantCalendars c
         var gaps = scope.Select(x => new HomeLoanGap(x.Id, names[x.Id], monthKeys.Where((_, i) => !coverage[x.Id].Contains(i)).ToList()))
             .Where(x => x.MissingMonths.Count > 0).ToList();
         var setup = new HomeLoanSetup(first, second,
-            accounts.Select(x => new HomeLoanAccountRole(x.Id, names[x.Id], AccountPreferences.EffectiveType(x), roles[x.Id])).ToList(),
+            accounts.Select(x => new HomeLoanAccountRole(x.Id, names[x.Id], AccountPreferences.EffectiveType(x), roles[x.Id], chosen.Contains(x.Id))).ToList(),
             profile?.Version ?? 0, profile is not null);
         var report = new HomeLoanReport(currency, months, monthKeys[0], monthKeys[^1], availableMonths, setup, monthly, average, total,
-            categoryTotals, tagChoices, payerList, new HomeLoanUntagged(untaggedCount, untaggedTotal),
+            categoryTotals, tagChoices, sharedTags, payerList, new HomeLoanUntagged(untaggedCount, untaggedTotal),
             review.OrderBy(x => x.OwnCategory is null ? 0 : 1).ThenByDescending(x => x.Date).ToList(), flagList, gaps, HomeLoanCatalog.Categories);
         return (report, rows);
     }

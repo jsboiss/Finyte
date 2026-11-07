@@ -13,6 +13,7 @@ import { MoneyFlowChart } from './MoneyFlowChart'
 import './homeLoan.css'
 
 const groupLabels = { living: 'Living expense', commitment: 'Commitment', savings: 'Saved' } as const
+const roleLabels = { spending: 'a spending account', savings: 'a savings account', excluded: 'not included' } as const
 
 export function HomeLoanPage() {
   const [months, setMonths] = useState(3)
@@ -50,6 +51,7 @@ export function HomeLoanPage() {
         <button type="button" className="home-loan-secondary" onClick={() => { setEditing(true); setMessage('') }}>Edit setup</button>
       </div>
       {!data.setup.saved && <div className="home-loan-callout"><p>Start by checking the setup: add both applicants' names, and mark which accounts are savings.</p><button type="button" onClick={() => setEditing(true)}>Check setup</button></div>}
+      <NewAccounts data={data} onCheck={() => { setEditing(true); setMessage('') }} />
       {data.gaps.length > 0 && <div className="home-loan-callout home-loan-warning"><strong>Some months have no transactions.</strong> Import those statements if the account was open, so the figures are complete.
         <ul>{data.gaps.map(x => <li key={x.accountId}>{x.accountName}: {x.missingMonths.map(monthLabel).join(', ')}</li>)}</ul>
         <Link to="/imports">Import statements</Link></div>}
@@ -66,6 +68,17 @@ export function HomeLoanPage() {
       <FlagSection data={data} />
     </>}
   </section>
+}
+
+function NewAccounts({ data, onCheck }: { data: HomeLoanReport; onCheck: () => void }) {
+  const added = data.setup.saved ? data.setup.accounts.filter(x => !x.chosen) : []
+  if (added.length === 0) {
+    return null
+  }
+  return <div className="home-loan-callout home-loan-warning">
+    <p><strong>{added.length === 1 ? 'An account was' : `${added.length} accounts were`} added since you saved the setup.</strong> Until you check {added.length === 1 ? 'it' : 'them'}, {added.map(x => `${x.name} counts as ${roleLabels[x.role]}`).join(', ')}.</p>
+    <button type="button" onClick={onCheck}>Check setup</button>
+  </div>
 }
 
 function Summary({ data }: { data: HomeLoanReport }) {
@@ -88,11 +101,11 @@ function Summary({ data }: { data: HomeLoanReport }) {
 function ToDo({ data }: { data: HomeLoanReport }) {
   const money = (value: number) => exactAmount(value, data.currency)
   const unlabelledCredits = data.payers.filter(x => x.kind === null)
-  const unmapped = data.tags.filter(x => x.category === null)
+  const unmapped = data.tags.filter(x => x.needsLine)
   const review = data.review.filter(x => x.ownCategory === null)
   const spend = data.categories.reduce((sum, x) => sum + x.total, 0)
   const pending = data.categories.filter(x => pendingCategories.includes(x.key)).reduce((sum, x) => sum + x.total, 0)
-  const percent = spend > 0 ? Math.round(((spend - pending) / spend) * 100) : 100
+  const percent = spend > 0 ? Math.floor(((spend - pending) / spend) * 100) : 100
   if (unlabelledCredits.length === 0 && pending === 0) {
     return <div className="home-loan-callout home-loan-done"><h2>Everything is labelled</h2><p>Every payment in this period has a label and a lender category. Download the summary when you're ready.</p></div>
   }
@@ -143,14 +156,25 @@ function PayerRow({ payer, payers, options, currency, onChanged }: {
   payer: HomeLoanPayer; payers: HomeLoanPayer[]; options: [string, string][]; currency: string; onChanged: () => Promise<unknown>
 }) {
   const saved = payer.kind ? `${payer.kind}:${payer.applicant ?? ''}` : ''
-  const [choice, setChoice] = useState(options.some(([value]) => value === saved) ? saved : '')
+  const choices: [string, string][] = !saved || options.some(([value]) => value === saved) ? options
+    : [...options, [saved, payer.kind === 'salary' ? 'Salary: removed second applicant (counted as other income)' : 'Other income: removed second applicant (counted as shared)']]
+  const [choice, setChoice] = useState(saved)
   const [match, setMatch] = useState(payer.matchedBy ?? payer.key)
   const save = useMutation({ mutationFn: saveIncomeSource, onSuccess: onChanged })
   const key = matchKey(match)
   const covered = key ? payers.filter(x => x.key === key || x.key.startsWith(`${key} `)) : []
   const others = covered.filter(x => x.key !== payer.key)
+  const sharers = payer.matchedBy ? payers.filter(x => x.key !== payer.key && x.matchedBy === payer.matchedBy) : []
+  const kept = sharers.filter(x => !covered.includes(x))
+  const keepPrevious = kept.length > 0
   const unchanged = payer.kind ? choice === saved && key === payer.matchedBy : choice === ''
   const invalid = choice !== '' && (key.length === 0 || !covered.some(x => x.key === payer.key))
+  const names = (list: HomeLoanPayer[]) => `${list.slice(0, 3).map(x => x.name).join(', ')}${list.length > 3 ? '…' : ''}`
+  const count = (list: HomeLoanPayer[]) => `${list.length} other ${list.length === 1 ? 'payer' : 'payers'}`
+  const hint = choice === '' ? (payer.matchedBy && sharers.length > 0 ? `Removing it also removes the label from ${count(sharers)}: ${names(sharers)}` : null)
+    : invalid ? 'This payer’s name must start with this text.'
+    : [others.length > 0 ? `Also covers ${count(others)}: ${names(others)}` : 'Covers only this payer.',
+      keepPrevious ? `${count(kept)} ${kept.length === 1 ? 'keeps' : 'keep'} the label from “${payer.matchedBy}”.` : ''].join(' ').trim()
   return <li className={payer.kind ? '' : 'home-loan-needs'}>
     <div><strong>{payer.name}</strong>
       <span>{payer.count} {payer.count === 1 ? 'payment' : 'payments'} in {payer.monthsSeen} {payer.monthsSeen === 1 ? 'month' : 'months'} · {exactAmount(payer.total, currency)}{payer.kind ? '' : ' · needs a label'}</span>
@@ -160,16 +184,15 @@ function PayerRow({ payer, payers, options, currency, onChanged }: {
       event.preventDefault()
       const [kind, applicant] = choice.split(':')
       save.mutate(kind
-        ? { key, previousKey: payer.matchedBy, name: payer.name, kind, applicant: applicant ? Number(applicant) : null }
+        ? { key, previousKey: keepPrevious ? null : payer.matchedBy, name: payer.name, kind, applicant: applicant ? Number(applicant) : null }
         : { key: payer.matchedBy ?? key, previousKey: null, name: payer.name, kind: null, applicant: null })
     }}>
       <select aria-label={`Label for ${payer.name}`} value={choice} onChange={event => setChoice(event.target.value)}>
-        {options.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+        {choices.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
       </select>
       {choice !== '' && <label className="home-loan-match">Applies to payments starting with
         <input value={match} maxLength={200} onChange={event => setMatch(event.target.value)} /></label>}
-      {choice !== '' && <small className="home-loan-hint">{invalid ? 'This payer’s name must start with this text.'
-        : others.length > 0 ? `Also covers ${others.length} other ${others.length === 1 ? 'payer' : 'payers'}: ${others.slice(0, 3).map(x => x.name).join(', ')}${others.length > 3 ? '…' : ''}` : 'Covers only this payer.'}</small>}
+      {hint && <small className="home-loan-hint">{hint}</small>}
       <button type="submit" className={unchanged ? 'home-loan-secondary' : ''} disabled={save.isPending || unchanged || invalid}>{save.isPending ? 'Saving…' : 'Save'}</button>
     </form>
     {save.isError && <p role="alert">That label could not be saved. Try again.</p>}
@@ -179,14 +202,13 @@ function PayerRow({ payer, payers, options, currency, onChanged }: {
 function ExpenseSection({ data, onChanged }: { data: HomeLoanReport; onChanged: () => Promise<unknown> }) {
   const money = (value: number) => exactAmount(value, data.currency)
   const untagged = data.categories.find(x => x.key === 'untagged')
-  const shared = data.tags.reduce((sum, x) => sum + x.total, 0) > data.categories.filter(x => x.key !== 'untagged').reduce((sum, x) => sum + x.total, 0) + 0.005
   return <section className="panel home-loan-section" id="home-loan-expenses"><h2>Money out</h2>
-    <p>Your spending by your own tags. Choose which line of the lender's living-expense form each tag counts as, and give a single payment its own line when its tag doesn't fit, like a home purchase under a broad Home tag. Only confirmed transfers between your own accounts are left out.</p>
+    <p>Your spending by your own tags. Choose which line of the lender's living-expense form each tag counts as, and give a single payment its own line when its tag doesn't fit, like a home purchase under a broad Home tag. Only confirmed transfers between included accounts are left out, so a repayment to your own loan account counts here once its tag has a line.</p>
     {data.categories.length === 0 && <p>No spending in this period.</p>}
 
     {(data.tags.length > 0 || untagged) && <>
       <h3 id="home-loan-tags">Your spending by tag</h3>
-      {shared && <p>A payment with more than one tag appears under each of its tags, so these add up to more than you spent.</p>}
+      {data.sharedTags && <p>A payment with more than one tag appears under each of its tags, so these add up to more than you spent.</p>}
       <ul className="home-loan-list">
         {data.tags.map(x => <TagCategoryRow key={`${x.tagId}-${x.category ?? ''}`} tag={x} categories={data.lenderCategories} currency={data.currency} onChanged={onChanged} />)}
         {untagged && <li className="home-loan-needs" id="home-loan-untagged">
@@ -201,8 +223,8 @@ function ExpenseSection({ data, onChanged }: { data: HomeLoanReport; onChanged: 
     {data.review.length > 0 && <>
       <h3 id="home-loan-review">Payments to check ({data.review.length})</h3>
       <p>These payments have tags on different lines of the lender's form, or their own line. Choose where each one counts. Until then it's counted as a living expense.</p>
-      <ul className="home-loan-list">{data.review.map(x => <li key={x.transactionId}>
-        <div><strong>{x.description}</strong><span>{dayLabel(x.date)} · {x.account} · {money(-x.amount)} · tagged {x.tags.join(', ')}</span></div>
+      <ul className="home-loan-list">{data.review.map(x => <li key={`${x.transactionId}-${x.ownCategory ?? ''}`}>
+        <div><strong>{x.description}</strong><span>{dayLabel(x.date)} · {x.account} · {money(-x.amount)}{x.tags.length > 0 ? ` · tagged ${x.tags.join(', ')}` : ' · no tags'}</span></div>
         <PaymentCategory payment={x} categories={data.lenderCategories} label={`${x.description} on ${dayLabel(x.date)}`} onChanged={onChanged} />
       </li>)}</ul>
     </>}
@@ -229,9 +251,9 @@ function CategoryOptions({ categories }: { categories: LenderCategory[] }) {
 function TagCategoryRow({ tag, categories, currency, onChanged }: { tag: HomeLoanTag; categories: LenderCategory[]; currency: string; onChanged: () => Promise<unknown> }) {
   const [choice, setChoice] = useState(tag.category ?? '')
   const save = useMutation({ mutationFn: saveCategory, onSuccess: onChanged })
-  return <li className={`home-loan-tag-row${tag.category ? '' : ' home-loan-needs'}`}>
+  return <li className={`home-loan-tag-row${tag.needsLine ? ' home-loan-needs' : ''}`}>
     <div><strong><span className="home-loan-swatch" style={{ backgroundColor: tag.color }} />{tag.name}</strong>
-      <span>{tag.payments.length} {tag.payments.length === 1 ? 'payment' : 'payments'} · {exactAmount(tag.monthlyAverage, currency)} a month · {exactAmount(tag.total, currency)}{tag.category ? '' : ' · choose its line on the lender’s form'}</span></div>
+      <span>{tag.count} {tag.count === 1 ? 'payment' : 'payments'} · {exactAmount(tag.monthlyAverage, currency)} a month · {exactAmount(tag.total, currency)}{tag.needsLine ? ' · choose its line on the lender’s form' : ''}</span></div>
     <form className="home-loan-apply" onSubmit={event => { event.preventDefault(); save.mutate({ tagId: tag.tagId, category: choice || null }) }}>
       <label className="home-loan-counts-as">Counts as<span className="visually-hidden"> for {tag.name}</span><select value={choice} onChange={event => setChoice(event.target.value)}>
         <option value="">Choose a line on the form</option>
@@ -241,7 +263,8 @@ function TagCategoryRow({ tag, categories, currency, onChanged }: { tag: HomeLoa
     </form>
     <details className="home-loan-payments">
       <summary>Show payments<span className="visually-hidden"> tagged {tag.name}</span> and give one its own line</summary>
-      <ul>{tag.payments.map(x => <li key={x.transactionId}><span>{dayLabel(x.date)} · {x.account}</span><span>{x.description}</span><strong>{exactAmount(x.amount, currency)}</strong>
+      {tag.payments.length < tag.count && <p>Showing the latest {tag.payments.length} of {tag.count}.</p>}
+      <ul>{tag.payments.map(x => <li key={`${x.transactionId}-${x.ownCategory ?? ''}`}><span>{dayLabel(x.date)} · {x.account}</span><span>{x.description}</span><strong>{exactAmount(x.amount, currency)}</strong>
         <PaymentCategory payment={x} categories={categories} label={`${x.description} on ${dayLabel(x.date)}`} onChanged={onChanged} compact /></li>)}</ul>
     </details>
     {save.isError && <p role="alert">That category could not be saved. Try again.</p>}

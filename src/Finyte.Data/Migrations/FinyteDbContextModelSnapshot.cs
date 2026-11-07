@@ -861,6 +861,10 @@ namespace Finyte.Data.Migrations
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.PrimitiveCollection<Guid[]>("ExcludedAccountIds")
+                        .IsRequired()
+                        .HasColumnType("uuid[]");
+
                     b.Property<string>("FirstApplicant")
                         .IsRequired()
                         .HasMaxLength(60)

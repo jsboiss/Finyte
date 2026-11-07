@@ -8,6 +8,7 @@ public sealed class HomeLoanProfile
     public string? SecondApplicant { get; set; }
     public Guid[] SpendingAccountIds { get; set; } = [];
     public Guid[] SavingsAccountIds { get; set; } = [];
+    public Guid[] ExcludedAccountIds { get; set; } = [];
     public int Version { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }

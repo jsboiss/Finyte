@@ -48,7 +48,7 @@ public static class HomeLoanCsv
         {
             Line(csv, [untagged.Label, "Living expense until tagged", Money(untagged.MonthlyAverage), Money(untagged.Total), .. untagged.ByMonth.Select(Money)]);
         }
-        if (SharesTags(report))
+        if (report.SharedTags)
         {
             Line(csv, "A payment with more than one tag appears under each of its tags.");
         }
@@ -101,9 +101,6 @@ public static class HomeLoanCsv
         }
         return csv.ToString();
     }
-
-    public static bool SharesTags(HomeLoanReport report) =>
-        report.Tags.Sum(x => x.Total) > report.Categories.Where(x => x.Key != HomeLoanCatalog.Untagged).Sum(x => x.Total) + 0.005m;
 
     private static string KindLabel(string? kind) => kind switch
     {

@@ -97,6 +97,7 @@ public static class HomeLoanEndpoints
         profile.SecondApplicant = second;
         profile.SpendingAccountIds = roles.Where(x => x.Role == "spending").Select(x => x.AccountId).ToArray();
         profile.SavingsAccountIds = roles.Where(x => x.Role == "savings").Select(x => x.AccountId).ToArray();
+        profile.ExcludedAccountIds = roles.Where(x => x.Role == "excluded").Select(x => x.AccountId).ToArray();
         profile.Version++;
         profile.UpdatedAt = now;
         try
@@ -128,7 +129,8 @@ public static class HomeLoanEndpoints
         }
         if (previous.Length > 0 && previous != key)
         {
-            dbContext.HomeLoanIncomeSources.RemoveRange(dbContext.HomeLoanIncomeSources.Where(x => x.TenantId == tenant.TenantId && x.MatchKey == previous));
+            dbContext.HomeLoanIncomeSources.RemoveRange(await dbContext.HomeLoanIncomeSources
+                .Where(x => x.TenantId == tenant.TenantId && x.MatchKey == previous).ToListAsync(cancellationToken));
         }
         var source = await dbContext.HomeLoanIncomeSources.SingleOrDefaultAsync(x => x.TenantId == tenant.TenantId && x.MatchKey == key, cancellationToken);
         if (request.Kind is null)
@@ -150,8 +152,7 @@ public static class HomeLoanEndpoints
             source.Applicant = request.Kind is "salary" or "other-income" ? request.Applicant : null;
             source.UpdatedAt = timeProvider.GetUtcNow();
         }
-        await dbContext.SaveChangesAsync(cancellationToken);
-        return Results.NoContent();
+        return await Save(dbContext, cancellationToken);
     }
 
     private static async Task<IResult> SaveCategory(SaveCategoryRequest request, TenantResolver tenantResolver, HttpContext httpContext,
@@ -188,8 +189,7 @@ public static class HomeLoanEndpoints
             choice.Category = request.Category;
             choice.UpdatedAt = timeProvider.GetUtcNow();
         }
-        await dbContext.SaveChangesAsync(cancellationToken);
-        return Results.NoContent();
+        return await Save(dbContext, cancellationToken);
     }
 
     private static async Task<IResult> SavePaymentCategory(SavePaymentCategoryRequest request, TenantResolver tenantResolver, HttpContext httpContext,
@@ -226,7 +226,19 @@ public static class HomeLoanEndpoints
             choice.Category = request.Category;
             choice.UpdatedAt = timeProvider.GetUtcNow();
         }
-        await dbContext.SaveChangesAsync(cancellationToken);
+        return await Save(dbContext, cancellationToken);
+    }
+
+    private static async Task<IResult> Save(FinyteDbContext dbContext, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+            return Results.Conflict("This was changed at the same time somewhere else. Reload and try again.");
+        }
         return Results.NoContent();
     }
 

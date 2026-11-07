@@ -16,6 +16,7 @@ public static class HomeLoanConfiguration
             x.Property(y => y.SecondApplicant).HasMaxLength(60);
             x.Property(y => y.SpendingAccountIds).HasColumnType("uuid[]");
             x.Property(y => y.SavingsAccountIds).HasColumnType("uuid[]");
+            x.Property(y => y.ExcludedAccountIds).HasColumnType("uuid[]");
             x.Property(y => y.Version).IsConcurrencyToken();
             x.HasIndex(y => y.TenantId).IsUnique();
         });

@@ -7,12 +7,12 @@ export type HomeLoanMonth = {
 export type LenderGroup = 'living' | 'commitment' | 'savings'
 export type HomeLoanPayment = { transactionId: string; date: string; account: string; description: string; amount: number; ownCategory: string | null }
 export type LenderCategory = { key: string; label: string; group: LenderGroup }
-export type HomeLoanAccountRole = { accountId: string; name: string; type: string; role: 'spending' | 'savings' | 'excluded' }
+export type HomeLoanAccountRole = { accountId: string; name: string; type: string; role: 'spending' | 'savings' | 'excluded'; chosen: boolean }
 export type HomeLoanPayer = {
   key: string; name: string; matchedBy: string | null; kind: string | null; applicant: number | null
   count: number; total: number; monthsSeen: number; latestDate: string; payments: HomeLoanPayment[]
 }
-export type HomeLoanTag = { tagId: string; name: string; color: string; category: string | null; total: number; monthlyAverage: number; byMonth: number[]; payments: HomeLoanPayment[] }
+export type HomeLoanTag = { tagId: string; name: string; color: string; category: string | null; needsLine: boolean; count: number; total: number; monthlyAverage: number; byMonth: number[]; payments: HomeLoanPayment[] }
 export type HomeLoanReviewPayment = { transactionId: string; date: string; account: string; description: string; amount: number; tags: string[]; ownCategory: string | null }
 export type HomeLoanReport = {
   currency: string; months: number; fromMonth: string; toMonth: string; availableMonths: string[]
@@ -20,6 +20,7 @@ export type HomeLoanReport = {
   monthlyTotals: HomeLoanMonth[]; average: HomeLoanMonth; total: HomeLoanMonth
   categories: { key: string; label: string; group: LenderGroup; total: number; monthlyAverage: number; byMonth: number[] }[]
   tags: HomeLoanTag[]
+  sharedTags: boolean
   payers: HomeLoanPayer[]
   untagged: { count: number; total: number }
   review: HomeLoanReviewPayment[]
