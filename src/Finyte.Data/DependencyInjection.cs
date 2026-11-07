@@ -25,6 +25,7 @@ public static class DependencyInjection
         services.AddScoped<Tagging.TagSuggestionService>();
         services.AddScoped<Transfers.InternalTransferService>();
         services.AddScoped<PayCycles.PayCycleQueries>();
+        services.AddScoped<HomeLoans.HomeLoanQueries>();
         services.AddScoped<Recurring.RecurringPaymentService>();
         services.AddScoped<IFiskilBankingSyncService, FiskilBankingSyncService>();
         services.AddScoped<IProviderSyncRunner, ProviderSyncRunner>();

@@ -21,6 +21,7 @@ public static class RouteBuilder
         app.MapOverviewEndpoints();
         app.MapCashFlowEndpoints();
         app.MapPayCycleEndpoints();
+        app.MapHomeLoanEndpoints();
         app.MapBudgetEndpoints();
         app.MapRecurringPaymentEndpoints();
         app.MapTagSuggestionEndpoints();
