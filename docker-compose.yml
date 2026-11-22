@@ -7,7 +7,7 @@ services:
       POSTGRES_USER: finyte
       POSTGRES_PASSWORD: finyte_dev_password
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
     volumes:
       - finyte-postgres-data:/var/lib/postgresql
     healthcheck:
@@ -29,8 +29,8 @@ services:
     container_name: finyte-temporal
     command: server start-dev --ip 0.0.0.0 --db-filename /var/lib/temporal/temporal.db
     ports:
-      - "7233:7233"
-      - "8233:8233"
+      - "127.0.0.1:7233:7233"
+      - "127.0.0.1:8233:8233"
     volumes:
       - finyte-temporal-data:/var/lib/temporal
     healthcheck:
@@ -54,7 +54,7 @@ services:
       Database__MigrateOnStartup: "true"
       Temporal__Address: temporal:7233
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     depends_on:
       postgres:
         condition: service_healthy
