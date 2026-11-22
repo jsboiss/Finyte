@@ -12,6 +12,6 @@ export function getTagSuggestions() {
   return httpClient<TagSuggestions>({ url: '/api/tag-suggestions' })
 }
 
-export function acceptTagSuggestions(items: AcceptItem[]) {
-  return httpClient<{ createdTags: number; createdRules: number; taggedTransactions: number }>({ method: 'POST', url: '/api/tag-suggestions/accept', data: { items } })
+export function acceptTagSuggestions(items: AcceptItem[], range?: { from: string; to: string }) {
+  return httpClient<{ createdTags: number; createdRules: number; taggedTransactions: number }>({ method: 'POST', url: '/api/tag-suggestions/accept', data: { items, ...range } })
 }

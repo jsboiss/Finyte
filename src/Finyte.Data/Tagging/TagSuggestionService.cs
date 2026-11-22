@@ -1,5 +1,6 @@
 using Finyte.Core.Accounts;
 using Finyte.Core.Recurring;
+using Finyte.Core.Scheduling;
 using Finyte.Data.Analytics;
 using Finyte.Data.Tenancy;
 using Finyte.Data.Transfers;
@@ -101,6 +102,8 @@ public sealed class TagSuggestionService(FinyteDbContext dbContext, TenantCalend
                 throw new ArgumentException("Choose to create a rule or to tag existing payments once.");
             }
         }
+        var calendar = await calendars.For(tenantId, cancellationToken);
+        var (start, end) = Range(calendar, request.From, request.To);
 
         await using var databaseTransaction = await tagService.BeginMutation(tenantId, cancellationToken);
         var tags = await dbContext.TransactionTags.Where(x => x.TenantId == tenantId).ToListAsync(cancellationToken);
@@ -150,8 +153,13 @@ public sealed class TagSuggestionService(FinyteDbContext dbContext, TenantCalend
         var taggedTransactions = 0;
         if (once.Count > 0)
         {
+            var accountIds = (await dbContext.Accounts.AsNoTracking().Where(x => x.TenantId == tenantId).ToListAsync(cancellationToken))
+                .Where(AccountPreferences.IncludeInAnalytics).Select(x => x.Id).ToArray();
             var untagged = await dbContext.Transactions.AsNoTracking()
-                .Where(x => x.TenantId == tenantId && x.Amount < 0 && !x.TagAssignments.Any(y => y.Tag != null && y.Tag.TenantId == tenantId))
+                .Where(x => x.TenantId == tenantId && x.Amount < 0 && accountIds.Contains(x.AccountId)
+                    && x.PostedAt >= calendar.StartOf(start) && x.PostedAt < calendar.EndExclusive(end)
+                    && !x.TagAssignments.Any(y => y.Tag != null && y.Tag.TenantId == tenantId))
+                .ExcludeInternalTransfers()
                 .Select(x => new { x.Id, x.MerchantName, x.Description })
                 .ToListAsync(cancellationToken);
             foreach (var row in untagged)
@@ -177,6 +185,17 @@ public sealed class TagSuggestionService(FinyteDbContext dbContext, TenantCalend
             await databaseTransaction.CommitAsync(cancellationToken);
         }
         return new AcceptTagSuggestionsResponse(createdTags, createdRules, taggedTransactions);
+    }
+
+    private static (DateOnly Start, DateOnly End) Range(FinancialCalendar calendar, DateOnly? from, DateOnly? to)
+    {
+        var end = to ?? calendar.Today;
+        var start = from ?? end.AddDays(-365);
+        if (end < start || end.DayNumber - start.DayNumber > 1827)
+        {
+            throw new ArgumentException("Choose a date range in order, spanning at most five years.");
+        }
+        return (start, end);
     }
 
     private static long MinorUnits(decimal amount) => (long)decimal.Round(Math.Abs(amount) * 100, MidpointRounding.AwayFromZero);
@@ -240,5 +259,5 @@ public sealed record MerchantSuggestion(string RuleMerchantName, IReadOnlyList<s
 public sealed record TagSuggestionGroup(string TagName, Guid? TagId, string Color, IReadOnlyList<MerchantSuggestion> Merchants);
 public sealed record TagSuggestionsResponse(DateOnly From, DateOnly To, IReadOnlyList<TagCoverage> Coverage, IReadOnlyList<TagSuggestionGroup> Groups, IReadOnlyList<MerchantSuggestion> NeedsTag);
 public sealed record AcceptTagSuggestionItem(string? MerchantName, Guid? TagId, string? TagName, string? Mode = null);
-public sealed record AcceptTagSuggestionsRequest(IReadOnlyList<AcceptTagSuggestionItem>? Items);
+public sealed record AcceptTagSuggestionsRequest(IReadOnlyList<AcceptTagSuggestionItem>? Items, DateOnly? From = null, DateOnly? To = null);
 public sealed record AcceptTagSuggestionsResponse(int CreatedTags, int CreatedRules, int TaggedTransactions = 0);
