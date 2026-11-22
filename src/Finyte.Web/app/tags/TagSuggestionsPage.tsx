@@ -15,7 +15,7 @@ export function TagSuggestionsPage() {
   const suggestions = useQuery({ queryKey: ['tag-suggestions'], queryFn: getTagSuggestions })
   const tags = useQuery({ queryKey: ['tags'], queryFn: () => httpClient<TransactionTag[]>({ url: '/api/tags' }) })
   const accept = useMutation({
-    mutationFn: (items: AcceptItem[]) => acceptTagSuggestions(items.map(x => ({ ...x, mode }))),
+    mutationFn: (items: AcceptItem[]) => acceptTagSuggestions(items.map(x => ({ ...x, mode })), suggestions.data && { from: suggestions.data.from, to: suggestions.data.to }),
     onSuccess: async (result, items) => {
       const added = result.createdTags > 0 ? ` and added ${result.createdTags} ${result.createdTags === 1 ? 'tag' : 'tags'}` : ''
       setNotice(mode === 'once'
@@ -36,7 +36,7 @@ export function TagSuggestionsPage() {
     {data && <>
       <fieldset className="panel tag-suggestion-mode"><legend>When I accept a suggestion</legend>
         <label><input type="radio" name="tag-mode" checked={mode === 'rule'} onChange={() => setMode('rule')} />Tag existing and future payments (creates a rule)</label>
-        <label><input type="radio" name="tag-mode" checked={mode === 'once'} onChange={() => setMode('once')} />Only tag existing payments</label>
+        <label><input type="radio" name="tag-mode" checked={mode === 'once'} onChange={() => setMode('once')} />Only tag the payments counted here</label>
       </fieldset>
       {data.coverage.map(x => <Coverage key={x.currency} tagged={x.taggedMinorUnits} total={x.totalMinorUnits} currency={x.currency} />)}
       {data.groups.length === 0 && data.needsTag.length === 0 && <section className="panel"><h2>Everything is tagged</h2><p>New merchants will appear here after your next import.</p></section>}

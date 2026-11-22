@@ -157,6 +157,58 @@ public sealed class TagSuggestionApiTests
     }
 
     [Fact]
+    public async Task ApplyingOnceTagsOnlyThePaymentsTheSuggestionCounted()
+    {
+        await using var baseFactory = new FinyteApiFactory();
+        await using var factory = WithClock(baseFactory);
+        using var client = factory.CreateClient();
+        await Seed(factory, client, billing: true);
+        Guid old, loanPayment, transfer;
+        using (var scope = factory.Services.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<FinyteDbContext>();
+            var everyday = await dbContext.Accounts.SingleAsync(x => x.Name == "Everyday");
+            var savings = await dbContext.Accounts.SingleAsync(x => x.Name == "Savings");
+            var loan = new Account { TenantId = everyday.TenantId, Name = "Loan", AccountTypeOverride = "home-loan", CreatedAt = DateTimeOffset.UtcNow };
+            dbContext.Accounts.Add(loan);
+            var oldRow = Row(everyday, 8, 1, -9.99m, "STREAMCO SYDNEY AUS Card xx1234 AUD 9.99");
+            oldRow.PostedAt = new DateTimeOffset(2025, 8, 1, 2, 0, 0, TimeSpan.Zero);
+            var loanRow = Row(loan, 8, 9, -9.99m, "STREAMCO SYDNEY AUS Card xx1234 AUD 9.99");
+            var transferRow = Row(everyday, 8, 10, -9.99m, "STREAMCO SYDNEY AUS Card xx1234 AUD 9.99");
+            transferRow.InternalTransferAccountId = savings.Id;
+            transferRow.InternalTransferSource = "manual";
+            dbContext.Transactions.AddRange(oldRow, loanRow, transferRow);
+            await dbContext.SaveChangesAsync();
+            (old, loanPayment, transfer) = (oldRow.Id, loanRow.Id, transferRow.Id);
+        }
+        var suggestions = await client.GetFromJsonAsync<JsonElement>(Url);
+        var counted = suggestions.GetProperty("groups").EnumerateArray().SelectMany(x => x.GetProperty("merchants").EnumerateArray())
+            .Concat(suggestions.GetProperty("needsTag").EnumerateArray())
+            .Single(x => x.GetProperty("ruleMerchantName").GetString() == "STREAMCO SYDNEY AUS").GetProperty("transactionCount").GetInt32();
+
+        var accepted = await (await client.PostAsJsonAsync($"{Url}/accept",
+            new AcceptTagSuggestionsRequest([new("STREAMCO SYDNEY AUS", null, "Subscriptions", "once")]))).Content.ReadFromJsonAsync<AcceptTagSuggestionsResponse>();
+
+        Assert.Equal(2, counted);
+        Assert.Equal(counted, accepted!.TaggedTransactions);
+        using (var scope = factory.Services.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<FinyteDbContext>();
+            var untagged = await dbContext.Transactions.Where(x => !x.TagAssignments.Any()).Select(x => x.Id).ToListAsync();
+            Assert.Contains(old, untagged);
+            Assert.Contains(loanPayment, untagged);
+            Assert.Contains(transfer, untagged);
+        }
+
+        var wider = await (await client.PostAsJsonAsync($"{Url}/accept",
+            new AcceptTagSuggestionsRequest([new("STREAMCO SYDNEY AUS", null, "Subscriptions", "once")], new DateOnly(2025, 7, 1), new DateOnly(2026, 9, 8))))
+            .Content.ReadFromJsonAsync<AcceptTagSuggestionsResponse>();
+        Assert.Equal(1, wider!.TaggedTransactions);
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync($"{Url}/accept",
+            new AcceptTagSuggestionsRequest([new("STREAMCO SYDNEY AUS", null, "Subscriptions", "once")], new DateOnly(2026, 9, 8), new DateOnly(2026, 1, 1)))).StatusCode);
+    }
+
+    [Fact]
     public async Task TransactionsCarryACleanedMerchantNameForRules()
     {
         await using var baseFactory = new FinyteApiFactory();
