@@ -53,6 +53,7 @@ builder.Services.AddAuthorization();
 
 var clerkAuthority = builder.Configuration["Clerk:Authority"];
 var hasClerkAuthority = !string.IsNullOrWhiteSpace(clerkAuthority);
+var authorizedParties = ClerkAuthorizedParties.Read(builder.Configuration);
 var hasDevAuth = builder.Environment.IsDevelopment() && builder.Configuration.GetValue<bool>("DevAuth:Enabled");
 
 if (hasDevAuth)
@@ -73,6 +74,17 @@ else if (hasClerkAuthority)
                 ValidateAudience = false,
                 ValidateIssuer = true
             };
+            x.Events = new JwtBearerEvents
+            {
+                OnTokenValidated = context =>
+                {
+                    if (!ClerkAuthorizedParties.IsAllowed(context.Principal, authorizedParties))
+                    {
+                        context.Fail("The sign-in token was issued for a different application.");
+                    }
+                    return Task.CompletedTask;
+                }
+            };
         });
 
 }
@@ -80,6 +92,11 @@ else if (hasClerkAuthority)
 var app = builder.Build();
 
 app.UseExceptionHandler();
+
+if (hasClerkAuthority && !hasDevAuth && authorizedParties.Count == 0)
+{
+    app.Logger.LogWarning("Clerk:AuthorizedParties is empty, so sign-in tokens are accepted whichever application they were issued for.");
+}
 
 if (app.Configuration.GetValue<bool>("Database:MigrateOnStartup"))
 {
