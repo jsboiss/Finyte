@@ -19,12 +19,21 @@ public sealed class ProviderSyncRunner(
             .FirstOrDefaultAsync(x => x.Id == syncRunId, cancellationToken)
             ?? throw new InvalidOperationException($"Provider sync run '{syncRunId}' was not found.");
 
-        if (syncRun.Status is ProviderSyncStatus.Succeeded)
+        if (syncRun.Status is ProviderSyncStatus.Succeeded or ProviderSyncStatus.Cancelled)
         {
             return;
         }
 
         var now = DateTimeOffset.UtcNow;
+        if (syncRun.ConsentId is not null && await dbContext.ProviderConnections.AnyAsync(x => x.TenantId == syncRun.TenantId
+            && x.ConsentId == syncRun.ConsentId && x.Status == ProviderConnectionStatus.Revoked, cancellationToken))
+        {
+            syncRun.Status = ProviderSyncStatus.Cancelled;
+            syncRun.CompletedAt = now;
+            await dbContext.SaveChangesAsync(cancellationToken);
+            return;
+        }
+
         syncRun.Status = ProviderSyncStatus.Running;
         syncRun.StartedAt ??= now;
         syncRun.CompletedAt = null;
