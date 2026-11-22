@@ -44,6 +44,49 @@ public sealed class ProviderSyncRunnerTests
         Assert.NotNull(updatedRun.CompletedAt);
     }
 
+    [Fact]
+    public async Task CancelledRunDoesNotSync()
+    {
+        await using var dbContext = CreateDbContext();
+        var syncRun = CreateSyncRun(ProviderSyncDataset.Transactions);
+        syncRun.Status = ProviderSyncStatus.Cancelled;
+        dbContext.ProviderSyncRuns.Add(syncRun);
+        await dbContext.SaveChangesAsync();
+        var bankingSyncService = new RecordingBankingSyncService();
+        var runner = new ProviderSyncRunner(dbContext, bankingSyncService, new RecordingSyncProjectionRefresher(dbContext));
+
+        await runner.Run(syncRun.Id, CancellationToken.None);
+
+        Assert.Null(bankingSyncService.TransactionSyncRunId);
+        Assert.Equal(ProviderSyncStatus.Cancelled, (await dbContext.ProviderSyncRuns.SingleAsync()).Status);
+    }
+
+    [Fact]
+    public async Task RunForARevokedConsentIsCancelledWithoutSyncing()
+    {
+        await using var dbContext = CreateDbContext();
+        var syncRun = CreateSyncRun(ProviderSyncDataset.Transactions);
+        syncRun.ConsentId = "consent-1";
+        dbContext.ProviderSyncRuns.Add(syncRun);
+        dbContext.ProviderConnections.Add(new ProviderConnection
+        {
+            TenantId = syncRun.TenantId, TenantMemberId = Guid.NewGuid(), Provider = ProviderSyncProvider.Fiskil, EndUserId = "end-user-1",
+            ConsentId = "consent-1", Status = ProviderConnectionStatus.Revoked, CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow
+        });
+        await dbContext.SaveChangesAsync();
+        var bankingSyncService = new RecordingBankingSyncService();
+        var projectionRefresher = new RecordingSyncProjectionRefresher(dbContext);
+        var runner = new ProviderSyncRunner(dbContext, bankingSyncService, projectionRefresher);
+
+        await runner.Run(syncRun.Id, CancellationToken.None);
+
+        Assert.Null(bankingSyncService.TransactionSyncRunId);
+        Assert.Null(projectionRefresher.SyncRunId);
+        var updatedRun = await dbContext.ProviderSyncRuns.SingleAsync();
+        Assert.Equal(ProviderSyncStatus.Cancelled, updatedRun.Status);
+        Assert.NotNull(updatedRun.CompletedAt);
+    }
+
     private static FinyteDbContext CreateDbContext()
     {
         var options = new DbContextOptionsBuilder<FinyteDbContext>()

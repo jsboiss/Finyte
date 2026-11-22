@@ -51,7 +51,7 @@ public sealed class FiskilWebhookIngestor(FinyteDbContext dbContext) : IFiskilWe
 
         var dataset = ToDataset(request.Data.Event);
 
-        if (connection is not null && dataset is not null)
+        if (connection is not null && connection.Status != ProviderConnectionStatus.Revoked && dataset is not null)
         {
             var syncRun = new ProviderSyncRun
             {
@@ -108,7 +108,12 @@ public sealed class FiskilWebhookIngestor(FinyteDbContext dbContext) : IFiskilWe
 
         if (connection is null)
         {
-            return connections.FirstOrDefault();
+            return connections.FirstOrDefault(x => x.Status != ProviderConnectionStatus.Revoked) ?? connections.FirstOrDefault();
+        }
+
+        if (connection.Status == ProviderConnectionStatus.Revoked)
+        {
+            return connection;
         }
 
         if (!string.IsNullOrWhiteSpace(data.ConsentId))

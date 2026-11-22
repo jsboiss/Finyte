@@ -3,6 +3,7 @@
 Behavioural rules only. Design rationale and verification belong on the pull request that made the change. Edit a line here only when the rule it states changes.
 
 - **Accounts.** Provider fields (`Name`, `ProductName`, categories, numbers) are source data and never edited; user choices live in `CustomName`, `AccountTypeOverride` and `IncludeInAnalyticsOverride`. Type defaults exclude loans, investments and term deposits from combined spending; explicit overrides always win. Total balance includes every account regardless.
+- **Bank connections.** A revoked consent stays revoked: later webhooks for it are recorded but never reactivate it or queue a sync, and any run still queued or retrying for it is cancelled. Reconnecting creates a new consent and connection.
 - **Balances.** Fiskil owns balances for connected accounts. Fiskil sends no balance timestamp, so a synced balance is dated when it first arrives or changes; an unchanged balance keeps its date and can become stale. OFX imports update a balance only for unconnected accounts, and only with a newer dated snapshot.
 - **Dates.** `PostedAt` is a UTC instant; every date is that instant in the household zone (`Tenant.TimeZoneId`, default Australia/Sydney) via `FinancialCalendar`, never `UtcDateTime.Date`. Range filters use local-midnight instants. OFX rows are stored at local noon. Changing the zone rewrites nothing and bumps `FinancialDataVersion`.
 - **Posted status.** Null, empty, `posted` and `POSTED` all count as posted. Pending and undated rows never count in totals.
